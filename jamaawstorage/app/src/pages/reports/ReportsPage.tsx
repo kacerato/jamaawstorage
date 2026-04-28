@@ -1,0 +1,1505 @@
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import type { Tables } from '../../types/database'
+import type { DateRange, ReportPeriod } from '../../types'
+import { supabase } from '../../lib/supabase'
+import { cn, formatDateTime } from '../../lib/utils'
+import {
+  Button,
+  Input,
+  Select,
+  Card,
+  Badge,
+  DataTable,
+  Alert,
+  EmptyState,
+  StatCard,
+  Spinner,
+} from '../../components/ui'
+import { ChartIcon, ClipboardIcon, PackageIcon, UsersIcon, AlertIcon, UserIcon } from '../../components/icons'
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+} from 'recharts'
+
+type PersonRow = Tables<'people'>
+type StockItemRow = Tables<'stock_items'>
+type WorkSiteRow = Tables<'work_sites'>
+
+type TabKey =
+  | 'movements'
+  | 'inventory'
+  | 'abc'
+  | 'lowstock'
+  | 'leader'
+
+const TABS: { key: TabKey; label: string }[] = [
+  { key: 'movements', label: 'Movimentações por Período' },
+  { key: 'inventory', label: 'Inventário de Colaboradores' },
+  { key: 'abc', label: 'Curva ABC de Saída' },
+  { key: 'lowstock', label: 'Itens Abaixo do Mínimo' },
+  { key: 'leader', label: 'Consumo por Líder' },
+]
+
+const PERIOD_PRESETS: { value: ReportPeriod; label: string }[] = [
+  { value: 'week', label: 'Última Semana' },
+  { value: 'month', label: 'Último Mês' },
+  { value: 'quarter', label: 'Últimos 3 Meses' },
+  { value: 'custom', label: 'Customizado' },
+]
+
+function getDateRange(period: ReportPeriod): DateRange {
+  const to = new Date()
+  to.setHours(23, 59, 59, 999)
+  const from = new Date()
+  from.setHours(0, 0, 0, 0)
+
+  switch (period) {
+    case 'week':
+      from.setDate(from.getDate() - 7)
+      break
+    case 'month':
+      from.setMonth(from.getMonth() - 1)
+      break
+    case 'quarter':
+      from.setMonth(from.getMonth() - 3)
+      break
+  }
+
+  return { from, to }
+}
+
+interface WithdrawalWithItems extends Tables<'withdrawals'> {
+  withdrawal_items: (Tables<'withdrawal_items'> & {
+    stock_items: StockItemRow
+  })[]
+  requested_by_person: PersonRow
+  collaborator: PersonRow | null
+  work_site: WorkSiteRow | null
+}
+
+interface CollaboratorWithInventory extends PersonRow {
+  person_inventories: (Tables<'person_inventories'> & {
+    stock_items: StockItemRow
+  })[]
+}
+
+interface AbcItem {
+  name: string
+  totalQuantity: number
+  percentage: number
+  cumulativePercentage: number
+  classification: 'A' | 'B' | 'C'
+}
+
+interface LowStockItem extends StockItemRow {
+  deficit: number
+  severity: 'critical' | 'warning'
+}
+
+interface LeaderConsumptionItem {
+  name: string
+  quantity: number
+}
+
+function exportToCSV(data: Record<string, unknown>[], filename: string) {
+  if (data.length === 0) return
+
+  const headers = Object.keys(data[0])
+  const csvRows: string[] = [headers.join(';')]
+
+  for (const row of data) {
+    const values = headers.map((header) => {
+      const val = row[header]
+      if (val === null || val === undefined) return ''
+      const str = String(val)
+      if (str.includes(';') || str.includes('"') || str.includes('\n')) {
+        return `"${str.replace(/"/g, '""')}"`
+      }
+      return str
+    })
+    csvRows.push(values.join(';'))
+  }
+
+  const csvString = '\uFEFF' + csvRows.join('\n')
+  const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  document.body.removeChild(link)
+  URL.revokeObjectURL(url)
+}
+
+export function ReportsPage() {
+  const [activeTab, setActiveTab] = useState<TabKey>('movements')
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div>
+        <h2 className="text-2xl font-bold text-white">Relatórios</h2>
+        <p className="mt-1 text-sm text-gray-400">
+          Relatórios de retiradas, consumo e estoque
+        </p>
+      </div>
+
+      <div className="flex gap-1 overflow-x-auto rounded-xl bg-gray-900 p-1">
+        {TABS.map((tab) => (
+          <button
+            key={tab.key}
+            type="button"
+            onClick={() => setActiveTab(tab.key)}
+            className={cn(
+              'whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+              activeTab === tab.key
+                ? 'bg-orange-500 text-white'
+                : 'text-gray-400 hover:bg-gray-800 hover:text-white',
+            )}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === 'movements' && <MovementsTab />}
+      {activeTab === 'inventory' && <InventoryTab />}
+      {activeTab === 'abc' && <AbcCurveTab />}
+      {activeTab === 'lowstock' && <LowStockTab />}
+      {activeTab === 'leader' && <LeaderConsumptionTab />}
+    </div>
+  )
+}
+
+function MovementsTab() {
+  const [withdrawals, setWithdrawals] = useState<WithdrawalWithItems[]>([])
+  const [leaders, setLeaders] = useState<PersonRow[]>([])
+  const [collaborators, setCollaborators] = useState<PersonRow[]>([])
+  const [worksites, setWorksites] = useState<WorkSiteRow[]>([])
+  const [stockItems, setStockItems] = useState<StockItemRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [dateFrom, setDateFrom] = useState<string>('')
+  const [dateTo, setDateTo] = useState<string>('')
+  const [leaderFilter, setLeaderFilter] = useState<string>('')
+  const [collabFilter, setCollabFilter] = useState<string>('')
+  const [worksiteFilter, setWorksiteFilter] = useState<string>('')
+  const [itemFilter, setItemFilter] = useState<string>('')
+
+  useEffect(() => {
+    async function fetchFilters() {
+      const [leadersRes, collabsRes, worksitesRes, itemsRes] = await Promise.all([
+        supabase.from('people').select('*').eq('is_active', true).in('role', ['leader', 'supervisor']).order('full_name'),
+        supabase.from('people').select('*').eq('is_active', true).eq('role', 'collaborator').order('full_name'),
+        supabase.from('work_sites').select('*').eq('is_active', true).order('name'),
+        supabase.from('stock_items').select('*').order('name'),
+      ])
+
+      if (leadersRes.data) setLeaders(leadersRes.data as PersonRow[])
+      if (collabsRes.data) setCollaborators(collabsRes.data as PersonRow[])
+      if (worksitesRes.data) setWorksites(worksitesRes.data as WorkSiteRow[])
+      if (itemsRes.data) setStockItems(itemsRes.data as StockItemRow[])
+    }
+    void fetchFilters()
+  }, [])
+
+  const fetchWithdrawals = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    let query = supabase
+      .from('withdrawals')
+      .select(
+        '*, withdrawal_items(*, stock_items:stock_items(*)), requested_by_person:people!requested_by(*), collaborator:people!collaborator_id(*), work_site:work_sites(*)',
+      )
+      .in('status', ['approved', 'completed'])
+      .order('created_at', { ascending: false })
+
+    if (dateFrom) {
+      query = query.gte('created_at', dateFrom)
+    }
+    if (dateTo) {
+      query = query.lte('created_at', `${dateTo}T23:59:59`)
+    }
+    if (leaderFilter) {
+      query = query.eq('requested_by', leaderFilter)
+    }
+    if (collabFilter) {
+      query = query.eq('collaborator_id', collabFilter)
+    }
+    if (worksiteFilter) {
+      query = query.eq('work_site_id', worksiteFilter)
+    }
+
+    const { data, error: fetchError } = await query
+
+    if (fetchError) {
+      setError(fetchError.message)
+      setWithdrawals([])
+    } else {
+      let results = (data as unknown as WithdrawalWithItems[]) ?? []
+
+      if (itemFilter) {
+        results = results.filter((w) =>
+          w.withdrawal_items.some((wi) => wi.stock_item_id === itemFilter),
+        )
+      }
+
+      setWithdrawals(results)
+    }
+    setLoading(false)
+  }, [dateFrom, dateTo, leaderFilter, collabFilter, worksiteFilter, itemFilter])
+
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      void fetchWithdrawals()
+    }, 300)
+    return () => clearTimeout(timeout)
+  }, [fetchWithdrawals])
+
+  const leaderOptions = useMemo(
+    () => [
+      { value: '', label: 'Todos os líderes' },
+      ...leaders.map((l) => ({ value: l.id, label: l.full_name })),
+    ],
+    [leaders],
+  )
+
+  const collabOptions = useMemo(
+    () => [
+      { value: '', label: 'Todos os colaboradores' },
+      ...collaborators.map((c) => ({ value: c.id, label: c.full_name })),
+    ],
+    [collaborators],
+  )
+
+  const worksiteOptions = useMemo(
+    () => [
+      { value: '', label: 'Todas as obras' },
+      ...worksites.map((w) => ({ value: w.id, label: w.name })),
+    ],
+    [worksites],
+  )
+
+  const itemOptions = useMemo(
+    () => [
+      { value: '', label: 'Todos os itens' },
+      ...stockItems.map((i) => ({ value: i.id, label: i.name })),
+    ],
+    [stockItems],
+  )
+
+  type WithdrawalRowForTable = WithdrawalWithItems & Record<string, unknown>
+
+  const tableData = useMemo<WithdrawalRowForTable[]>(
+    () => withdrawals as WithdrawalRowForTable[],
+    [withdrawals],
+  )
+
+  const columns = useMemo(
+    () => [
+      {
+        key: 'created_at' as const,
+        header: 'Data',
+        sortable: true,
+        render: (_v: unknown, row: WithdrawalRowForTable) =>
+          formatDateTime((row as unknown as WithdrawalWithItems).created_at),
+      },
+      {
+        key: 'code' as const,
+        header: 'Código',
+        sortable: true,
+        render: (_v: unknown, row: WithdrawalRowForTable) => (
+          <span className="font-mono font-medium text-orange-400">
+            {(row as unknown as WithdrawalWithItems).code}
+          </span>
+        ),
+      },
+      {
+        key: 'requested_by' as const,
+        header: 'Líder',
+        render: (_v: unknown, row: WithdrawalRowForTable) =>
+          (row as unknown as WithdrawalWithItems).requested_by_person?.full_name ?? '-',
+      },
+      {
+        key: 'destination_type' as const,
+        header: 'Destino',
+        render: (_v: unknown, row: WithdrawalRowForTable) => {
+          const w = row as unknown as WithdrawalWithItems
+          if (w.destination_type === 'collaborator') {
+            return w.collaborator?.full_name ?? 'Colaborador'
+          }
+          return w.work_site?.name ?? 'Obra'
+        },
+      },
+      {
+        key: 'withdrawal_items' as const,
+        header: 'Itens',
+        render: (_v: unknown, row: WithdrawalRowForTable) => {
+          const items = (row as unknown as WithdrawalWithItems).withdrawal_items
+          return (
+            <div className="flex flex-col gap-0.5">
+              {items.map((wi) => (
+                <span key={wi.id} className="text-xs text-gray-400">
+                  {wi.stock_items?.name ?? '-'} ({wi.quantity} {wi.unit})
+                </span>
+              ))}
+            </div>
+          )
+        },
+      },
+      {
+        key: 'totalQty' as const,
+        header: 'Qtd Total',
+        className: 'text-center',
+        render: (_v: unknown, row: WithdrawalRowForTable) => {
+          const items = (row as unknown as WithdrawalWithItems).withdrawal_items
+          const total = items.reduce((sum, wi) => sum + wi.quantity, 0)
+          return <span className="font-medium text-white">{total}</span>
+        },
+      },
+    ],
+    [],
+  )
+
+  const handleExportCSV = () => {
+    const rows = withdrawals.map((w) => ({
+      Data: formatDateTime(w.created_at),
+      Código: w.code,
+      Líder: w.requested_by_person?.full_name ?? '',
+      Destino:
+        w.destination_type === 'collaborator'
+          ? w.collaborator?.full_name ?? 'Colaborador'
+          : w.work_site?.name ?? 'Obra',
+      Itens: w.withdrawal_items
+        .map((wi) => `${wi.stock_items?.name ?? '-'} (${wi.quantity} ${wi.unit})`)
+        .join(', '),
+      'Qtd Total': w.withdrawal_items.reduce((s, wi) => s + wi.quantity, 0),
+    }))
+    exportToCSV(rows, 'movimentacoes-periodo.csv')
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card variant="bordered" padding="md">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-40">
+            <Input
+              type="date"
+              label="De"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+          </div>
+          <div className="w-40">
+            <Input
+              type="date"
+              label="Até"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
+          </div>
+          <div className="w-52">
+            <Select
+              label="Líder"
+              options={leaderOptions}
+              value={leaderFilter}
+              onChange={(e) => setLeaderFilter(e.target.value)}
+            />
+          </div>
+          <div className="w-52">
+            <Select
+              label="Colaborador"
+              options={collabOptions}
+              value={collabFilter}
+              onChange={(e) => setCollabFilter(e.target.value)}
+            />
+          </div>
+          <div className="w-48">
+            <Select
+              label="Obra"
+              options={worksiteOptions}
+              value={worksiteFilter}
+              onChange={(e) => setWorksiteFilter(e.target.value)}
+            />
+          </div>
+          <div className="w-48">
+            <Select
+              label="Item"
+              options={itemOptions}
+              value={itemFilter}
+              onChange={(e) => setItemFilter(e.target.value)}
+            />
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setDateFrom('')
+                setDateTo('')
+                setLeaderFilter('')
+                setCollabFilter('')
+                setWorksiteFilter('')
+                setItemFilter('')
+              }}
+            >
+              Limpar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCSV}
+              disabled={withdrawals.length === 0}
+            >
+              Exportar CSV
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {error && (
+        <Alert variant="danger" dismissible onDismiss={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      <DataTable<WithdrawalRowForTable>
+        columns={columns}
+        data={tableData}
+        keyExtractor={(row) => (row as unknown as WithdrawalWithItems).id}
+        isLoading={loading}
+        emptyMessage="Nenhuma movimentação encontrada para os filtros aplicados"
+      />
+    </div>
+  )
+}
+
+function InventoryTab() {
+  const [collaborators, setCollaborators] = useState<CollaboratorWithInventory[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchInventory() {
+      setLoading(true)
+      setError(null)
+
+      const { data, error: fetchError } = await supabase
+        .from('people')
+        .select('*, person_inventories:left_person_inventories_on_person_id(*, stock_items:stock_items(*))')
+        .eq('is_active', true)
+        .eq('role', 'collaborator')
+        .order('full_name')
+
+      if (fetchError) {
+        setError(fetchError.message)
+      } else {
+        setCollaborators((data as unknown as CollaboratorWithInventory[]) ?? [])
+      }
+      setLoading(false)
+    }
+    void fetchInventory()
+  }, [])
+
+  type CollabRowForTable = CollaboratorWithInventory & Record<string, unknown>
+
+  const tableData = useMemo<CollabRowForTable[]>(
+    () => collaborators as CollabRowForTable[],
+    [collaborators],
+  )
+
+  const columns = useMemo(
+    () => [
+      {
+        key: 'full_name' as const,
+        header: 'Colaborador',
+        sortable: true,
+        render: (_v: unknown, row: CollabRowForTable) => {
+          const c = row as unknown as CollaboratorWithInventory
+          return (
+            <button
+              type="button"
+              className="flex items-center gap-2 text-left"
+              onClick={(e) => {
+                e.stopPropagation()
+                setExpandedId(expandedId === c.id ? null : c.id)
+              }}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 16 16"
+                fill="none"
+                className={cn(
+                  'transition-transform text-gray-500',
+                  expandedId === c.id && 'rotate-90',
+                )}
+              >
+                <path
+                  d="M6 4L10 8L6 12"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              <span className="font-medium text-white">{c.full_name}</span>
+            </button>
+          )
+        },
+      },
+      {
+        key: 'employee_id' as const,
+        header: 'Matrícula',
+        sortable: true,
+        render: (value: unknown) => (value as string | null) ?? '-',
+      },
+      {
+        key: 'sector' as const,
+        header: 'Setor',
+        sortable: true,
+        render: (value: unknown) => (value as string | null) ?? '-',
+      },
+      {
+        key: 'person_inventories' as const,
+        header: 'Itens no Inventário',
+        render: (_v: unknown, row: CollabRowForTable) => {
+          const c = row as unknown as CollaboratorWithInventory
+          const inventories = c.person_inventories ?? []
+          if (inventories.length === 0) return <span className="text-gray-500">Nenhum</span>
+          return (
+            <span className="text-white">
+              {inventories.length} {inventories.length === 1 ? 'item' : 'itens'}
+            </span>
+          )
+        },
+      },
+      {
+        key: 'totalQty' as const,
+        header: 'Qtd Total',
+        className: 'text-center',
+        render: (_v: unknown, row: CollabRowForTable) => {
+          const c = row as unknown as CollaboratorWithInventory
+          const total = (c.person_inventories ?? []).reduce((s, pi) => s + pi.quantity, 0)
+          return <span className="font-medium text-white">{total}</span>
+        },
+      },
+    ],
+    [expandedId],
+  )
+
+  const handleExportCSV = () => {
+    const rows: Record<string, unknown>[] = []
+    for (const c of collaborators) {
+      const invs = c.person_inventories ?? []
+      if (invs.length === 0) {
+        rows.push({
+          Colaborador: c.full_name,
+          Matrícula: c.employee_id ?? '',
+          Setor: c.sector ?? '',
+          Item: '-',
+          Quantidade: 0,
+        })
+      } else {
+        for (const inv of invs) {
+          rows.push({
+            Colaborador: c.full_name,
+            Matrícula: c.employee_id ?? '',
+            Setor: c.sector ?? '',
+            Item: inv.stock_items?.name ?? '-',
+            Quantidade: inv.quantity,
+          })
+        }
+      }
+    }
+    exportToCSV(rows, 'inventario-colaboradores.csv')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Spinner size="lg" />
+        <p className="mt-4 text-sm text-gray-400">Carregando inventário...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return <Alert variant="danger" title="Erro ao carregar">{error}</Alert>
+  }
+
+  if (collaborators.length === 0) {
+    return (
+      <EmptyState
+        icon={<UsersIcon size={48} />}
+        title="Nenhum colaborador ativo"
+        description="Não há colaboradores ativos cadastrados no sistema"
+      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportCSV}
+          disabled={collaborators.length === 0}
+        >
+          Exportar CSV
+        </Button>
+      </div>
+
+      <div className="flex flex-col gap-2">
+        <DataTable<CollabRowForTable>
+          columns={columns}
+          data={tableData}
+          keyExtractor={(row) => (row as unknown as CollaboratorWithInventory).id}
+          isLoading={false}
+          emptyMessage="Nenhum colaborador encontrado"
+          onRowClick={(row) => {
+            const c = row as unknown as CollaboratorWithInventory
+            setExpandedId(expandedId === c.id ? null : c.id)
+          }}
+        />
+
+        {expandedId && (() => {
+          const collab = collaborators.find((c) => c.id === expandedId)
+          if (!collab || (collab.person_inventories ?? []).length === 0) return null
+
+          return (
+            <Card variant="bordered" padding="md">
+              <h4 className="mb-3 text-sm font-semibold text-white">
+                Itens de {collab.full_name}
+              </h4>
+              <div className="overflow-hidden rounded-lg border border-gray-700">
+                <table className="w-full">
+                  <thead>
+                    <tr className="bg-gray-800">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Item</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Categoria</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400">Quantidade</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Unidade</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {collab.person_inventories.map((inv) => (
+                      <tr key={inv.id} className="border-t border-gray-800">
+                        <td className="px-3 py-2 text-sm text-gray-300">
+                          {inv.stock_items?.name ?? '-'}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-400">
+                          {inv.stock_items?.category ?? '-'}
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm font-medium text-white">
+                          {inv.quantity}
+                        </td>
+                        <td className="px-3 py-2 text-sm text-gray-400">
+                          {inv.stock_items?.unit ?? '-'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )
+        })()}
+      </div>
+    </div>
+  )
+}
+
+function AbcCurveTab() {
+  const [period, setPeriod] = useState<ReportPeriod>('month')
+  const [customFrom, setCustomFrom] = useState<string>('')
+  const [customTo, setCustomTo] = useState<string>('')
+  const [abcData, setAbcData] = useState<AbcItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const fetchAbcData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
+    let range: DateRange
+    if (period === 'custom') {
+      if (!customFrom || !customTo) {
+        setAbcData([])
+        setLoading(false)
+        return
+      }
+      range = {
+        from: new Date(customFrom + 'T00:00:00'),
+        to: new Date(customTo + 'T23:59:59'),
+      }
+    } else {
+      range = getDateRange(period)
+    }
+
+    const { data, error: fetchError } = await supabase
+      .from('withdrawal_items')
+      .select('quantity, stock_items:stock_items(name)')
+      .gte('created_at', range.from.toISOString())
+      .lte('created_at', range.to.toISOString())
+
+    if (fetchError) {
+      setError(fetchError.message)
+      setAbcData([])
+      setLoading(false)
+      return
+    }
+
+    const rawData = (data ?? []) as unknown as {
+      quantity: number
+      stock_items: { name: string } | null
+    }[]
+
+    const grouped = new Map<string, number>()
+    for (const item of rawData) {
+      const name = item.stock_items?.name ?? 'Desconhecido'
+      grouped.set(name, (grouped.get(name) ?? 0) + item.quantity)
+    }
+
+    const totalQuantity = Array.from(grouped.values()).reduce((s, q) => s + q, 0)
+
+    const sorted = Array.from(grouped.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, totalQuantity_item], _idx) => ({ name, totalQuantity: totalQuantity_item }))
+
+    let cumulative = 0
+    const abcItems: AbcItem[] = sorted.map((item) => {
+      const pct = totalQuantity > 0 ? (item.totalQuantity / totalQuantity) * 100 : 0
+      cumulative += pct
+      let classification: 'A' | 'B' | 'C' = 'C'
+      if (cumulative <= 80) {
+        classification = 'A'
+      } else if (cumulative <= 95) {
+        classification = 'B'
+      }
+      return {
+        name: item.name,
+        totalQuantity: item.totalQuantity,
+        percentage: Math.round(pct * 100) / 100,
+        cumulativePercentage: Math.round(cumulative * 100) / 100,
+        classification,
+      }
+    })
+
+    setAbcData(abcItems)
+    setLoading(false)
+  }, [period, customFrom, customTo])
+
+  useEffect(() => {
+    void fetchAbcData()
+  }, [fetchAbcData])
+
+  const chartData = useMemo(
+    () =>
+      abcData.map((item) => ({
+        name: item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name,
+        fullName: item.name,
+        Quantidade: item.totalQuantity,
+      })),
+    [abcData],
+  )
+
+  const classificationBadge: Record<string, 'danger' | 'warning' | 'default'> = {
+    A: 'danger',
+    B: 'warning',
+    C: 'default',
+  }
+
+  type AbcRowForTable = AbcItem & Record<string, unknown>
+
+  const tableData = useMemo<AbcRowForTable[]>(
+    () => abcData.map((item, idx) => ({
+      ...item,
+      rank: idx + 1,
+    })) as AbcRowForTable[],
+    [abcData],
+  )
+
+  const columns = useMemo(
+    () => [
+      {
+        key: 'rank' as const,
+        header: '#',
+        className: 'w-12 text-center',
+        render: (value: unknown) => (
+          <span className="font-mono text-gray-500">{value as number}</span>
+        ),
+      },
+      {
+        key: 'name' as const,
+        header: 'Item',
+        sortable: true,
+        render: (_v: unknown, row: AbcRowForTable) => (
+          <span className="font-medium text-white">{(row as unknown as AbcItem).name}</span>
+        ),
+      },
+      {
+        key: 'totalQuantity' as const,
+        header: 'Qtd Total',
+        sortable: true,
+        className: 'text-right',
+        render: (value: unknown) => (
+          <span className="font-medium text-white">{value as number}</span>
+        ),
+      },
+      {
+        key: 'percentage' as const,
+        header: '%',
+        sortable: true,
+        className: 'text-right',
+        render: (value: unknown) => `${(value as number).toFixed(2)}%`,
+      },
+      {
+        key: 'cumulativePercentage' as const,
+        header: '% Acum.',
+        sortable: true,
+        className: 'text-right',
+        render: (value: unknown) => `${(value as number).toFixed(2)}%`,
+      },
+      {
+        key: 'classification' as const,
+        header: 'Classe',
+        render: (value: unknown) => {
+          const cls = value as 'A' | 'B' | 'C'
+          return (
+            <Badge variant={classificationBadge[cls]} size="sm">
+              {cls}
+            </Badge>
+          )
+        },
+      },
+    ],
+    [],
+  )
+
+  const handleExportCSV = () => {
+    const rows = abcData.map((item, idx) => ({
+      Rank: idx + 1,
+      Item: item.name,
+      'Qtd Total': item.totalQuantity,
+      Porcentagem: `${item.percentage.toFixed(2)}%`,
+      'Porcentagem Acumulada': `${item.cumulativePercentage.toFixed(2)}%`,
+      Classificação: item.classification,
+    }))
+    exportToCSV(rows, 'curva-abc-saida.csv')
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card variant="bordered" padding="md">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-44">
+            <Select
+              label="Período"
+              options={PERIOD_PRESETS}
+              value={period}
+              onChange={(e) => setPeriod(e.target.value as ReportPeriod)}
+            />
+          </div>
+          {period === 'custom' && (
+            <>
+              <div className="w-40">
+                <Input
+                  type="date"
+                  label="De"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                />
+              </div>
+              <div className="w-40">
+                <Input
+                  type="date"
+                  label="Até"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => void fetchAbcData()}>
+              Atualizar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCSV}
+              disabled={abcData.length === 0}
+            >
+              Exportar CSV
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {error && (
+        <Alert variant="danger" dismissible onDismiss={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Spinner size="lg" />
+          <p className="mt-4 text-sm text-gray-400">Calculando curva ABC...</p>
+        </div>
+      ) : abcData.length === 0 ? (
+        <EmptyState
+          icon={<ChartIcon size={48} />}
+          title="Sem dados"
+          description="Nenhuma retirada encontrada no período selecionado"
+        />
+      ) : (
+        <>
+          <Card variant="bordered" padding="md">
+            <h3 className="mb-4 text-sm font-semibold text-gray-300">
+              Curva ABC - Quantidade Retirada por Item
+            </h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartData}
+                  margin={{ top: 5, right: 20, left: 20, bottom: 60 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis
+                    dataKey="name"
+                    tick={{ fill: '#9ca3af', fontSize: 11 }}
+                    angle={-45}
+                    textAnchor="end"
+                    interval={0}
+                    height={80}
+                  />
+                  <YAxis tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1f2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#f9fafb',
+                    }}
+                    formatter={((value: number) => [value, 'Quantidade']) as never}
+                    labelFormatter={((label: string, payload: Array<{ payload?: { fullName?: string } }>) => {
+                      if (payload?.[0]?.payload?.fullName) return payload[0].payload.fullName
+                      return label
+                    }) as never}
+                  />
+                  <Bar dataKey="Quantidade" fill="#f97316" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <DataTable<AbcRowForTable>
+            columns={columns}
+            data={tableData}
+            keyExtractor={(row: AbcRowForTable) => `${(row as unknown as AbcItem & { rank?: number }).name}-${(row as unknown as AbcItem & { rank?: number }).rank ?? 0}`}
+            isLoading={false}
+            emptyMessage="Nenhum dado encontrado"
+          />
+        </>
+      )}
+    </div>
+  )
+}
+
+function LowStockTab() {
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchLowStock() {
+      setLoading(true)
+      setError(null)
+
+      const { data, error: fetchError } = await supabase.rpc('check_low_stock')
+
+      if (fetchError) {
+        setError(fetchError.message)
+        setLowStockItems([])
+      } else {
+        const items = ((data as StockItemRow[] | null) ?? []).map((item): LowStockItem => {
+          const deficit = item.minimum_quantity - item.current_quantity
+          const severity = item.current_quantity === 0 ? 'critical' : 'warning'
+          return { ...item, deficit, severity }
+        })
+        setLowStockItems(items)
+      }
+      setLoading(false)
+    }
+    void fetchLowStock()
+  }, [])
+
+  type LowStockRowForTable = LowStockItem & Record<string, unknown>
+
+  const tableData = useMemo<LowStockRowForTable[]>(
+    () => lowStockItems as LowStockRowForTable[],
+    [lowStockItems],
+  )
+
+  const columns = useMemo(
+    () => [
+      {
+        key: 'name' as const,
+        header: 'Item',
+        sortable: true,
+        render: (_v: unknown, row: LowStockRowForTable) => {
+          const item = row as unknown as LowStockItem
+          return (
+            <div className="flex items-center gap-2">
+              {item.severity === 'critical' && (
+                <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
+              )}
+              {item.severity === 'warning' && (
+                <span className="inline-block h-2 w-2 rounded-full bg-orange-500" />
+              )}
+              <span className="font-medium text-white">{item.name}</span>
+            </div>
+          )
+        },
+      },
+      {
+        key: 'category' as const,
+        header: 'Categoria',
+        sortable: true,
+        render: (value: unknown) => (value as string | null) ?? '-',
+      },
+      {
+        key: 'quantity' as const,
+        header: 'Qtd Atual',
+        className: 'text-right',
+        render: (_v: unknown, row: LowStockRowForTable) => {
+          const item = row as unknown as LowStockItem
+          return (
+            <span
+              className={cn(
+                'font-medium',
+                item.severity === 'critical' ? 'text-red-400' : 'text-orange-400',
+              )}
+            >
+              {item.current_quantity}
+            </span>
+          )
+        },
+      },
+      {
+        key: 'minimum_quantity' as const,
+        header: 'Qtd Mínima',
+        className: 'text-right',
+        render: (value: unknown) => (
+          <span className="text-gray-300">{value as number}</span>
+        ),
+      },
+      {
+        key: 'deficit' as const,
+        header: 'Déficit',
+        className: 'text-right',
+        render: (_v: unknown, row: LowStockRowForTable) => {
+          const item = row as unknown as LowStockItem
+          return (
+            <span
+              className={cn(
+                'font-medium',
+                item.severity === 'critical' ? 'text-red-400' : 'text-orange-400',
+              )}
+            >
+              -{item.deficit}
+            </span>
+          )
+        },
+      },
+      {
+        key: 'severity' as const,
+        header: 'Status',
+        render: (_v: unknown, row: LowStockRowForTable) => {
+          const item = row as unknown as LowStockItem
+          return (
+            <Badge variant={item.severity === 'critical' ? 'danger' : 'warning'} dot size="sm">
+              {item.severity === 'critical' ? 'Crítico' : 'Atenção'}
+            </Badge>
+          )
+        },
+      },
+    ],
+    [],
+  )
+
+  const handleExportCSV = () => {
+    const rows = lowStockItems.map((item) => ({
+      Item: item.name,
+      Categoria: item.category ?? '',
+      'Qtd Atual': item.current_quantity,
+      'Qtd Mínima': item.minimum_quantity,
+      Déficit: item.deficit,
+      Severidade: item.severity === 'critical' ? 'Crítico' : 'Atenção',
+    }))
+    exportToCSV(rows, 'itens-abaixo-minimo.csv')
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Spinner size="lg" />
+        <p className="mt-4 text-sm text-gray-400">Verificando estoque...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return <Alert variant="danger" title="Erro ao carregar">{error}</Alert>
+  }
+
+  if (lowStockItems.length === 0) {
+    return (
+      <EmptyState
+        icon={<PackageIcon size={48} />}
+        title="Nenhum item abaixo do mínimo"
+        description="Todos os itens estão com estoque adequado"
+      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center justify-between">
+        <Alert variant="warning" title="Itens com estoque abaixo do mínimo" className="flex-1">
+          {lowStockItems.length} item(ns) encontrados abaixo da quantidade mínima
+        </Alert>
+        <div className="ml-4">
+          <Button variant="outline" size="sm" onClick={handleExportCSV}>
+            Exportar CSV
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        <StatCard
+          title="Total Abaixo do Mínimo"
+          value={lowStockItems.length}
+          icon={<AlertIcon size={20} />}
+          variant="danger"
+        />
+        <StatCard
+          title="Críticos (Qtd = 0)"
+          value={lowStockItems.filter((i) => i.severity === 'critical').length}
+          variant="danger"
+        />
+      </div>
+
+      <DataTable<LowStockRowForTable>
+        columns={columns}
+        data={tableData}
+        keyExtractor={(row) => (row as unknown as LowStockItem).id}
+        isLoading={false}
+        emptyMessage="Nenhum item abaixo do mínimo"
+      />
+    </div>
+  )
+}
+
+function LeaderConsumptionTab() {
+  const [leaders, setLeaders] = useState<PersonRow[]>([])
+  const [selectedLeader, setSelectedLeader] = useState<string>('')
+  const [period, setPeriod] = useState<ReportPeriod>('month')
+  const [customFrom, setCustomFrom] = useState<string>('')
+  const [customTo, setCustomTo] = useState<string>('')
+  const [consumptionData, setConsumptionData] = useState<LeaderConsumptionItem[]>([])
+  const [totalItems, setTotalItems] = useState(0)
+  const [totalWithdrawals, setTotalWithdrawals] = useState(0)
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchLeaders() {
+      const { data } = await supabase
+        .from('people')
+        .select('*')
+        .eq('is_active', true)
+        .in('role', ['leader', 'supervisor'])
+        .order('full_name')
+
+      if (data) setLeaders(data as PersonRow[])
+    }
+    void fetchLeaders()
+  }, [])
+
+  const leaderOptions = useMemo(
+    () => [
+      { value: '', label: 'Selecione um líder' },
+      ...leaders.map((l) => ({ value: l.id, label: l.full_name })),
+    ],
+    [leaders],
+  )
+
+  const fetchConsumption = useCallback(async () => {
+    if (!selectedLeader) {
+      setConsumptionData([])
+      setTotalItems(0)
+      setTotalWithdrawals(0)
+      return
+    }
+
+    setLoading(true)
+    setError(null)
+
+    let range: DateRange
+    if (period === 'custom') {
+      if (!customFrom || !customTo) {
+        setConsumptionData([])
+        setLoading(false)
+        return
+      }
+      range = {
+        from: new Date(customFrom + 'T00:00:00'),
+        to: new Date(customTo + 'T23:59:59'),
+      }
+    } else {
+      range = getDateRange(period)
+    }
+
+    const { data, error: fetchError } = await supabase
+      .from('withdrawals')
+      .select('id, withdrawal_items(quantity, stock_items:stock_items(name))')
+      .eq('requested_by', selectedLeader)
+      .in('status', ['approved', 'completed'])
+      .gte('created_at', range.from.toISOString())
+      .lte('created_at', range.to.toISOString())
+
+    if (fetchError) {
+      setError(fetchError.message)
+      setConsumptionData([])
+      setTotalItems(0)
+      setTotalWithdrawals(0)
+      setLoading(false)
+      return
+    }
+
+    const rawWithdrawals = (data ?? []) as unknown as {
+      id: string
+      withdrawal_items: {
+        quantity: number
+        stock_items: { name: string } | null
+      }[]
+    }[]
+
+    const grouped = new Map<string, number>()
+    let itemsTotal = 0
+    const withdrawalIds = new Set<string>()
+
+    for (const w of rawWithdrawals) {
+      withdrawalIds.add(w.id)
+      for (const wi of w.withdrawal_items) {
+        const name = wi.stock_items?.name ?? 'Desconhecido'
+        const current = grouped.get(name) ?? 0
+        grouped.set(name, current + wi.quantity)
+        itemsTotal += wi.quantity
+      }
+    }
+
+    const sorted = Array.from(grouped.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([name, quantity]) => ({ name, quantity }))
+
+    setConsumptionData(sorted)
+    setTotalItems(itemsTotal)
+    setTotalWithdrawals(withdrawalIds.size)
+    setLoading(false)
+  }, [selectedLeader, period, customFrom, customTo])
+
+  useEffect(() => {
+    void fetchConsumption()
+  }, [fetchConsumption])
+
+  const chartData = useMemo(
+    () =>
+      consumptionData.map((item) => ({
+        name: item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name,
+        fullName: item.name,
+        Quantidade: item.quantity,
+      })),
+    [consumptionData],
+  )
+
+  const handleExportCSV = () => {
+    const rows = consumptionData.map((item) => ({
+      Item: item.name,
+      Quantidade: item.quantity,
+    }))
+    exportToCSV(rows, `consumo-lider-${selectedLeader}.csv`)
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card variant="bordered" padding="md">
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="w-64">
+            <Select
+              label="Líder"
+              options={leaderOptions}
+              value={selectedLeader}
+              onChange={(e) => setSelectedLeader(e.target.value)}
+            />
+          </div>
+          <div className="w-44">
+            <Select
+              label="Período"
+              options={PERIOD_PRESETS}
+              value={period}
+              onChange={(e) => setPeriod(e.target.value as ReportPeriod)}
+            />
+          </div>
+          {period === 'custom' && (
+            <>
+              <div className="w-40">
+                <Input
+                  type="date"
+                  label="De"
+                  value={customFrom}
+                  onChange={(e) => setCustomFrom(e.target.value)}
+                />
+              </div>
+              <div className="w-40">
+                <Input
+                  type="date"
+                  label="Até"
+                  value={customTo}
+                  onChange={(e) => setCustomTo(e.target.value)}
+                />
+              </div>
+            </>
+          )}
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => void fetchConsumption()}>
+              Atualizar
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportCSV}
+              disabled={consumptionData.length === 0}
+            >
+              Exportar CSV
+            </Button>
+          </div>
+        </div>
+      </Card>
+
+      {error && (
+        <Alert variant="danger" dismissible onDismiss={() => setError(null)}>
+          {error}
+        </Alert>
+      )}
+
+      {!selectedLeader ? (
+        <EmptyState
+          icon={<UserIcon size={48} />}
+          title="Selecione um líder"
+          description="Escolha um líder para visualizar o consumo"
+        />
+      ) : loading ? (
+        <div className="flex flex-col items-center justify-center py-12">
+          <Spinner size="lg" />
+          <p className="mt-4 text-sm text-gray-400">Calculando consumo...</p>
+        </div>
+      ) : consumptionData.length === 0 ? (
+        <EmptyState
+          icon={<ChartIcon size={48} />}
+          title="Sem dados"
+          description="Nenhuma retirada encontrada para este líder no período selecionado"
+        />
+      ) : (
+        <>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <StatCard
+              title="Total Itens Retirados"
+              value={totalItems}
+              icon={<PackageIcon size={20} />}
+            />
+            <StatCard
+              title="Total de Retiradas"
+              value={totalWithdrawals}
+              icon={<ClipboardIcon size={20} />}
+            />
+          </div>
+
+          <Card variant="bordered" padding="md">
+            <h3 className="mb-4 text-sm font-semibold text-gray-300">
+              Itens mais retirados pelo líder
+            </h3>
+            <div className="h-80">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={chartData}
+                  layout="vertical"
+                  margin={{ top: 5, right: 20, left: 100, bottom: 5 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                  <YAxis
+                    dataKey="name"
+                    type="category"
+                    tick={{ fill: '#9ca3af', fontSize: 11 }}
+                    width={90}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1f2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#f9fafb',
+                    }}
+                    formatter={((value: number) => [value, 'Quantidade']) as never}
+                    labelFormatter={((label: string, payload: Array<{ payload?: { fullName?: string } }>) => {
+                      if (payload?.[0]?.payload?.fullName) return payload[0].payload.fullName
+                      return label
+                    }) as never}
+                  />
+                  <Bar dataKey="Quantidade" fill="#f97316" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </Card>
+
+          <Card variant="bordered" padding="md">
+            <h4 className="mb-3 text-sm font-semibold text-gray-300">Detalhamento</h4>
+            <div className="overflow-hidden rounded-lg border border-gray-700">
+              <table className="w-full">
+                <thead>
+                  <tr className="bg-gray-800">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">#</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Item</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-300">Quantidade</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {consumptionData.map((item, idx) => (
+                    <tr key={item.name} className="border-t border-gray-800">
+                      <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-white">{item.name}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-300">{item.quantity}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </>
+      )}
+    </div>
+  )
+}

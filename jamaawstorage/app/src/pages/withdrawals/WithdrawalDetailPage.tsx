@@ -1,0 +1,336 @@
+import { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
+import { supabase } from '../../lib/supabase'
+import type { WithdrawalWithDetails, WithdrawalStatus } from '../../types'
+import {
+  Button,
+  Card,
+  Badge,
+  Modal,
+  Alert,
+  Spinner,
+  EmptyState,
+} from '../../components/ui'
+import {
+  ClipboardIcon,
+  SignatureIcon,
+  CameraIcon,
+} from '../../components/icons'
+import { formatDateTime } from '../../lib/utils'
+
+type WithdrawalRow = WithdrawalWithDetails
+
+const statusBadgeVariant: Record<WithdrawalStatus, 'success' | 'warning' | 'danger' | 'default'> = {
+  completed: 'success',
+  approved: 'success',
+  pending: 'warning',
+  rejected: 'danger',
+}
+
+const statusLabels: Record<WithdrawalStatus, string> = {
+  completed: 'Concluída',
+  approved: 'Aprovada',
+  pending: 'Pendente',
+  rejected: 'Rejeitada',
+}
+
+export function WithdrawalDetailPage() {
+  const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+
+  const [withdrawal, setWithdrawal] = useState<WithdrawalRow | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  const [showCancelModal, setShowCancelModal] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [cancelError, setCancelError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!id) return
+    let cancelled = false
+
+    supabase
+      .from('withdrawals')
+      .select(
+        '*, withdrawal_items(*, stock_items(*)), requested_by_person:people!requested_by(*), collaborator:people!collaborator_id(*), work_site:work_sites(*), approved_by_profile:profiles!authorized_by(*)',
+      )
+      .eq('id', id)
+      .single<WithdrawalRow>()
+      .then(({ data, error: fetchError }) => {
+        if (cancelled) return
+        setError(null)
+        if (fetchError || !data) {
+          setError(fetchError?.message ?? 'Retirada não encontrada')
+        } else {
+          setWithdrawal(data)
+        }
+        setLoading(false)
+      })
+
+    return () => { cancelled = true }
+  }, [id])
+
+  const handleCancel = async () => {
+    if (!withdrawal) return
+    setCancelling(true)
+    setCancelError(null)
+
+    const { error: updateError } = await supabase
+      .from('withdrawals')
+      .update({ status: 'rejected' as const } as never)
+      .eq('id', withdrawal.id)
+
+    if (updateError) {
+      setCancelError(updateError.message)
+      setCancelling(false)
+      return
+    }
+
+    setWithdrawal((prev) =>
+      prev ? { ...prev, status: 'rejected' as WithdrawalStatus } : prev,
+    )
+    setCancelling(false)
+    setShowCancelModal(false)
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <Spinner size="lg" />
+      </div>
+    )
+  }
+
+  if (error || !withdrawal) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Button variant="ghost" onClick={() => navigate('/withdrawals')}>
+          ← Voltar para Retiradas
+        </Button>
+        <EmptyState
+          icon={<ClipboardIcon size={48} />}
+          title="Retirada não encontrada"
+          description={error ?? 'A retirada solicitada não foi encontrada.'}
+        />
+      </div>
+    )
+  }
+
+  const canCancel = withdrawal.status === 'completed' || withdrawal.status === 'approved' || withdrawal.status === 'pending'
+  const hasSupervisorSignature = !!withdrawal.supervisor_signature
+  const hasRequesterSignature = !!withdrawal.requester_signature
+  const bothSignaturesPresent = hasSupervisorSignature && hasRequesterSignature
+
+  const destinationLabel =
+    withdrawal.destination_type === 'collaborator'
+      ? withdrawal.collaborator
+        ? `${withdrawal.collaborator.full_name} — Inventário pessoal`
+        : 'Colaborador não informado'
+      : withdrawal.work_site
+        ? `${withdrawal.work_site.name} — Obra`
+        : 'Obra não informada'
+
+  return (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" onClick={() => navigate('/withdrawals')}>
+            ← Voltar
+          </Button>
+          <div>
+            <div className="flex items-center gap-3">
+              <h2 className="text-2xl font-bold text-white">{withdrawal.code}</h2>
+              <Badge variant={statusBadgeVariant[withdrawal.status]} dot>
+                {statusLabels[withdrawal.status]}
+              </Badge>
+            </div>
+            <p className="mt-1 text-sm text-gray-400">
+              {formatDateTime(withdrawal.created_at)}
+            </p>
+          </div>
+        </div>
+        {canCancel && (
+          <Button
+            variant="danger"
+            onClick={() => setShowCancelModal(true)}
+          >
+            Cancelar Retirada
+          </Button>
+        )}
+      </div>
+
+      <Card variant="bordered" padding="lg">
+        <h3 className="mb-4 text-lg font-semibold text-white">Detalhes</h3>
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div>
+            <p className="text-xs font-medium text-gray-400">Autorizado por</p>
+            <p className="text-sm text-white">
+              {withdrawal.approved_by_profile?.full_name ?? 'Não informado'}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400">Solicitado por</p>
+            <p className="text-sm text-white">
+              {withdrawal.requested_by_person?.full_name ?? 'Não informado'}
+              {withdrawal.requested_by_person?.employee_id
+                ? ` (${withdrawal.requested_by_person.employee_id})`
+                : ''}
+            </p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400">Destino</p>
+            <p className="text-sm text-white">{destinationLabel}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400">Observações</p>
+            <p className="text-sm text-white">{withdrawal.notes ?? 'Nenhuma'}</p>
+          </div>
+        </div>
+      </Card>
+
+      <Card variant="bordered" padding="lg">
+        <h3 className="mb-4 text-lg font-semibold text-white">
+          Itens ({withdrawal.withdrawal_items?.length ?? 0})
+        </h3>
+        {(!withdrawal.withdrawal_items || withdrawal.withdrawal_items.length === 0) ? (
+          <p className="text-sm text-gray-400">Nenhum item registrado</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-gray-700">
+                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Item</th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Categoria</th>
+                  <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Qtd</th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Unidade</th>
+                </tr>
+              </thead>
+              <tbody>
+                {withdrawal.withdrawal_items.map((wi) => (
+                  <tr key={wi.id} className="border-b border-gray-800">
+                    <td className="px-3 py-2 text-sm text-white">
+                      {wi.stock_items?.name ?? '-'}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-gray-400">
+                      {wi.stock_items?.category ?? '-'}
+                    </td>
+                    <td className="px-3 py-2 text-center text-sm text-gray-300">
+                      {wi.quantity}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-gray-300">
+                      {wi.unit}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {withdrawal.withdrawal_items && withdrawal.withdrawal_items.length > 0 && (
+          <div className="mt-3 border-t border-gray-700 pt-3 text-sm text-gray-400">
+            Total: {withdrawal.withdrawal_items.reduce((sum, wi) => sum + wi.quantity, 0)} unidades
+          </div>
+        )}
+      </Card>
+
+      <Card variant="bordered" padding="lg">
+        <h3 className="mb-4 text-lg font-semibold text-white">
+          <CameraIcon size={18} className="mr-2 inline-block" />
+          Registro Fotográfico
+        </h3>
+        {withdrawal.photo_url ? (
+          <img
+            src={withdrawal.photo_url}
+            alt="Registro fotográfico"
+            className="max-h-64 rounded-lg border border-gray-700"
+          />
+        ) : (
+          <p className="text-sm text-gray-400">Sem registro fotográfico</p>
+        )}
+      </Card>
+
+      <Card variant="bordered" padding="lg">
+        <h3 className="mb-4 text-lg font-semibold text-white">
+          <SignatureIcon size={18} className="mr-2 inline-block" />
+          Assinaturas
+          {bothSignaturesPresent && (
+            <Badge variant="success" size="sm" className="ml-2">
+              ✓ Completas
+            </Badge>
+          )}
+        </h3>
+        <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-xs font-medium text-gray-400">Supervisor</p>
+            {withdrawal.supervisor_signature ? (
+              <img
+                src={withdrawal.supervisor_signature}
+                alt="Assinatura do supervisor"
+                className="h-20 rounded border border-gray-700 bg-white p-1"
+              />
+            ) : (
+              <span className="text-xs text-gray-500">Não assinado</span>
+            )}
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-xs font-medium text-gray-400">Solicitante</p>
+            {withdrawal.requester_signature ? (
+              <img
+                src={withdrawal.requester_signature}
+                alt="Assinatura do solicitante"
+                className="h-20 rounded border border-gray-700 bg-white p-1"
+              />
+            ) : (
+              <span className="text-xs text-gray-500">Não assinado</span>
+            )}
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            <p className="text-xs font-medium text-gray-400">Testemunha</p>
+            {withdrawal.witness_signature ? (
+              <img
+                src={withdrawal.witness_signature}
+                alt="Assinatura da testemunha"
+                className="h-20 rounded border border-gray-700 bg-white p-1"
+              />
+            ) : (
+              <span className="text-xs text-gray-500">Opcional</span>
+            )}
+          </div>
+        </div>
+      </Card>
+
+      <Modal
+        isOpen={showCancelModal}
+        onClose={() => setShowCancelModal(false)}
+        title="Cancelar Retirada"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-gray-300">
+            Tem certeza que deseja cancelar esta retirada? O estoque será restaurado automaticamente.
+          </p>
+          {cancelError && (
+            <Alert variant="danger">{cancelError}</Alert>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setShowCancelModal(false)}
+              disabled={cancelling}
+            >
+              Não
+            </Button>
+            <Button
+              variant="danger"
+              onClick={handleCancel}
+              isLoading={cancelling}
+            >
+              Sim, Cancelar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  )
+}

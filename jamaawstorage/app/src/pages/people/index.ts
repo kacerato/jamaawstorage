@@ -1,0 +1,5 @@
+export { PeoplePage } from './PeoplePage'
+export { PersonDetailPage } from './PersonDetailPage'
+export { PersonForm } from './PersonForm'
+export { PersonInventoryModal } from './PersonInventoryModal'
+export { PeopleRoutes } from './PeopleRoutes'

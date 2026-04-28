@@ -1,0 +1,32 @@
+import { useState, useCallback } from 'react'
+
+import { Sidebar } from './Sidebar'
+import { Header } from './Header'
+
+import { Outlet } from 'react-router-dom'
+
+export function AppLayout() {
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((prev) => !prev)
+  }, [])
+
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false)
+  }, [])
+
+  return (
+    <div className="min-h-screen bg-gray-950 text-white">
+      <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
+
+      <div className="lg:pl-64">
+        <Header onToggleSidebar={toggleSidebar} />
+
+        <main className="p-4 lg:p-6">
+          <Outlet />
+        </main>
+      </div>
+    </div>
+  )
+}
