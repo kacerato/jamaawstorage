@@ -59,7 +59,7 @@ export interface Database {
         }
         Insert: {
           id?: string
-          code?: string
+          code: string
           name: string
           description?: string | null
           unit: string

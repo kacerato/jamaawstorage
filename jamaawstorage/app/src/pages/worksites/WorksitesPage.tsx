@@ -50,7 +50,7 @@ export function WorksitesPage() {
 
     const { data, error: fetchError } = await supabase
       .from('work_sites')
-      .select('*, withdrawals!withdrawals_work_site_id_fkey(id)')
+      .select('*, withdrawals(id)')
       .order('name')
 
     if (fetchError) {
@@ -92,7 +92,7 @@ export function WorksitesPage() {
 
     const { data, error: fetchError } = await supabase
       .from('withdrawals')
-      .select('id, code, status, created_at, people!withdrawals_requested_by_fkey(full_name), withdrawal_items!withdrawal_items_withdrawal_id_fkey(id)')
+      .select('id, code, status, created_at, requested_by_person:people!withdrawals_requested_by_fkey(full_name), withdrawal_items(id)')
       .eq('work_site_id', worksiteId)
       .order('created_at', { ascending: false })
       .limit(20)
@@ -114,7 +114,7 @@ export function WorksitesPage() {
       code: row.code,
       status: row.status,
       created_at: row.created_at,
-      requester_name: (row.people as unknown as { full_name: string } | null)?.full_name ?? '—',
+      requester_name: row.requested_by_person?.full_name ?? '—',
       items_count: row.withdrawal_items?.length ?? 0,
     }))
 
@@ -519,6 +519,6 @@ interface RawWithdrawalRow {
   code: string
   status: string
   created_at: string
-  people: unknown
+  requested_by_person: { full_name: string } | null
   withdrawal_items: { id: string }[]
 }

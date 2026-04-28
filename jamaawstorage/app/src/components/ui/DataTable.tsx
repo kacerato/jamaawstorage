@@ -83,9 +83,9 @@ export function DataTable<T extends Record<string, unknown>>({
         <table className="w-full">
           <thead>
             <tr className="bg-gray-800">
-              {columns.map((col) => (
+              {columns.map((col, idx) => (
                 <th
-                  key={String(col.key)}
+                  key={`${String(col.key)}-${idx}`}
                   className="px-4 py-3 text-left text-sm font-medium text-gray-300"
                 >
                   {col.header}
@@ -96,9 +96,9 @@ export function DataTable<T extends Record<string, unknown>>({
           <tbody>
             {Array.from({ length: 5 }).map((_, idx) => (
               <tr key={idx} className="border-t border-gray-800">
-                {columns.map((col) => (
+                {columns.map((col, colIdx) => (
                   <td
-                    key={String(col.key)}
+                    key={`${String(col.key)}-${colIdx}`}
                     className="px-4 py-3"
                   >
                     <div className="h-4 animate-pulse rounded bg-gray-800" />
@@ -155,9 +155,9 @@ export function DataTable<T extends Record<string, unknown>>({
         <table className="w-full">
           <thead>
             <tr className="sticky top-0 bg-gray-800">
-              {columns.map((col) => (
+              {columns.map((col, idx) => (
                 <th
-                  key={String(col.key)}
+                  key={`${String(col.key)}-${idx}`}
                   className={cn(
                     'px-4 py-3 text-left text-sm font-medium text-gray-300',
                     col.sortable && 'cursor-pointer select-none hover:text-orange-400',
@@ -207,9 +207,9 @@ export function DataTable<T extends Record<string, unknown>>({
                   )}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
-                  {columns.map((col) => (
+                  {columns.map((col, idx) => (
                     <td
-                      key={String(col.key)}
+                      key={`${String(col.key)}-${idx}`}
                       className={cn('px-4 py-3 text-sm text-gray-300', col.className)}
                     >
                       {renderCellValue(row, col)}

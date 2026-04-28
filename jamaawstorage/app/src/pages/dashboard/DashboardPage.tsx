@@ -81,7 +81,7 @@ export function DashboardPage() {
           .eq('is_active', true),
         supabase
           .from('withdrawals')
-          .select('*, requested_by_person:people!requested_by(*), withdrawal_items:id(*)')
+          .select('*, requested_by_person:people!withdrawals_requested_by_fkey(*), withdrawal_items(id)')
           .order('created_at', { ascending: false })
           .limit(10),
       ])

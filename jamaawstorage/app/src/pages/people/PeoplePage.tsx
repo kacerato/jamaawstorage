@@ -38,7 +38,7 @@ export function PeoplePage() {
 
     const { data, error: fetchError } = await supabase
       .from('people')
-      .select('*, person_inventories:left_person_inventories_on_person_id(stock_item_id, stock_items:stock_items(minimum_quantity, current_quantity))')
+      .select('*, person_inventories(stock_item_id, stock_items(minimum_quantity, current_quantity))')
       .order('full_name')
 
     if (fetchError) {

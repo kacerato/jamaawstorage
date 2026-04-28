@@ -195,7 +195,7 @@ function MovementsTab() {
   useEffect(() => {
     async function fetchFilters() {
       const [leadersRes, collabsRes, worksitesRes, itemsRes] = await Promise.all([
-        supabase.from('people').select('*').eq('is_active', true).in('role', ['leader', 'supervisor']).order('full_name'),
+        supabase.from('people').select('*').eq('is_active', true).eq('role', 'leader').order('full_name'),
         supabase.from('people').select('*').eq('is_active', true).eq('role', 'collaborator').order('full_name'),
         supabase.from('work_sites').select('*').eq('is_active', true).order('name'),
         supabase.from('stock_items').select('*').order('name'),
@@ -216,7 +216,7 @@ function MovementsTab() {
     let query = supabase
       .from('withdrawals')
       .select(
-        '*, withdrawal_items(*, stock_items:stock_items(*)), requested_by_person:people!requested_by(*), collaborator:people!collaborator_id(*), work_site:work_sites(*)',
+        '*, withdrawal_items(*, stock_items(*)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*)',
       )
       .in('status', ['approved', 'completed'])
       .order('created_at', { ascending: false })
@@ -494,7 +494,7 @@ function InventoryTab() {
 
       const { data, error: fetchError } = await supabase
         .from('people')
-        .select('*, person_inventories:left_person_inventories_on_person_id(*, stock_items:stock_items(*))')
+        .select('*, person_inventories(*, stock_items(*))')
         .eq('is_active', true)
         .eq('role', 'collaborator')
         .order('full_name')
@@ -1230,7 +1230,7 @@ function LeaderConsumptionTab() {
         .from('people')
         .select('*')
         .eq('is_active', true)
-        .in('role', ['leader', 'supervisor'])
+        .eq('role', 'leader')
         .order('full_name')
 
       if (data) setLeaders(data as PersonRow[])

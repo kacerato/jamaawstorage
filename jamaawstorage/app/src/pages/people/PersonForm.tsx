@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from 'react'
 import type { Tables, TablesInsert, AppRole } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { Button, Input, Select } from '../../components/ui'
+import { Alert, Button, Input, Select } from '../../components/ui'
 
 interface PersonFormProps {
   person?: Tables<'people'> | null
@@ -22,10 +22,11 @@ interface FormErrors {
   full_name?: string
   employee_id?: string
   role?: string
+  form?: string
 }
 
 export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const isEditing = person != null
 
   const [form, setForm] = useState<FormState>({
@@ -63,11 +64,21 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
     }
 
     setCheckingEmployeeId(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('people')
       .select('id')
       .eq('employee_id', empId.trim())
       .maybeSingle<{ id: string }>()
+
+    if (error) {
+      setEmployeeIdAvailable(null)
+      setErrors((prev) => ({
+        ...prev,
+        employee_id: 'Não foi possível validar a matrícula agora.',
+      }))
+      setCheckingEmployeeId(false)
+      return
+    }
 
     setEmployeeIdAvailable(data == null)
     setCheckingEmployeeId(false)
@@ -104,9 +115,20 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!validate()) return
-    if (!user) return
+    if (!user) {
+      setErrors((prev) => ({ ...prev, form: 'Sua sessão expirou. Faça login novamente.' }))
+      return
+    }
+    if (!profile) {
+      setErrors((prev) => ({
+        ...prev,
+        form: 'Seu usuário autenticado ainda não possui perfil de supervisor disponível.',
+      }))
+      return
+    }
 
     setIsSubmitting(true)
+    setErrors((prev) => ({ ...prev, form: undefined }))
 
     try {
       if (isEditing && person) {
@@ -136,7 +158,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
           sector: form.sector.trim() || null,
           photo_url: form.photo_url.trim() || null,
           is_active: true,
-          created_by: user.id,
+          created_by: profile.id,
         }
 
         const { data, error } = await supabase
@@ -150,7 +172,18 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Erro ao salvar pessoa'
-      setErrors({ full_name: message })
+      const lower = message.toLowerCase()
+      let friendlyMessage = message
+
+      if (lower.includes('people_created_by_fkey') || lower.includes('foreign key')) {
+        friendlyMessage =
+          'O usuário logado não possui um perfil válido em profiles. Refaça o login após aplicar a migration do Supabase.'
+      } else if (lower.includes('permission denied')) {
+        friendlyMessage =
+          'Seu usuário não tem permissão para cadastrar pessoas. Verifique as policies e grants do Supabase.'
+      }
+
+      setErrors((prev) => ({ ...prev, form: friendlyMessage }))
     } finally {
       setIsSubmitting(false)
     }
@@ -222,6 +255,12 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
         />
         <p className="text-sm text-gray-500">Envio de foto disponível em breve</p>
       </div>
+
+      {errors.form && (
+        <Alert variant="danger">
+          {errors.form}
+        </Alert>
+      )}
 
       <div className="flex justify-end gap-3 border-t border-gray-700 pt-4">
         <Button type="button" variant="secondary" onClick={onCancel}>

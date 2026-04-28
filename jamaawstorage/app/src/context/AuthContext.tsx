@@ -27,30 +27,73 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const fetchProfile = useCallback(async (userId: string): Promise<ProfileRow | null> => {
+  const createMissingProfile = useCallback(async (authUser: User): Promise<ProfileRow | null> => {
+    const fullNameFromMetadata =
+      typeof authUser.user_metadata?.full_name === 'string'
+        ? authUser.user_metadata.full_name.trim()
+        : ''
+
+    const employeeIdFromMetadata =
+      typeof authUser.user_metadata?.employee_id === 'string'
+        ? authUser.user_metadata.employee_id.trim()
+        : ''
+
+    const fallbackProfile: ProfileInsert = {
+      id: authUser.id,
+      full_name:
+        fullNameFromMetadata ||
+        authUser.email?.split('@')[0]?.trim() ||
+        'Supervisor',
+      employee_id: employeeIdFromMetadata || null,
+      role: 'supervisor',
+      is_active: true,
+    }
+
+    const { data, error } = await supabase
+      .from('profiles')
+      .upsert(fallbackProfile as never, { onConflict: 'id' })
+      .select('*')
+      .maybeSingle<ProfileRow>()
+
+    if (error) {
+      console.error('Error creating missing profile:', error.message)
+      return null
+    }
+
+    return data ?? null
+  }, [])
+
+  const fetchProfile = useCallback(async (authUser: User): Promise<ProfileRow | null> => {
     const { data, error } = await supabase
       .from('profiles')
       .select('*')
-      .eq('id', userId)
-      .single<ProfileRow>()
+      .eq('id', authUser.id)
+      .maybeSingle<ProfileRow>()
 
     if (error) {
       console.error('Error fetching profile:', error.message)
       return null
     }
 
-    if (!data) {
+    let resolvedProfile = data
+
+    if (!resolvedProfile) {
+      console.warn('Profile not found for authenticated user. Creating a supervisor profile automatically.')
+      resolvedProfile = await createMissingProfile(authUser)
+    }
+
+    if (!resolvedProfile) {
       return null
     }
 
-    if (data.role !== 'supervisor' || !data.is_active) {
+    if (resolvedProfile.role !== 'supervisor' || !resolvedProfile.is_active) {
       console.error('Access denied: only active supervisor accounts are allowed')
       await supabase.auth.signOut()
       return null
     }
 
-    return data
-  }, [])
+    return resolvedProfile
+  }, [createMissingProfile])
 
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -60,7 +103,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
         setUser(currentUser)
 
         if (currentUser) {
-          const fetchedProfile = await fetchProfile(currentUser.id)
+          const fetchedProfile = await fetchProfile(currentUser)
           setProfile(fetchedProfile)
         } else {
           setProfile(null)
@@ -95,6 +138,12 @@ function AuthProvider({ children }: { children: ReactNode }) {
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email,
         password,
+        options: {
+          data: {
+            full_name: profileData.full_name,
+            employee_id: profileData.employee_id ?? null,
+          },
+        },
       })
 
       if (authError) {

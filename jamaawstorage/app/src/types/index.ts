@@ -70,6 +70,7 @@ export interface WithdrawalListItem {
   created_at: string
   supervisor_signature: string | null
   requester_signature: string | null
+  withdrawal_items?: { id: string }[]
   requested_by_person: Tables<'people'>
   collaborator: Tables<'people'> | null
   work_site: Tables<'work_sites'> | null

@@ -53,7 +53,7 @@ export function WithdrawalsPage() {
       .from('people')
       .select('*')
       .eq('is_active', true)
-      .in('role', ['leader', 'supervisor'])
+      .eq('role', 'leader')
       .order('full_name')
       .then(({ data }) => {
         if (cancelled) return
@@ -70,7 +70,7 @@ export function WithdrawalsPage() {
       let query = supabase
         .from('withdrawals')
         .select(
-          'id, code, requested_by, destination_type, collaborator_id, work_site_id, status, created_at, supervisor_signature, requester_signature, requested_by_person:people!requested_by(*), collaborator:people!collaborator_id(*), work_site:work_sites(*)',
+          'id, code, requested_by, destination_type, collaborator_id, work_site_id, status, created_at, supervisor_signature, requester_signature, withdrawal_items(id), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*)',
         )
         .order('created_at', { ascending: false })
 
@@ -159,9 +159,12 @@ export function WithdrawalsPage() {
       },
     },
     {
-      key: 'status' as const,
+      key: 'item_count' as const,
       header: 'Qtd Itens',
-      render: () => '-',
+      render: (_value: unknown, row: WithdrawalRowForTable) => {
+        const w = row as unknown as WithdrawalListItem
+        return w.withdrawal_items?.length ?? 0
+      },
       className: 'text-center',
     },
     {

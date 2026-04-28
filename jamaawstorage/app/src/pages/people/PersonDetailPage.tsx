@@ -76,7 +76,7 @@ export function PersonDetailPage() {
 
     const { data, error: fetchError } = await supabase
       .from('people')
-      .select('*, person_inventories:left_person_inventories_on_person_id(*, stock_items:stock_items(*))')
+      .select('*, person_inventories(*, stock_items(*))')
       .eq('id', id)
       .single()
 
@@ -126,7 +126,7 @@ export function PersonDetailPage() {
 
     const { data, error: fetchError } = await supabase
       .from('withdrawals')
-      .select('*, withdrawal_items:left_withdrawal_items_on_withdrawal_id(*, stock_items:stock_items(*)), collaborator:left_withdrawals_collaborator_id_fkey(*), work_site:left_withdrawals_work_site_id_fkey(*)')
+      .select('*, withdrawal_items(*, stock_items(*)), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*)')
       .eq('requested_by', id)
       .order('created_at', { ascending: false })
 

@@ -109,7 +109,7 @@ export function StockPage() {
         .order('created_at', { ascending: false }),
       supabase
         .from('withdrawal_items')
-        .select('quantity, withdrawal:withdrawals(id, code, status, created_at, requested_by_person:people!requested_by(full_name))')
+        .select('quantity, withdrawal:withdrawals(id, code, status, created_at, requested_by_person:people!withdrawals_requested_by_fkey(full_name))')
         .eq('stock_item_id', itemId)
         .order('created_at', { ascending: false })
         .limit(10),
@@ -140,6 +140,7 @@ export function StockPage() {
   const filteredItems = items.filter((item) => {
     const matchesSearch =
       searchQuery === '' ||
+      item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
       item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.category ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
       (item.ca_nr ?? '').toLowerCase().includes(searchQuery.toLowerCase())
@@ -292,6 +293,14 @@ export function StockPage() {
 
   const columns = [
     {
+      key: 'code',
+      header: 'CÃ³digo',
+      sortable: true,
+      render: (_value: unknown, row: StockRowRecord) => (
+        <span className="font-mono text-sm text-orange-400">{row.code}</span>
+      ),
+    },
+    {
       key: 'name',
       header: 'Nome',
       sortable: true,
@@ -389,7 +398,7 @@ export function StockPage() {
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="flex-1">
             <Input
-              placeholder="Buscar por nome, categoria ou CA/NR..."
+              placeholder="Buscar por cÃ³digo, nome, categoria ou CA/NR..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               leftIcon={
@@ -599,6 +608,14 @@ export function StockPage() {
         {selectedItem && (
           <div className="flex flex-col gap-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-medium uppercase text-gray-500">
+                  CÃ³digo
+                </p>
+                <p className="mt-1 text-sm font-mono text-orange-400">
+                  {selectedItem.code}
+                </p>
+              </div>
               <div>
                 <p className="text-xs font-medium uppercase text-gray-500">
                   Nome

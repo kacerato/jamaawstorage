@@ -7,6 +7,7 @@ type StockItemInsert = TablesInsert<'stock_items'>
 type StockItemUpdate = TablesUpdate<'stock_items'>
 
 interface StockItemFormData {
+  code: string
   name: string
   description: string
   category: string
@@ -18,7 +19,7 @@ interface StockItemFormData {
 
 const UNIT_OPTIONS = [
   { value: 'un', label: 'un - Unidade' },
-  { value: 'pç', label: 'pç - Peça' },
+  { value: 'pÃ§', label: 'pÃ§ - PeÃ§a' },
   { value: 'cx', label: 'cx - Caixa' },
   { value: 'm', label: 'm - Metro' },
   { value: 'kg', label: 'kg - Quilograma' },
@@ -37,12 +38,13 @@ const SVG_ICON_KEY_OPTIONS = [
   { value: 'helmet', label: 'Capacete' },
   { value: 'pliers', label: 'Alicate' },
   { value: 'gloves', label: 'Luvas' },
-  { value: 'goggles', label: 'Óculos' },
+  { value: 'goggles', label: 'Ã“culos' },
   { value: 'vest', label: 'Colete' },
   { value: 'package', label: 'Pacote' },
 ]
 
 interface FormErrors {
+  code?: string
   name?: string
   current_quantity?: string
   minimum_quantity?: string
@@ -58,6 +60,7 @@ interface StockItemFormProps {
 function itemToFormData(item: StockItemRow | null): StockItemFormData {
   if (!item) {
     return {
+      code: '',
       name: '',
       description: '',
       category: '',
@@ -67,7 +70,9 @@ function itemToFormData(item: StockItemRow | null): StockItemFormData {
       ca_nr: '',
     }
   }
+
   return {
+    code: item.code,
     name: item.name,
     description: item.description ?? '',
     category: item.category ?? '',
@@ -78,6 +83,19 @@ function itemToFormData(item: StockItemRow | null): StockItemFormData {
   }
 }
 
+function sanitizeCode(value: string): string {
+  return value
+    .toUpperCase()
+    .replace(/[^A-Z0-9-]/g, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-|-$/g, '')
+    .slice(0, 24)
+}
+
+function suggestCode(value: string): string {
+  return sanitizeCode(value.trim().replace(/\s+/g, '-'))
+}
+
 export function StockItemForm({
   item,
   onSubmit,
@@ -85,19 +103,20 @@ export function StockItemForm({
   isSubmitting,
 }: StockItemFormProps) {
   const isEditing = item !== null
-  const [formData, setFormData] = useState<StockItemFormData>(
-    itemToFormData(item)
-  )
-  const [svgIconKey, setSvgIconKey] = useState<string>(
-    isEditing ? 'package' : 'package'
-  )
+  const [formData, setFormData] = useState<StockItemFormData>(itemToFormData(item))
+  const [svgIconKey, setSvgIconKey] = useState<string>(item?.svg_icon_key ?? 'package')
   const [errors, setErrors] = useState<FormErrors>({})
+  const [codeManuallyEdited, setCodeManuallyEdited] = useState(isEditing)
 
   const validate = (): boolean => {
     const newErrors: FormErrors = {}
 
+    if (!formData.code.trim()) {
+      newErrors.code = 'CÃ³digo Ã© obrigatÃ³rio'
+    }
+
     if (!formData.name.trim()) {
-      newErrors.name = 'Nome é obrigatório'
+      newErrors.name = 'Nome Ã© obrigatÃ³rio'
     }
 
     if (formData.current_quantity < 0) {
@@ -105,8 +124,7 @@ export function StockItemForm({
     }
 
     if (formData.minimum_quantity < 0) {
-      newErrors.minimum_quantity =
-        'Quantidade mínima deve ser maior ou igual a zero'
+      newErrors.minimum_quantity = 'Quantidade mÃ­nima deve ser maior ou igual a zero'
     }
 
     setErrors(newErrors)
@@ -119,6 +137,7 @@ export function StockItemForm({
     if (!validate()) return
 
     const baseData = {
+      code: sanitizeCode(formData.code),
       name: formData.name.trim(),
       description: formData.description.trim() || null,
       category: formData.category || null,
@@ -135,18 +154,16 @@ export function StockItemForm({
         updated_at: new Date().toISOString(),
       }
       await onSubmit(updateData)
-    } else {
-      const insertData: StockItemInsert = {
-        ...baseData,
-      }
-      await onSubmit(insertData)
+      return
     }
+
+    const insertData: StockItemInsert = {
+      ...baseData,
+    }
+    await onSubmit(insertData)
   }
 
-  const handleChange = (
-    field: keyof StockItemFormData,
-    value: string | number
-  ) => {
+  const handleChange = (field: keyof StockItemFormData, value: string | number) => {
     setFormData((prev) => ({ ...prev, [field]: value }))
     if (errors[field as keyof FormErrors]) {
       setErrors((prev) => {
@@ -157,34 +174,61 @@ export function StockItemForm({
     }
   }
 
+  const handleNameChange = (value: string) => {
+    setFormData((prev) => ({
+      ...prev,
+      name: value,
+      code:
+        !isEditing && !codeManuallyEdited && prev.code.trim() === ''
+          ? suggestCode(value)
+          : prev.code,
+    }))
+
+    if (errors.name) {
+      setErrors((prev) => {
+        const next = { ...prev }
+        delete next.name
+        return next
+      })
+    }
+  }
+
+  const handleCodeChange = (value: string) => {
+    setCodeManuallyEdited(true)
+    handleChange('code', sanitizeCode(value))
+  }
+
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input
           label="Nome *"
           value={formData.name}
-          onChange={(e) => handleChange('name', e.target.value)}
+          onChange={(e) => handleNameChange(e.target.value)}
           error={errors.name}
           placeholder="Nome do item"
           required
         />
 
+        <Input
+          label="CÃ³digo *"
+          value={formData.code}
+          onChange={(e) => handleCodeChange(e.target.value)}
+          error={errors.code}
+          placeholder="Ex: CAPACETE-001"
+          helperText={!isEditing ? 'Gerado automaticamente a partir do nome, mas pode ser editado.' : undefined}
+          required
+        />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select
           label="Unidade"
           value={formData.unit}
           onChange={(e) => handleChange('unit', e.target.value)}
           options={UNIT_OPTIONS}
         />
-      </div>
 
-      <Input
-        label="Descrição"
-        value={formData.description}
-        onChange={(e) => handleChange('description', e.target.value)}
-        placeholder="Descrição do item (opcional)"
-      />
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Select
           label="Categoria"
           value={formData.category}
@@ -192,22 +236,31 @@ export function StockItemForm({
           options={CATEGORY_OPTIONS}
           placeholder="Selecione uma categoria"
         />
+      </div>
+
+      <Input
+        label="DescriÃ§Ã£o"
+        value={formData.description}
+        onChange={(e) => handleChange('description', e.target.value)}
+        placeholder="DescriÃ§Ã£o do item (opcional)"
+      />
+
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Input
+          label="CA/NR"
+          value={formData.ca_nr}
+          onChange={(e) => handleChange('ca_nr', e.target.value)}
+          placeholder="Certificado de AprovaÃ§Ã£o - apenas para EPIs"
+          helperText="Certificado de AprovaÃ§Ã£o - apenas para EPIs"
+        />
 
         <Select
-          label="Ícone SVG"
+          label="Ãcone SVG"
           value={svgIconKey}
           onChange={(e) => setSvgIconKey(e.target.value)}
           options={SVG_ICON_KEY_OPTIONS}
         />
       </div>
-
-      <Input
-        label="CA/NR"
-        value={formData.ca_nr ?? ''}
-        onChange={(e) => handleChange('ca_nr', e.target.value)}
-        placeholder="Certificado de Aprovação - apenas para EPIs"
-        helperText="Certificado de Aprovação - apenas para EPIs"
-      />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Input
@@ -215,25 +268,19 @@ export function StockItemForm({
           type="number"
           min={0}
           value={String(formData.current_quantity)}
-          onChange={(e) =>
-            handleChange('current_quantity', parseInt(e.target.value, 10) || 0)
-          }
+          onChange={(e) => handleChange('current_quantity', parseInt(e.target.value, 10) || 0)}
           error={errors.current_quantity}
         />
 
         <Input
-          label="Quantidade Mínima"
+          label="Quantidade MÃ­nima"
           type="number"
           min={0}
           value={String(formData.minimum_quantity)}
-          onChange={(e) =>
-            handleChange('minimum_quantity', parseInt(e.target.value, 10) || 0)
-          }
+          onChange={(e) => handleChange('minimum_quantity', parseInt(e.target.value, 10) || 0)}
           error={errors.minimum_quantity}
         />
       </div>
-
-
 
       <div className="flex items-center justify-end gap-3 border-t border-gray-700 pt-4">
         <Button
@@ -245,7 +292,7 @@ export function StockItemForm({
           Cancelar
         </Button>
         <Button type="submit" variant="primary" isLoading={isSubmitting}>
-          {isEditing ? 'Salvar Alterações' : 'Criar Item'}
+          {isEditing ? 'Salvar AlteraÃ§Ãµes' : 'Criar Item'}
         </Button>
       </div>
     </form>

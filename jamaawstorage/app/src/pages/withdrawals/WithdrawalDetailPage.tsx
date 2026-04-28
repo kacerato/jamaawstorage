@@ -53,7 +53,7 @@ export function WithdrawalDetailPage() {
     supabase
       .from('withdrawals')
       .select(
-        '*, withdrawal_items(*, stock_items(*)), requested_by_person:people!requested_by(*), collaborator:people!collaborator_id(*), work_site:work_sites(*), approved_by_profile:profiles!authorized_by(*)',
+        '*, withdrawal_items(*, stock_items(*)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*), approved_by_profile:profiles!withdrawals_authorized_by_fkey(*)',
       )
       .eq('id', id)
       .single<WithdrawalRow>()
