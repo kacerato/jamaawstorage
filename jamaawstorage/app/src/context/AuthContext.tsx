@@ -13,6 +13,7 @@ interface AuthContextType {
   user: User | null
   profile: ProfileRow | null
   loading: boolean
+  error: string | null
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signUp: (
     email: string,
@@ -20,6 +21,7 @@ interface AuthContextType {
     profileData: { full_name: string; employee_id?: string }
   ) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
+  retry: () => void
 }
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -47,14 +49,35 @@ function translateError(msg: string): string {
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
+const AUTH_TIMEOUT_MS = 10000 // 10 segundos máximo de espera
+
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
-  const mountedRef = useRef(true)
+  const [error, setError] = useState<string | null>(null)
 
-  // ── Profile fetch (no sign-out side effects) ────────────────────────────────
+  // Refs para controle de lifecycle e timeouts
+  const isActiveRef = useRef(true)
+  const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const subscriptionRef = useRef<{ unsubscribe: () => void } | null>(null)
 
+  // ── Cleanup function ──────────────────────────────────────────────────────
+  const clearAuthTimeout = useCallback(() => {
+    if (timeoutIdRef.current) {
+      clearTimeout(timeoutIdRef.current)
+      timeoutIdRef.current = null
+    }
+  }, [])
+
+  const stopLoading = useCallback(() => {
+    if (isActiveRef.current) {
+      setLoading(false)
+    }
+    clearAuthTimeout()
+  }, [clearAuthTimeout])
+
+  // ── Profile fetch ───────────────────────────────────────────────────────────
   const fetchProfile = useCallback(async (authUser: User): Promise<ProfileRow | null> => {
     try {
       const { data, error } = await supabase
@@ -108,81 +131,114 @@ function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  // ── Resolve a user session into state ───────────────────────────────────────
-
+  // ── Session resolution ──────────────────────────────────────────────────────
   const resolveSession = useCallback(async (authUser: User | null) => {
+    if (!isActiveRef.current) return
+
     if (!authUser) {
-      if (mountedRef.current) {
-        setUser(null)
-        setProfile(null)
-      }
-      return
-    }
-
-    const prof = await fetchProfile(authUser)
-
-    if (!mountedRef.current) return
-
-    // If not a supervisor or inactive, sign out quietly
-    if (prof && (prof.role !== 'supervisor' || !prof.is_active)) {
-      console.error('[Auth] Acesso negado: somente supervisores ativos.')
       setUser(null)
       setProfile(null)
-      await supabase.auth.signOut()
+      setError(null)
       return
     }
 
-    setUser(authUser)
-    setProfile(prof)
+    try {
+      const prof = await fetchProfile(authUser)
+
+      if (!isActiveRef.current) return
+
+      // Se não for supervisor ou estiver inativo, fazer logout
+      if (prof && (prof.role !== 'supervisor' || !prof.is_active)) {
+        console.error('[Auth] Acesso negado: somente supervisores ativos.')
+        setUser(null)
+        setProfile(null)
+        setError('Acesso negado: somente supervisores ativos podem acessar.')
+        await supabase.auth.signOut()
+        return
+      }
+
+      setUser(authUser)
+      setProfile(prof)
+      setError(null)
+    } catch (err) {
+      console.error('[Auth] Erro ao resolver sessão:', err)
+      if (isActiveRef.current) {
+        setError('Erro ao carregar dados do usuário.')
+      }
+    }
   }, [fetchProfile])
 
-  // ── Bootstrap: get existing session + subscribe to changes ──────────────────
-  // explicitly call getSession to avoid React Strict Mode swallowing INITIAL_SESSION
-  const authInitialized = useRef(false)
+  // ── Initialize auth ───────────────────────────────────────────────────────
+  const initializeAuth = useCallback(async () => {
+    if (!isActiveRef.current) return
 
-  useEffect(() => {
-    let ignore = false
-    mountedRef.current = true
+    setLoading(true)
+    setError(null)
 
-    // 1. Fetch the initial session explicitly (only once even in Strict Mode)
-    if (!authInitialized.current) {
-      authInitialized.current = true
-      supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-        if (ignore) return
-        
-        if (error) {
-          console.error('[Auth] Erro ao obter sessão inicial:', error.message)
-          if (mountedRef.current) setLoading(false)
+    // Setup timeout de segurança - GARANTE que loading sempre termina
+    timeoutIdRef.current = setTimeout(() => {
+      if (isActiveRef.current) {
+        console.warn('[Auth] Timeout de inicialização atingido')
+        setLoading(false)
+        setError('Tempo de conexão esgotado. Verifique sua internet.')
+      }
+    }, AUTH_TIMEOUT_MS)
+
+    try {
+      // 1. Buscar sessão inicial
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession()
+
+      if (!isActiveRef.current) return
+
+      if (sessionError) {
+        console.error('[Auth] Erro ao obter sessão:', sessionError.message)
+        setError(translateError(sessionError.message))
+        stopLoading()
+        return
+      }
+
+      const authUser = session?.user ?? null
+
+      // 2. Verificar se sessão está expirada
+      if (session?.expires_at) {
+        const expiresAt = session.expires_at * 1000
+        if (Date.now() > expiresAt) {
+          console.warn('[Auth] Sessão expirada na inicialização')
+          setUser(null)
+          setProfile(null)
+          await supabase.auth.signOut()
+          stopLoading()
           return
         }
+      }
 
-        const authUser = session?.user ?? null
+      // 3. Resolver sessão
+      await resolveSession(authUser)
 
-        if (session?.expires_at) {
-          const expiresAt = session.expires_at * 1000
-          if (Date.now() > expiresAt) {
-            console.warn('[Auth] Sessão expirada na inicialização. Limpando...')
-            setUser(null)
-            setProfile(null)
-            if (mountedRef.current) setLoading(false)
-            void supabase.auth.signOut()
-            return
-          }
-        }
-
-        await resolveSession(authUser)
-        if (!ignore && mountedRef.current) {
-          setLoading(false)
-        }
-      })
+    } catch (err) {
+      console.error('[Auth] Erro fatal na inicialização:', err)
+      if (isActiveRef.current) {
+        setError('Erro ao inicializar autenticação.')
+      }
+    } finally {
+      // GARANTIA ABSOLUTA: loading sempre termina aqui
+      stopLoading()
     }
+  }, [resolveSession, stopLoading])
 
-    // 2. Listen for future auth changes
+  // ── Effect: Initial setup ─────────────────────────────────────────────────
+  useEffect(() => {
+    isActiveRef.current = true
+
+    // Inicializar auth imediatamente
+    initializeAuth()
+
+    // 2. Configurar listener para mudanças de auth
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        if (ignore) return
+        if (!isActiveRef.current) return
 
-        // Ignoramos INITIAL_SESSION pois já lidamos com ela via getSession() acima
+        // Ignorar INITIAL_SESSION pois já tratamos via getSession()
         if (event === 'INITIAL_SESSION') return
 
         const authUser = session?.user ?? null
@@ -190,47 +246,46 @@ function AuthProvider({ children }: { children: ReactNode }) {
         if (event === 'SIGNED_OUT') {
           setUser(null)
           setProfile(null)
-          if (mountedRef.current) setLoading(false)
+          setError(null)
           return
         }
 
         if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          // Verificar expiração
           if (session?.expires_at) {
             const expiresAt = session.expires_at * 1000
             if (Date.now() > expiresAt) {
-              console.warn(`[Auth] Sessão expirada (${event}). Limpando...`)
+              console.warn(`[Auth] Sessão expirada (${event})`)
               setUser(null)
               setProfile(null)
-              if (mountedRef.current) setLoading(false)
-              void supabase.auth.signOut()
+              await supabase.auth.signOut()
               return
             }
           }
 
           await resolveSession(authUser)
-          if (!ignore && mountedRef.current) {
-            setLoading(false)
-          }
         }
       }
     )
 
+    subscriptionRef.current = subscription
+
+    // Cleanup
     return () => {
-      ignore = true
-      mountedRef.current = false
-      subscription.unsubscribe()
+      isActiveRef.current = false
+      clearAuthTimeout()
+      subscriptionRef.current?.unsubscribe()
+      subscriptionRef.current = null
     }
-  }, [resolveSession])
+  }, [initializeAuth, resolveSession, clearAuthTimeout])
 
-  // ── Auth actions ──────────────────────────────────────────────────────────────
-
+  // ── Auth actions ────────────────────────────────────────────────────────────
   const signIn = useCallback(
     async (email: string, password: string): Promise<{ error: string | null }> => {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
         return { error: translateError(error.message) }
       }
-      // The onAuthStateChange listener will handle setting user/profile
       return { error: null }
     },
     []
@@ -278,12 +333,25 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async (): Promise<void> => {
     setUser(null)
     setProfile(null)
+    setError(null)
     await supabase.auth.signOut()
   }, [])
 
-  // ── Context value ─────────────────────────────────────────────────────────────
+  const retry = useCallback(() => {
+    initializeAuth()
+  }, [initializeAuth])
 
-  const value: AuthContextType = { user, profile, loading, signIn, signUp, signOut }
+  // ── Context value ────────────────────────────────────────────────────────────
+  const value: AuthContextType = {
+    user,
+    profile,
+    loading,
+    error,
+    signIn,
+    signUp,
+    signOut,
+    retry,
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
