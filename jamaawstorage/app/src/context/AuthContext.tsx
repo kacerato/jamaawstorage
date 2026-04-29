@@ -53,6 +53,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
   // Timeout ID para cleanup
   const timeoutIdRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const isMountedRef = useRef(true)
+  // Guard: quando true, onAuthStateChange não interfere (signIn/signOut gerenciam o estado)
+  const isManualActionRef = useRef(false)
 
   // Computed
   const loading = state === 'loading'
@@ -159,8 +161,10 @@ function AuthProvider({ children }: { children: ReactNode }) {
     initializeAuth()
 
     // Listener para mudanças de estado em tempo real
+    // Ignora eventos durante ações manuais (signIn/signOut) para evitar race conditions
     const unsubscribe = onAuthStateChange((session) => {
       if (!isMountedRef.current) return
+      if (isManualActionRef.current) return
 
       if (!session) {
         // Usuário deslogou em outra aba ou token expirou
@@ -186,34 +190,47 @@ function AuthProvider({ children }: { children: ReactNode }) {
   // ── Auth actions ────────────────────────────────────────────────────────────
   const signIn = useCallback(
     async (email: string, password: string): Promise<{ error: string | null }> => {
+      isManualActionRef.current = true
       setSafeState('loading')
       setSafeError(null)
 
-      const { user: authUser, error: signInError } = await authSignIn(email, password)
+      try {
+        const { user: authUser, error: signInError } = await authSignIn(email, password)
 
-      if (signInError || !authUser) {
-        setSafeError(signInError || 'Erro ao fazer login')
-        setSafeState('error')
-        return { error: signInError || 'Erro ao fazer login' }
+        if (signInError || !authUser) {
+          const errMsg = signInError || 'Erro ao fazer login'
+          setSafeError(errMsg)
+          setSafeState('unauthenticated')
+          return { error: errMsg }
+        }
+
+        // Buscar profile após login
+        const userProfile = await fetchProfile(authUser.id)
+
+        // Verificar permissões
+        if (userProfile && (userProfile.role !== 'supervisor' || !userProfile.is_active)) {
+          await authSignOut()
+          setSafeUser(null)
+          setSafeProfile(null)
+          const errMsg = 'Acesso negado: somente supervisores ativos podem acessar.'
+          setSafeError(errMsg)
+          setSafeState('unauthenticated')
+          return { error: errMsg }
+        }
+
+        setSafeUser(authUser)
+        setSafeProfile(userProfile)
+        setSafeState('authenticated')
+        return { error: null }
+      } catch (err) {
+        const errMsg = err instanceof Error ? err.message : 'Erro ao fazer login'
+        setSafeError(errMsg)
+        setSafeState('unauthenticated')
+        return { error: errMsg }
+      } finally {
+        // Libera o guard após um tick para o listener não captar o evento deste signIn
+        setTimeout(() => { isManualActionRef.current = false }, 500)
       }
-
-      // Buscar profile após login
-      const userProfile = await fetchProfile(authUser.id)
-
-      // Verificar permissões
-      if (userProfile && (userProfile.role !== 'supervisor' || !userProfile.is_active)) {
-        await authSignOut()
-        setSafeUser(null)
-        setSafeProfile(null)
-        setSafeError('Acesso negado: somente supervisores ativos podem acessar.')
-        setSafeState('error')
-        return { error: 'Acesso negado: somente supervisores ativos podem acessar.' }
-      }
-
-      setSafeUser(authUser)
-      setSafeProfile(userProfile)
-      setSafeState('authenticated')
-      return { error: null }
     },
     [setSafeError, setSafeState, setSafeUser, setSafeProfile]
   )
@@ -247,14 +264,18 @@ function AuthProvider({ children }: { children: ReactNode }) {
   )
 
   const signOut = useCallback(async (): Promise<void> => {
+    isManualActionRef.current = true
     setSafeState('loading')
 
-    await authSignOut()
-
-    setSafeUser(null)
-    setSafeProfile(null)
-    setSafeError(null)
-    setSafeState('unauthenticated')
+    try {
+      await authSignOut()
+    } finally {
+      setSafeUser(null)
+      setSafeProfile(null)
+      setSafeError(null)
+      setSafeState('unauthenticated')
+      setTimeout(() => { isManualActionRef.current = false }, 500)
+    }
   }, [setSafeError, setSafeState, setSafeUser, setSafeProfile])
 
   const retry = useCallback(() => {
