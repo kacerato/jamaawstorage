@@ -174,7 +174,6 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
 
   const clearPhoto = () => {
     setPhotoPreview(null)
-    setSvgIconKey('generico')
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -237,7 +236,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
   }
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-4" style={{ maxHeight: '70vh', overflowY: 'auto', paddingRight: 2 }}>
+    <form onSubmit={handleSubmit} className="flex flex-col gap-4">
 
       {/* ── Seção: Foto do Item ── */}
       <div className="rounded-xl border border-gray-700/50 bg-gray-900/50 p-4 shadow-sm shadow-orange-500/5">

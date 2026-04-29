@@ -8,6 +8,7 @@ import {
   signUp as authSignUp,
   signOut as authSignOut,
   fetchProfile,
+  onAuthStateChange,
 } from '../services/authService'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -157,12 +158,30 @@ function AuthProvider({ children }: { children: ReactNode }) {
     // Inicia em idle e chama initialize
     initializeAuth()
 
+    // Listener para mudanças de estado em tempo real
+    const unsubscribe = onAuthStateChange((session) => {
+      if (!isMountedRef.current) return
+
+      if (!session) {
+        // Usuário deslogou em outra aba ou token expirou
+        setSafeUser(null)
+        setSafeProfile(null)
+        setSafeState('unauthenticated')
+      } else {
+        // Sessão renovada ou atualizada
+        setSafeUser(session.user)
+        setSafeProfile(session.profile)
+        setSafeState('authenticated')
+      }
+    })
+
     // Cleanup perfeito quando componente desmonta
     return () => {
       isMountedRef.current = false
       clearAuthTimeout()
+      unsubscribe()
     }
-  }, [initializeAuth, clearAuthTimeout])
+  }, [initializeAuth, clearAuthTimeout, setSafeUser, setSafeProfile, setSafeState])
 
   // ── Auth actions ────────────────────────────────────────────────────────────
   const signIn = useCallback(

@@ -28,107 +28,128 @@ export function useNotifications() {
   const refetch = useCallback(async () => {
     setLoading(true)
 
-    const [lowStockResult, pendingWithdrawalsResult, recentItemsResult] = await Promise.all([
-      supabase.rpc('check_low_stock'),
-      supabase
-        .from('withdrawals')
-        .select(
-          'id, code, status, created_at, requested_by_person:people!withdrawals_requested_by_fkey(full_name)'
-        )
-        .eq('status', 'pending')
-        .order('created_at', { ascending: false })
-        .limit(5),
-      supabase
-        .from('stock_items')
-        .select('id, name, code, created_at')
-        .gte('created_at', new Date(Date.now() - 48 * 3600 * 1000).toISOString())
-        .order('created_at', { ascending: false })
-        .limit(3),
-    ])
+    try {
+      const [lowStockResult, pendingWithdrawalsResult, recentItemsResult] = await Promise.all([
+        supabase.rpc('check_low_stock'),
+        supabase
+          .from('withdrawals')
+          .select('id, code, status, created_at, requested_by')
+          .eq('status', 'pending')
+          .order('created_at', { ascending: false })
+          .limit(5),
+        supabase
+          .from('stock_items')
+          .select('id, name, code, created_at')
+          .gte('created_at', new Date(Date.now() - 48 * 3600 * 1000).toISOString())
+          .order('created_at', { ascending: false })
+          .limit(3),
+      ])
 
-    const lowStockData = (lowStockResult.data ?? []) as Tables<'stock_items'>[]
-    const pendingWithdrawalsData =
-      (pendingWithdrawalsResult.data as {
+      if (lowStockResult.error) {
+        console.error('Error fetching low stock items:', lowStockResult.error.message)
+      }
+      if (pendingWithdrawalsResult.error) {
+        console.error('Error fetching pending withdrawals:', pendingWithdrawalsResult.error.message)
+      }
+      if (recentItemsResult.error) {
+        console.error('Error fetching recent items:', recentItemsResult.error.message)
+      }
+
+      const lowStockData = (lowStockResult.data ?? []) as Tables<'stock_items'>[]
+      setLowStockItems(lowStockData)
+
+      // Fetch people names for pending withdrawals
+      const rawWithdrawals = (pendingWithdrawalsResult.data as {
         id: string
         code: string | null
         status: string
         created_at: string
-        requested_by_person: { full_name: string | null } | null
-      }[]) ?? []
-    const recentItemsData =
-      (recentItemsResult.data as {
-        id: string
-        name: string
-        code: string
-        created_at: string
+        requested_by: string | null
       }[]) ?? []
 
-    if (lowStockResult.error) {
-      console.error('Error fetching low stock items:', lowStockResult.error.message)
-    }
-    if (pendingWithdrawalsResult.error) {
-      console.error('Error fetching pending withdrawals:', pendingWithdrawalsResult.error.message)
-    }
-    if (recentItemsResult.error) {
-      console.error('Error fetching recent items:', recentItemsResult.error.message)
-    }
+      const requestedByIds = rawWithdrawals
+        .map(w => w.requested_by)
+        .filter(Boolean) as string[]
 
-    setLowStockItems(lowStockData)
+      let peopleMap: Record<string, string> = {}
+      if (requestedByIds.length > 0) {
+        const { data: peopleData } = await supabase
+          .from('people')
+          .select('id, full_name')
+          .in('id', Array.from(new Set(requestedByIds)))
 
-    const items: NotificationItem[] = []
+        peopleMap = Object.fromEntries(
+          (peopleData || []).map(p => [p.id, p.full_name])
+        )
+      }
 
-    for (const item of lowStockData) {
-      if (item.current_quantity === 0) {
+      const recentItemsData =
+        (recentItemsResult.data as {
+          id: string
+          name: string
+          code: string
+          created_at: string
+        }[]) ?? []
+
+      const items: NotificationItem[] = []
+
+      for (const item of lowStockData) {
+        if (item.current_quantity === 0) {
+          items.push({
+            id: `stock-critical-${item.id}`,
+            type: 'stock_critical',
+            title: item.name,
+            description: `Estoque zerado! 0 / mín. ${item.minimum_quantity} ${item.unit}`,
+            createdAt: item.updated_at,
+            linkPath: '/stock',
+          })
+        } else {
+          items.push({
+            id: `stock-low-${item.id}`,
+            type: 'stock_low',
+            title: item.name,
+            description: `Estoque baixo: ${item.current_quantity} / mín. ${item.minimum_quantity} ${item.unit}`,
+            createdAt: item.updated_at,
+            linkPath: '/stock',
+          })
+        }
+      }
+
+      for (const withdrawal of rawWithdrawals) {
+        const personName = withdrawal.requested_by ? peopleMap[withdrawal.requested_by] : null
         items.push({
-          id: `stock-critical-${item.id}`,
-          type: 'stock_critical',
-          title: item.name,
-          description: `Estoque zerado! 0 / mín. ${item.minimum_quantity} ${item.unit}`,
-          createdAt: item.updated_at,
-          linkPath: '/stock',
+          id: `withdrawal-pending-${withdrawal.id}`,
+          type: 'withdrawal_pending',
+          title: withdrawal.code ?? 'Retirada',
+          description: `Retirada pendente — ${personName ?? 'N/A'}`,
+          createdAt: withdrawal.created_at,
+          linkPath: '/withdrawals',
         })
-      } else {
+      }
+
+      for (const item of recentItemsData) {
         items.push({
-          id: `stock-low-${item.id}`,
-          type: 'stock_low',
+          id: `item-added-${item.id}`,
+          type: 'item_added',
           title: item.name,
-          description: `Estoque baixo: ${item.current_quantity} / mín. ${item.minimum_quantity} ${item.unit}`,
-          createdAt: item.updated_at,
+          description: `Novo item adicionado (${item.code})`,
+          createdAt: item.created_at,
           linkPath: '/stock',
         })
       }
-    }
 
-    for (const withdrawal of pendingWithdrawalsData) {
-      items.push({
-        id: `withdrawal-pending-${withdrawal.id}`,
-        type: 'withdrawal_pending',
-        title: withdrawal.code ?? 'Retirada',
-        description: `Retirada pendente — ${withdrawal.requested_by_person?.full_name ?? 'N/A'}`,
-        createdAt: withdrawal.created_at,
-        linkPath: '/withdrawals',
+      items.sort((a, b) => {
+        const priorityDiff = priorityOrder[a.type] - priorityOrder[b.type]
+        if (priorityDiff !== 0) return priorityDiff
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       })
+
+      setNotifications(items)
+    } catch (err) {
+      console.error('Error fetching notifications:', err)
+    } finally {
+      setLoading(false)
     }
-
-    for (const item of recentItemsData) {
-      items.push({
-        id: `item-added-${item.id}`,
-        type: 'item_added',
-        title: item.name,
-        description: `Novo item adicionado (${item.code})`,
-        createdAt: item.created_at,
-        linkPath: '/stock',
-      })
-    }
-
-    items.sort((a, b) => {
-      const priorityDiff = priorityOrder[a.type] - priorityOrder[b.type]
-      if (priorityDiff !== 0) return priorityDiff
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    })
-
-    setNotifications(items)
-    setLoading(false)
   }, [])
 
   useEffect(() => {

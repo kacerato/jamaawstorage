@@ -78,7 +78,7 @@ export function Modal({
       />
       <div
         className={cn(
-          'relative w-full max-h-[90vh] transform rounded-2xl bg-gray-900 shadow-2xl transition-all duration-200 flex flex-col',
+          'relative w-full max-h-[90vh] overflow-y-auto transform rounded-2xl bg-gray-900 shadow-2xl transition-all duration-200 flex flex-col',
           sizeClasses[size],
           isAnimating
             ? 'translate-y-0 scale-100 opacity-100'
@@ -116,7 +116,7 @@ export function Modal({
             </button>
           )}
         </div>
-        <div className="overflow-y-auto px-6 py-4">{children}</div>
+        <div className="flex-1 px-6 py-4">{children}</div>
       </div>
     </div>,
     document.body,

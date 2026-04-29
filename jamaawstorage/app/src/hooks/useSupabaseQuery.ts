@@ -20,11 +20,21 @@ export function useSupabaseQuery<T>(
     setLoading(true)
     setError(null)
 
-    const result = await queryFn(supabase)
-
-    setData(result.data)
-    setError(result.error)
-    setLoading(false)
+    try {
+      const result = await queryFn(supabase)
+      setData(result.data)
+      setError(result.error)
+    } catch (err) {
+      console.error('useSupabaseQuery error:', err)
+      setError({
+        message: err instanceof Error ? err.message : 'Erro inesperado',
+        details: '',
+        hint: '',
+        code: 'UNKNOWN',
+      } as PostgrestError)
+    } finally {
+      setLoading(false)
+    }
   }, [queryFn])
 
   useEffect(() => {

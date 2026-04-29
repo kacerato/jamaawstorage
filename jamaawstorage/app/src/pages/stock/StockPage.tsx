@@ -100,24 +100,29 @@ export function StockPage() {
     setLoading(true)
     setError(null)
 
-    const { data, error: fetchError } = await supabase
-      .from('stock_items')
-      .select('*')
-      .order('name', { ascending: true })
+    try {
+      const { data, error: fetchError } = await supabase
+        .from('stock_items')
+        .select('*')
+        .order('name', { ascending: true })
 
-    if (fetchError) {
-      setError(fetchError.message)
+      if (fetchError) {
+        setError(fetchError.message)
+        return
+      }
+
+      const mapped = ((data as unknown as StockItemRow[]) ?? []).map((item) => ({
+        ...item,
+        is_low_stock: item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity,
+      }))
+
+      setItems(mapped)
+    } catch (err: unknown) {
+      console.error('Error fetching items:', err)
+      setError('Erro ao carregar itens.')
+    } finally {
       setLoading(false)
-      return
     }
-
-    const mapped = ((data as unknown as StockItemRow[]) ?? []).map((item) => ({
-      ...item,
-      is_low_stock: item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity,
-    }))
-
-    setItems(mapped)
-    setLoading(false)
   }, [])
 
   useEffect(() => {
@@ -127,40 +132,74 @@ export function StockPage() {
   const fetchItemDetails = useCallback(async (itemId: string) => {
     setDetailLoading(true)
 
-    const [lotsResult, withdrawalItemsResult] = await Promise.all([
-      supabase
+    try {
+      // Fetch lots
+      const { data: lotsData } = await supabase
         .from('stock_item_lots')
         .select('*')
         .eq('stock_item_id', itemId)
-        .order('created_at', { ascending: false }),
-      supabase
+        .order('created_at', { ascending: false })
+
+      setItemLots(lotsData ?? [])
+
+      // Step 1: Fetch withdrawal items with their basic withdrawal details
+      const { data: withdrawalItemsData } = await supabase
         .from('withdrawal_items')
-        .select('quantity, withdrawal:withdrawals(id, code, status, created_at, requested_by_person:people!withdrawals_requested_by_fkey(full_name))')
+        .select(`
+          quantity,
+          withdrawal:withdrawals(
+            id, 
+            code, 
+            status, 
+            created_at,
+            requested_by
+          )
+        `)
         .eq('stock_item_id', itemId)
         .order('created_at', { ascending: false })
-        .limit(10),
-    ])
+        .limit(10)
 
-    setItemLots(lotsResult.data ?? [])
+      // Step 2: Extract requested_by IDs and fetch people
+      const rawWiData = (withdrawalItemsData as any[]) || []
+      
+      const requestedByIds = rawWiData
+        .map(wi => wi.withdrawal?.requested_by)
+        .filter(Boolean)
 
-    const typedWithdrawals: WithdrawalWithDetails[] = []
-    if (withdrawalItemsResult.data) {
-      for (const wi of withdrawalItemsResult.data) {
-        const w = (wi as Record<string, unknown>).withdrawal as Record<string, unknown> | undefined
-        if (w) {
-          typedWithdrawals.push({
-            id: w.id as string,
-            code: w.code as string | null,
-            status: w.status as string,
-            created_at: w.created_at as string,
-            requested_by_person: w.requested_by_person as { full_name: string } | null,
-            quantity: (wi as { quantity: number }).quantity,
-          })
-        }
+      const uniqueRequestedByIds = Array.from(new Set(requestedByIds))
+
+      let peopleMap: Record<string, { full_name: string }> = {}
+      if (uniqueRequestedByIds.length > 0) {
+        const { data: peopleData } = await supabase
+          .from('people')
+          .select('id, full_name')
+          .in('id', uniqueRequestedByIds)
+        
+        peopleMap = Object.fromEntries(
+          (peopleData || []).map(p => [p.id, { full_name: p.full_name }])
+        )
       }
+
+      // Step 3: Build strongly typed result array
+      const typedWithdrawals: WithdrawalWithDetails[] = rawWiData
+        .filter(wi => wi.withdrawal)
+        .map(wi => ({
+          id: wi.withdrawal.id,
+          code: wi.withdrawal.code,
+          status: wi.withdrawal.status,
+          created_at: wi.withdrawal.created_at,
+          requested_by_person: wi.withdrawal.requested_by 
+            ? peopleMap[wi.withdrawal.requested_by] || null 
+            : null,
+          quantity: wi.quantity,
+        }))
+
+      setItemWithdrawals(typedWithdrawals)
+    } catch (err) {
+      console.error('Error fetching item details:', err)
+    } finally {
+      setDetailLoading(false)
     }
-    setItemWithdrawals(typedWithdrawals)
-    setDetailLoading(false)
   }, [])
 
   const filteredItems = items.filter((item) => {

@@ -30,7 +30,7 @@ function roleLabel(role: string): string {
 }
 
 export function ProfileModal({ profile, onClose }: ProfileModalProps) {
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
   const navigate = useNavigate()
   const overlayRef = useRef<HTMLDivElement>(null)
 
@@ -51,10 +51,6 @@ export function ProfileModal({ profile, onClose }: ProfileModalProps) {
     [onClose]
   )
 
-  const handleSignOut = useCallback(async () => {
-    onClose()
-    await signOut()
-  }, [onClose, signOut])
 
   const handleEditProfile = useCallback(() => {
     onClose()
@@ -180,19 +176,7 @@ export function ProfileModal({ profile, onClose }: ProfileModalProps) {
         Editar Perfil
       </button>
 
-      {/* Sign out */}
-      <button
-            id="profile-signout-btn"
-            onClick={handleSignOut}
-            style={styles.signOutBtn}
-          >
-            <svg width={16} height={16} viewBox="0 0 24 24" fill="none">
-              <path d="M17 16l4-4m0 0l-4-4m4 4H7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-              <path d="M3 12V7a2 2 0 012-2h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              <path d="M3 12v5a2 2 0 002 2h7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-            </svg>
-            Sair da conta
-          </button>
+
         </div>
       </div>
     </>

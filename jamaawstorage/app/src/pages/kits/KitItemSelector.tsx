@@ -83,7 +83,7 @@ export function KitItemSelector({ onSelect, selectedIds }: KitItemSelectorProps)
         </p>
       )}
 
-      <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-700">
+      <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-700">
         {items.map((item) => {
           const alreadySelected = selectedIds.has(item.id)
           const isLowStock = item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity
