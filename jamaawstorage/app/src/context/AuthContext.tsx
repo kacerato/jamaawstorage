@@ -137,42 +137,73 @@ function AuthProvider({ children }: { children: ReactNode }) {
   }, [fetchProfile])
 
   // ── Bootstrap: get existing session + subscribe to changes ──────────────────
-  // Use onAuthStateChange which emits INITIAL_SESSION automatically.
-  // This prevents concurrent getSession calls that cause GoTrue deadlocks.
-
+  // explicitly call getSession to avoid React Strict Mode swallowing INITIAL_SESSION
   useEffect(() => {
     let ignore = false
     mountedRef.current = true
 
+    // 1. Fetch the initial session explicitly
+    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+      if (ignore) return
+      
+      if (error) {
+        console.error('[Auth] Erro ao obter sessão inicial:', error.message)
+        if (mountedRef.current) setLoading(false)
+        return
+      }
+
+      const authUser = session?.user ?? null
+
+      if (session?.expires_at) {
+        const expiresAt = session.expires_at * 1000
+        if (Date.now() > expiresAt) {
+          console.warn('[Auth] Sessão expirada na inicialização. Limpando...')
+          setUser(null)
+          setProfile(null)
+          if (mountedRef.current) setLoading(false)
+          void supabase.auth.signOut()
+          return
+        }
+      }
+
+      await resolveSession(authUser)
+      if (!ignore && mountedRef.current) {
+        setLoading(false)
+      }
+    })
+
+    // 2. Listen for future auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         if (ignore) return
+
+        // Ignoramos INITIAL_SESSION pois já lidamos com ela via getSession() acima
+        if (event === 'INITIAL_SESSION') return
 
         const authUser = session?.user ?? null
 
         if (event === 'SIGNED_OUT') {
           setUser(null)
           setProfile(null)
-          setLoading(false)
+          if (mountedRef.current) setLoading(false)
           return
         }
 
-        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
           if (session?.expires_at) {
             const expiresAt = session.expires_at * 1000
             if (Date.now() > expiresAt) {
               console.warn(`[Auth] Sessão expirada (${event}). Limpando...`)
               setUser(null)
               setProfile(null)
-              setLoading(false)
-              // Don't await signOut here to avoid another possible lock issue if network is down
+              if (mountedRef.current) setLoading(false)
               void supabase.auth.signOut()
               return
             }
           }
 
           await resolveSession(authUser)
-          if (!ignore) {
+          if (!ignore && mountedRef.current) {
             setLoading(false)
           }
         }
