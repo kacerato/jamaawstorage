@@ -138,39 +138,44 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
   // ── Bootstrap: get existing session + subscribe to changes ──────────────────
   // explicitly call getSession to avoid React Strict Mode swallowing INITIAL_SESSION
+  const authInitialized = useRef(false)
+
   useEffect(() => {
     let ignore = false
     mountedRef.current = true
 
-    // 1. Fetch the initial session explicitly
-    supabase.auth.getSession().then(async ({ data: { session }, error }) => {
-      if (ignore) return
-      
-      if (error) {
-        console.error('[Auth] Erro ao obter sessão inicial:', error.message)
-        if (mountedRef.current) setLoading(false)
-        return
-      }
-
-      const authUser = session?.user ?? null
-
-      if (session?.expires_at) {
-        const expiresAt = session.expires_at * 1000
-        if (Date.now() > expiresAt) {
-          console.warn('[Auth] Sessão expirada na inicialização. Limpando...')
-          setUser(null)
-          setProfile(null)
+    // 1. Fetch the initial session explicitly (only once even in Strict Mode)
+    if (!authInitialized.current) {
+      authInitialized.current = true
+      supabase.auth.getSession().then(async ({ data: { session }, error }) => {
+        if (ignore) return
+        
+        if (error) {
+          console.error('[Auth] Erro ao obter sessão inicial:', error.message)
           if (mountedRef.current) setLoading(false)
-          void supabase.auth.signOut()
           return
         }
-      }
 
-      await resolveSession(authUser)
-      if (!ignore && mountedRef.current) {
-        setLoading(false)
-      }
-    })
+        const authUser = session?.user ?? null
+
+        if (session?.expires_at) {
+          const expiresAt = session.expires_at * 1000
+          if (Date.now() > expiresAt) {
+            console.warn('[Auth] Sessão expirada na inicialização. Limpando...')
+            setUser(null)
+            setProfile(null)
+            if (mountedRef.current) setLoading(false)
+            void supabase.auth.signOut()
+            return
+          }
+        }
+
+        await resolveSession(authUser)
+        if (!ignore && mountedRef.current) {
+          setLoading(false)
+        }
+      })
+    }
 
     // 2. Listen for future auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
