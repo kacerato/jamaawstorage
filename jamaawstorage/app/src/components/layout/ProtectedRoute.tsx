@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react'
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { Spinner } from '../ui'
-import { AlertCircle, RefreshCw } from 'lucide-react'
+import { AlertCircle, RefreshCw, Loader2 } from 'lucide-react'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -14,7 +13,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gray-950">
-        <Spinner size="lg" />
+        <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
       </div>
     )
   }
