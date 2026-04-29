@@ -56,68 +56,78 @@ export function DashboardPage() {
       const today = new Date()
       const todayStr = today.toISOString().split('T')[0]
 
-      const [
-      stockResult,
-      ,
-        withdrawalsResult,
-        peopleResult,
-        recentWithdrawalsResult,
-      ] = await Promise.all([
-        supabase
-          .from('stock_items')
-          .select('*', { count: 'exact', head: true }),
-        supabase
+      try {
+        const [
+          stockResult,
+          ,
+          withdrawalsResult,
+          peopleResult,
+          recentWithdrawalsResult,
+        ] = await Promise.all([
+          supabase
+            .from('stock_items')
+            .select('*', { count: 'exact', head: true }),
+          supabase
+            .from('stock_items')
+            .select('*')
+            .lte('current_quantity', 0)
+            .gt('minimum_quantity', 0),
+          supabase
+            .from('withdrawals')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', todayStr),
+          supabase
+            .from('people')
+            .select('*', { count: 'exact', head: true })
+            .eq('is_active', true),
+          supabase
+            .from('withdrawals')
+            .select('*, requested_by_person:people!withdrawals_requested_by_fkey(*), withdrawal_items(id)')
+            .order('created_at', { ascending: false })
+            .limit(10),
+        ])
+
+        if (stockResult.error) {
+          setError(stockResult.error.message)
+          setLoading(false)
+          return
+        }
+
+        const { data: allStockItems } = await supabase
           .from('stock_items')
           .select('*')
-          .lte('current_quantity', 0)
-          .gt('minimum_quantity', 0),
-        supabase
-          .from('withdrawals')
-          .select('*', { count: 'exact', head: true })
-          .gte('created_at', todayStr),
-        supabase
-          .from('people')
-          .select('*', { count: 'exact', head: true })
-          .eq('is_active', true),
-        supabase
-          .from('withdrawals')
-          .select('*, requested_by_person:people!withdrawals_requested_by_fkey(*), withdrawal_items(id)')
-          .order('created_at', { ascending: false })
-          .limit(10),
-      ])
 
-      if (stockResult.error) {
-        setError(stockResult.error.message)
+        const lowItems = ((allStockItems ?? []) as Tables<'stock_items'>[]).filter(
+          (item) => item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity
+        )
+
+        setLowStockItems(
+          lowItems.map((item) => ({ ...item, is_low_stock: true }))
+        )
+
+        const { count: todayWithdrawalsCount } = withdrawalsResult
+        const { count: activePeopleCount } = peopleResult
+
+        const typedWithdrawals = (recentWithdrawalsResult.data ?? []) as unknown as RecentWithdrawal[]
+        setRecentWithdrawals(typedWithdrawals)
+
+        setStats({
+          total_items: stockResult.count ?? 0,
+          low_stock_count: lowItems.length,
+          total_withdrawals_today: todayWithdrawalsCount ?? 0,
+          active_people_count: activePeopleCount ?? 0,
+        })
+      } catch (err: any) {
+        console.error('Dashboard Error:', err)
+        // Se for erro de Lock do Supabase, tenta novamente após 500ms
+        if (err?.message?.includes('Lock') || err?.toString()?.includes('Lock')) {
+          setTimeout(() => fetchDashboardData(), 800)
+          return
+        }
+        setError(err instanceof Error ? err.message : 'Erro inesperado ao carregar dados')
+      } finally {
         setLoading(false)
-        return
       }
-
-      const { data: allStockItems } = await supabase
-        .from('stock_items')
-        .select('*')
-
-const lowItems = ((allStockItems ?? []) as Tables<'stock_items'>[]).filter(
-      (item) => item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity
-    )
-
-    setLowStockItems(
-      lowItems.map((item) => ({ ...item, is_low_stock: true }))
-    )
-
-      const { count: todayWithdrawalsCount } = withdrawalsResult
-      const { count: activePeopleCount } = peopleResult
-
-      const typedWithdrawals = (recentWithdrawalsResult.data ?? []) as unknown as RecentWithdrawal[]
-      setRecentWithdrawals(typedWithdrawals)
-
-      setStats({
-        total_items: stockResult.count ?? 0,
-        low_stock_count: lowItems.length,
-        total_withdrawals_today: todayWithdrawalsCount ?? 0,
-        active_people_count: activePeopleCount ?? 0,
-      })
-
-      setLoading(false)
     }
 
     fetchDashboardData()
