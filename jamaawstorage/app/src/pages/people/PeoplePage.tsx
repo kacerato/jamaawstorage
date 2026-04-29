@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Tables, AppRole } from '../../types/database'
 import { supabase } from '../../lib/supabase'
@@ -32,38 +32,84 @@ export function PeoplePage() {
   const [editingPerson, setEditingPerson] = useState<Tables<'people'> | null>(null)
   const [deactivatingId, setDeactivatingId] = useState<string | null>(null)
 
-  const fetchPeople = useCallback(async () => {
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const PAGE_SIZE = 50
+
+  // OTIMIZADO: Paginação server-side com query simplificada
+  const fetchPeople = useCallback(async (page = 0) => {
     setLoading(true)
     setError(null)
 
-    const { data, error: fetchError } = await supabase
-      .from('people')
-      .select('*, person_inventories(stock_item_id, stock_items(minimum_quantity, current_quantity))')
-      .order('full_name')
+    try {
+      // Query simplificada - sem join complexo com inventories
+      let query = supabase
+        .from('people')
+        .select('id, full_name, employee_id, role, sector, photo_url, is_active, created_at, updated_at', { count: 'exact' })
+        .order('full_name')
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
-    if (fetchError) {
-      setError(fetchError.message)
-      setLoading(false)
-      return
-    }
+      // Filtro de status no servidor
+      if (statusFilter === 'active') {
+        query = query.eq('is_active', true)
+      } else if (statusFilter === 'inactive') {
+        query = query.eq('is_active', false)
+      }
 
-    if (!data) {
-      setPeople([])
-      setLoading(false)
-      return
-    }
+      // Filtro de role no servidor
+      if (roleFilter !== 'all') {
+        query = query.eq('role', roleFilter)
+      }
 
-    const enriched: PersonWithInventoryCount[] = (data as unknown as RawPersonRow[]).map(
-      (row) => {
-        const inventories = row.person_inventories ?? []
-        let lowStockWarnings = 0
-        for (const inv of inventories) {
-          const stockItem = inv.stock_items as unknown as { minimum_quantity: number; current_quantity: number } | null
-          if (stockItem && stockItem.current_quantity <= stockItem.minimum_quantity) {
-            lowStockWarnings++
+      // Busca por texto no servidor
+      if (search.trim()) {
+        const searchTerm = search.trim()
+        query = query.or(`full_name.ilike.%${searchTerm}%,employee_id.ilike.%${searchTerm}%`)
+      }
+
+      const { data, error: fetchError, count } = await query
+
+      if (fetchError) {
+        setError(fetchError.message)
+        setLoading(false)
+        return
+      }
+
+      if (!data) {
+        setPeople([])
+        setTotalCount(0)
+        setLoading(false)
+        return
+      }
+
+      // Buscar contagem de inventários separadamente (mais eficiente)
+      const personIds = data.map(p => p.id)
+      let inventoryMap: Record<string, { count: number; low_stock: number }> = {}
+
+      if (personIds.length > 0) {
+        const { data: invData } = await supabase
+          .from('person_inventories')
+          .select('person_id, stock_items!inner(minimum_quantity, current_quantity)')
+          .in('person_id', personIds)
+
+        if (invData) {
+          for (const inv of invData as any[]) {
+            const personId = inv.person_id
+            if (!inventoryMap[personId]) {
+              inventoryMap[personId] = { count: 0, low_stock: 0 }
+            }
+            inventoryMap[personId].count++
+            const stockItem = inv.stock_items
+            if (stockItem && stockItem.current_quantity <= stockItem.minimum_quantity) {
+              inventoryMap[personId].low_stock++
+            }
           }
         }
-        return {
+      }
+
+      const enriched: PersonWithInventoryCount[] = (data as unknown as RawPersonRow[]).map(
+        (row) => ({
           id: row.id,
           full_name: row.full_name,
           employee_id: row.employee_id,
@@ -73,36 +119,38 @@ export function PeoplePage() {
           is_active: row.is_active,
           created_at: row.created_at,
           updated_at: row.updated_at,
-          inventory_count: inventories.length,
-          low_stock_warnings: lowStockWarnings,
-        }
-      },
-    )
+          inventory_count: inventoryMap[row.id]?.count ?? 0,
+          low_stock_warnings: inventoryMap[row.id]?.low_stock ?? 0,
+        }),
+      )
 
-    setPeople(enriched)
-    setLoading(false)
-  }, [])
+      setPeople(enriched)
+      setTotalCount(count || 0)
+    } catch (err) {
+      console.error('Error fetching people:', err)
+      setError('Erro ao carregar pessoas.')
+    } finally {
+      setLoading(false)
+    }
+  }, [statusFilter, roleFilter, search])
 
+  // Reset para página 0 quando filtros mudarem
   useEffect(() => {
-    setTimeout(() => void fetchPeople(), 0)
-  }, [fetchPeople])
+    setCurrentPage(0)
+    void fetchPeople(0)
+  }, [fetchPeople, statusFilter, roleFilter])
 
-  const filteredPeople = useMemo(() => {
-    return people.filter((person) => {
-      const matchesSearch =
-        search === '' ||
-        person.full_name.toLowerCase().includes(search.toLowerCase()) ||
-        (person.employee_id ?? '').toLowerCase().includes(search.toLowerCase())
+  // Busca com debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(0)
+      void fetchPeople(0)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [fetchPeople, search])
 
-      const matchesRole = roleFilter === 'all' || person.role === roleFilter
-
-      const matchesStatus =
-        (statusFilter === 'active' && person.is_active) ||
-        (statusFilter === 'inactive' && !person.is_active)
-
-      return matchesSearch && matchesRole && matchesStatus
-    })
-  }, [people, search, roleFilter, statusFilter])
+  // Não precisa mais de filteredPeople - filtros são no servidor
+  const filteredPeople = people
 
   const handleToggleActive = async (person: PersonWithInventoryCount) => {
     setDeactivatingId(person.id)
@@ -312,6 +360,44 @@ export function PeoplePage() {
         emptyMessage="Nenhuma pessoa encontrada"
         onRowClick={(row) => navigate(`/people/${row.id}`)}
       />
+
+      {/* Paginação */}
+      {totalCount > PAGE_SIZE && (
+        <div className="flex items-center justify-between border-t border-gray-700 pt-4">
+          <p className="text-sm text-gray-400">
+            Mostrando {currentPage * PAGE_SIZE + 1} - {Math.min((currentPage + 1) * PAGE_SIZE, totalCount)} de {totalCount} pessoas
+          </p>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const newPage = currentPage - 1
+                setCurrentPage(newPage)
+                void fetchPeople(newPage)
+              }}
+              disabled={currentPage === 0 || loading}
+            >
+              Anterior
+            </Button>
+            <span className="text-sm text-gray-400">
+              Página {currentPage + 1} de {Math.ceil(totalCount / PAGE_SIZE)}
+            </span>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                const newPage = currentPage + 1
+                setCurrentPage(newPage)
+                void fetchPeople(newPage)
+              }}
+              disabled={(currentPage + 1) * PAGE_SIZE >= totalCount || loading}
+            >
+              Próxima
+            </Button>
+          </div>
+        </div>
+      )}
 
       {profile && deactivatingId && (
         <ConfirmToggleModal

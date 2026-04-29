@@ -1,5 +1,23 @@
 @import "tailwindcss";
 
+/* ESTILOS BASE ANTI-FLASH */
+@layer base {
+  html {
+    background-color: #030712; /* gray-950 */
+  }
+  body {
+    background-color: #030712;
+    color: #ffffff;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
+  }
+  #root {
+    min-height: 100vh;
+    background-color: #030712;
+  }
+}
+
 /* ── Slim scrollbar for all scrollable areas ──────────────────────────────── */
 * {
   scrollbar-width: thin;

@@ -45,7 +45,8 @@ const AUTH_TIMEOUT_MS = 10000 // 10 segundos máximo
 
 function AuthProvider({ children }: { children: ReactNode }) {
   // Estado simples sem refs complexas
-  const [state, setState] = useState<AuthState>('idle')
+  // CORREÇÃO: Estado inicial 'loading' para evitar flash de conteúdo não-autenticado
+  const [state, setState] = useState<AuthState>('loading')
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [error, setError] = useState<string | null>(null)

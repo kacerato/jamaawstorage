@@ -86,6 +86,11 @@ export function StockPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
+  
+  // Paginação
+  const [currentPage, setCurrentPage] = useState(0)
+  const [totalCount, setTotalCount] = useState(0)
+  const PAGE_SIZE = 50
 
   const [modalMode, setModalMode] = useState<ModalMode | null>(null)
   const [selectedItem, setSelectedItem] = useState<StockItemRow | null>(null)
@@ -96,15 +101,41 @@ export function StockPage() {
   const [itemWithdrawals, setItemWithdrawals] = useState<WithdrawalWithDetails[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
 
-  const fetchItems = useCallback(async () => {
+  // OTIMIZADO: Paginação server-side com filtros no banco
+  const fetchItems = useCallback(async (page = 0) => {
     setLoading(true)
     setError(null)
 
     try {
-      const { data, error: fetchError } = await supabase
+      // Build query com colunas específicas (não SELECT *)
+      let query = supabase
         .from('stock_items')
-        .select('*')
+        .select(
+          'id, code, name, category, ca_nr, current_quantity, minimum_quantity, unit, is_active, svg_icon_key, description',
+          { count: 'exact' }
+        )
         .order('name', { ascending: true })
+        .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
+
+      // Filtro de status no servidor
+      if (statusFilter === 'active') {
+        query = query.eq('is_active', true)
+      } else if (statusFilter === 'inactive') {
+        query = query.eq('is_active', false)
+      }
+
+      // Filtro de categoria no servidor
+      if (categoryFilter) {
+        query = query.eq('category', categoryFilter)
+      }
+
+      // Busca por texto no servidor (usa índice GIN se disponível)
+      if (searchQuery.trim()) {
+        const searchTerm = searchQuery.trim().toLowerCase()
+        query = query.or(`name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%`)
+      }
+
+      const { data, error: fetchError, count } = await query
 
       if (fetchError) {
         setError(fetchError.message)
@@ -117,17 +148,29 @@ export function StockPage() {
       }))
 
       setItems(mapped)
+      setTotalCount(count || 0)
     } catch (err: unknown) {
       console.error('Error fetching items:', err)
       setError('Erro ao carregar itens.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [statusFilter, categoryFilter, searchQuery])
 
+  // Reset para página 0 quando filtros mudarem
   useEffect(() => {
-    setTimeout(() => void fetchItems(), 0)
-  }, [fetchItems])
+    setCurrentPage(0)
+    void fetchItems(0)
+  }, [fetchItems, statusFilter, categoryFilter])
+
+  // Busca com debounce
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(0)
+      void fetchItems(0)
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [fetchItems, searchQuery])
 
   const fetchItemDetails = useCallback(async (itemId: string) => {
     setDetailLoading(true)
@@ -594,14 +637,53 @@ export function StockPage() {
           action={{ label: 'Novo Item', onClick: handleOpenCreate }}
         />
       ) : (
-        <DataTable<StockRowRecord>
-          columns={columns}
-          data={filteredItems as StockRowRecord[]}
-          keyExtractor={(row) => row.id}
-          isLoading={false}
-          emptyMessage="Nenhum item encontrado com os filtros aplicados"
-          onRowClick={(row) => handleOpenDetail(row as unknown as StockItemRow)}
-        />
+        <>
+          <DataTable<StockRowRecord>
+            columns={columns}
+            data={items as StockRowRecord[]}
+            keyExtractor={(row) => row.id}
+            isLoading={false}
+            emptyMessage="Nenhum item encontrado com os filtros aplicados"
+            onRowClick={(row) => handleOpenDetail(row as unknown as StockItemRow)}
+          />
+          {/* Paginação */}
+          {totalCount > PAGE_SIZE && (
+            <div className="flex items-center justify-between border-t border-gray-700 pt-4">
+              <p className="text-sm text-gray-400">
+                Mostrando {currentPage * PAGE_SIZE + 1} - {Math.min((currentPage + 1) * PAGE_SIZE, totalCount)} de {totalCount} itens
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const newPage = currentPage - 1
+                    setCurrentPage(newPage)
+                    void fetchItems(newPage)
+                  }}
+                  disabled={currentPage === 0}
+                >
+                  Anterior
+                </Button>
+                <span className="text-sm text-gray-400">
+                  Página {currentPage + 1} de {Math.ceil(totalCount / PAGE_SIZE)}
+                </span>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => {
+                    const newPage = currentPage + 1
+                    setCurrentPage(newPage)
+                    void fetchItems(newPage)
+                  }}
+                  disabled={(currentPage + 1) * PAGE_SIZE >= totalCount}
+                >
+                  Próxima
+                </Button>
+              </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* Create Modal */}

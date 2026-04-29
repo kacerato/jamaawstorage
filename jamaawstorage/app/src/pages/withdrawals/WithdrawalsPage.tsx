@@ -70,9 +70,15 @@ export function WithdrawalsPage() {
       let query = supabase
         .from('withdrawals')
         .select(
-          'id, code, requested_by, destination_type, collaborator_id, work_site_id, status, created_at, supervisor_signature, requester_signature, withdrawal_items(id), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*)',
+          `id, code, requested_by, destination_type, collaborator_id, work_site_id, status, created_at, supervisor_signature, requester_signature,
+          withdrawal_items(id),
+          requested_by_person:people!withdrawals_requested_by_fkey(id, full_name),
+          collaborator:people!withdrawals_collaborator_id_fkey(id, full_name),
+          work_site:work_sites!withdrawals_work_site_id_fkey(id, name)`,
+          { count: 'exact' }
         )
         .order('created_at', { ascending: false })
+        .limit(100)
 
       if (searchCode.trim()) {
         query = query.ilike('code', `%${searchCode.trim()}%`)

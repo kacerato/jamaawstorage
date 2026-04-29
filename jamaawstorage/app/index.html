@@ -1,13 +1,44 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="../src/assets/logojamaaw.png" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>app</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/src/assets/logojamaaw.png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JamaaW Storage</title>
+  <!-- ESTILOS ANTI-FLASH - Carregam imediatamente -->
+  <style>
+    /* Previne flash branco durante carregamento */
+    html, body {
+      margin: 0;
+      padding: 0;
+      background-color: #030712; /* gray-950 - cor do tema escuro */
+      color: #ffffff;
+      min-height: 100vh;
+    }
+    /* Garante que o root ocupe espaço */
+    #root {
+      min-height: 100vh;
+      background-color: #030712;
+    }
+    /* Loading spinner enquanto React carrega */
+    #root:empty::before {
+      content: '';
+      display: block;
+      width: 40px;
+      height: 40px;
+      margin: 45vh auto;
+      border: 3px solid rgba(249, 115, 22, 0.3); /* orange-500 com transparência */
+      border-top-color: #f97316; /* orange-500 */
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
 </html>
