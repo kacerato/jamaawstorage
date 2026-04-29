@@ -39,6 +39,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       stock_items: {
         Row: {
@@ -89,6 +90,15 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "stock_items_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       stock_item_lots: {
         Row: {
@@ -118,6 +128,15 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "stock_item_lots_stock_item_id_fkey"
+            columns: ["stock_item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       people: {
         Row: {
@@ -155,6 +174,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
       person_inventories: {
         Row: {
@@ -181,6 +201,22 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "person_inventories_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "person_inventories_stock_item_id_fkey"
+            columns: ["stock_item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       withdrawals: {
         Row: {
@@ -237,6 +273,29 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "withdrawals_requested_by_fkey"
+            columns: ["requested_by"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "withdrawals_collaborator_id_fkey"
+            columns: ["collaborator_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "withdrawals_work_site_id_fkey"
+            columns: ["work_site_id"]
+            isOneToOne: false
+            referencedRelation: "work_sites"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       withdrawal_items: {
         Row: {
@@ -263,6 +322,29 @@ export interface Database {
           quantity?: number
           unit?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "withdrawal_items_withdrawal_id_fkey"
+            columns: ["withdrawal_id"]
+            isOneToOne: false
+            referencedRelation: "withdrawals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "withdrawal_items_stock_item_id_fkey"
+            columns: ["stock_item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "withdrawal_items_lot_id_fkey"
+            columns: ["lot_id"]
+            isOneToOne: false
+            referencedRelation: "stock_item_lots"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       work_sites: {
         Row: {
@@ -289,6 +371,7 @@ export interface Database {
           created_at?: string
           updated_at?: string
         }
+        Relationships: []
       }
     kits: {
       Row: {
@@ -318,6 +401,15 @@ export interface Database {
         created_at?: string
         updated_at?: string
       }
+        Relationships: [
+          {
+            foreignKeyName: "kits_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
     }
       kit_items: {
         Row: {
@@ -341,6 +433,22 @@ export interface Database {
           quantity?: number
           created_at?: string
         }
+        Relationships: [
+          {
+            foreignKeyName: "kit_items_kit_id_fkey"
+            columns: ["kit_id"]
+            isOneToOne: false
+            referencedRelation: "kits"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "kit_items_stock_item_id_fkey"
+            columns: ["stock_item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          }
+        ]
       }
       audit_logs: {
         Row: {
@@ -373,6 +481,7 @@ export interface Database {
           new_data?: Record<string, unknown> | null
           created_at?: string
         }
+        Relationships: []
       }
     }
     Views: Record<string, never>

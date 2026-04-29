@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import type { Tables, TablesInsert } from '../../types/database'
+import type { Tables, TablesInsert, TablesUpdate } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { Button, Input } from '../../components/ui'
@@ -40,12 +40,12 @@ export function WorksiteForm({ worksite, onSubmit, onCancel }: WorksiteFormProps
 
   useEffect(() => {
     if (worksite) {
-      setForm({
+      setTimeout(() => setForm({
         name: worksite.name,
         description: '',
         location: worksite.location ?? '',
         is_active: worksite.is_active,
-      })
+      }), 0)
     }
   }, [worksite])
 
@@ -70,7 +70,7 @@ export function WorksiteForm({ worksite, onSubmit, onCancel }: WorksiteFormProps
 
     try {
       if (isEditing && worksite) {
-        const updateData: Partial<WorkSiteInsert> & Record<string, unknown> = {
+        const updateData: TablesUpdate<'work_sites'> = {
           name: form.name.trim(),
           location: form.location.trim() || null,
           is_active: form.is_active,
@@ -79,7 +79,7 @@ export function WorksiteForm({ worksite, onSubmit, onCancel }: WorksiteFormProps
 
         const { error } = await supabase
           .from('work_sites')
-          .update(updateData as never)
+          .update(updateData)
           .eq('id', worksite.id)
 
         if (error) throw error
@@ -93,7 +93,7 @@ export function WorksiteForm({ worksite, onSubmit, onCancel }: WorksiteFormProps
 
         const { error } = await supabase
           .from('work_sites')
-          .insert(insertData as never)
+          .insert(insertData)
 
         if (error) throw error
         onSubmit()

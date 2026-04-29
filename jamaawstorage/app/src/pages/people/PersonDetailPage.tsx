@@ -175,12 +175,12 @@ export function PersonDetailPage() {
   }, [id, person])
 
   useEffect(() => {
-    void fetchPerson()
+    setTimeout(() => void fetchPerson(), 0)
   }, [fetchPerson])
 
   useEffect(() => {
     if (person && person.role === 'leader') {
-      void fetchWithdrawals()
+      setTimeout(() => void fetchWithdrawals(), 0)
     }
   }, [person, fetchWithdrawals])
 
@@ -228,7 +228,7 @@ export function PersonDetailPage() {
       .sort((a, b) => b.quantity - a.quantity)
       .slice(0, 10)
 
-    setConsumptionData(chartData)
+    setTimeout(() => setConsumptionData(chartData), 0)
   }, [getFilteredWithdrawals])
 
   const handleToggleActive = async () => {
@@ -237,7 +237,7 @@ export function PersonDetailPage() {
 
     const { error: updateError } = await supabase
       .from('people')
-      .update({ is_active: !person.is_active, updated_at: new Date().toISOString() } as never)
+      .update({ is_active: !person.is_active, updated_at: new Date().toISOString() })
       .eq('id', person.id)
 
     if (updateError) {
@@ -251,7 +251,7 @@ export function PersonDetailPage() {
     setShowToggleModal(false)
   }
 
-  const handleEditSubmit = (_updated: Tables<'people'>) => {
+  const handleEditSubmit = (_result: Tables<'people'>) => {
     setShowEditModal(false)
     void fetchPerson()
   }

@@ -84,7 +84,7 @@ export function PeoplePage() {
   }, [])
 
   useEffect(() => {
-    void fetchPeople()
+    setTimeout(() => void fetchPeople(), 0)
   }, [fetchPeople])
 
   const filteredPeople = useMemo(() => {
@@ -109,7 +109,7 @@ export function PeoplePage() {
 
     const { error: updateError } = await supabase
       .from('people')
-      .update({ is_active: !person.is_active, updated_at: new Date().toISOString() } as never)
+      .update({ is_active: !person.is_active, updated_at: new Date().toISOString() })
       .eq('id', person.id)
 
     if (updateError) {
@@ -126,7 +126,7 @@ export function PeoplePage() {
     setDeactivatingId(null)
   }
 
-  const handleFormSubmit = (_person: Tables<'people'>) => {
+  const handleFormSubmit = (_result: Tables<'people'>) => {
     setShowFormModal(false)
     setEditingPerson(null)
     void fetchPeople()

@@ -774,7 +774,7 @@ function AbcCurveTab() {
 
     const sorted = Array.from(grouped.entries())
       .sort((a, b) => b[1] - a[1])
-      .map(([name, totalQuantity_item], _idx) => ({ name, totalQuantity: totalQuantity_item }))
+      .map(([name, totalQuantity_item]) => ({ name, totalQuantity: totalQuantity_item }))
 
     let cumulative = 0
     const abcItems: AbcItem[] = sorted.map((item) => {
@@ -800,7 +800,7 @@ function AbcCurveTab() {
   }, [period, customFrom, customTo])
 
   useEffect(() => {
-    void fetchAbcData()
+    setTimeout(() => void fetchAbcData(), 0)
   }, [fetchAbcData])
 
   const chartData = useMemo(
@@ -992,11 +992,11 @@ function AbcCurveTab() {
                       borderRadius: '8px',
                       color: '#f9fafb',
                     }}
-                    formatter={((value: number) => [value, 'Quantidade']) as never}
-                    labelFormatter={((label: string, payload: Array<{ payload?: { fullName?: string } }>) => {
+                    formatter={((value: any) => [value, 'Quantidade'])}
+                    labelFormatter={((label: any, payload: any) => {
                       if (payload?.[0]?.payload?.fullName) return payload[0].payload.fullName
                       return label
-                    }) as never}
+                    })}
                   />
                   <Bar dataKey="Quantidade" fill="#f97316" radius={[4, 4, 0, 0]} />
                 </BarChart>
@@ -1322,7 +1322,7 @@ function LeaderConsumptionTab() {
   }, [selectedLeader, period, customFrom, customTo])
 
   useEffect(() => {
-    void fetchConsumption()
+    setTimeout(() => void fetchConsumption(), 0)
   }, [fetchConsumption])
 
   const chartData = useMemo(
@@ -1463,11 +1463,11 @@ function LeaderConsumptionTab() {
                       borderRadius: '8px',
                       color: '#f9fafb',
                     }}
-                    formatter={((value: number) => [value, 'Quantidade']) as never}
-                    labelFormatter={((label: string, payload: Array<{ payload?: { fullName?: string } }>) => {
+                    formatter={((value: any) => [value, 'Quantidade'])}
+                    labelFormatter={((label: any, payload: any) => {
                       if (payload?.[0]?.payload?.fullName) return payload[0].payload.fullName
                       return label
-                    }) as never}
+                    })}
                   />
                   <Bar dataKey="Quantidade" fill="#f97316" radius={[0, 4, 4, 0]} />
                 </BarChart>

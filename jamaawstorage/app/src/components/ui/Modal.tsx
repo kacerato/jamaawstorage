@@ -28,7 +28,7 @@ export function Modal({
   showCloseButton = true,
 }: ModalProps) {
   const [isAnimating, setIsAnimating] = useState(false)
-  const [shouldRender, setShouldRender] = useState(false)
+  const shouldRender = isOpen || isAnimating
 
   const handleEscape = useCallback(
     (e: KeyboardEvent) => {
@@ -41,20 +41,17 @@ export function Modal({
 
   useEffect(() => {
     if (isOpen) {
-      setShouldRender(true)
       requestAnimationFrame(() => {
         setIsAnimating(true)
       })
       document.addEventListener('keydown', handleEscape)
       document.body.style.overflow = 'hidden'
     } else {
+      requestAnimationFrame(() => {
       setIsAnimating(false)
-      const timeout = setTimeout(() => {
-        setShouldRender(false)
-      }, 200)
+    })
       document.removeEventListener('keydown', handleEscape)
       document.body.style.overflow = ''
-      return () => clearTimeout(timeout)
     }
 
     return () => {
@@ -81,14 +78,14 @@ export function Modal({
       />
       <div
         className={cn(
-          'relative w-full transform rounded-2xl bg-gray-900 shadow-2xl transition-all duration-200',
+          'relative w-full max-h-[90vh] transform rounded-2xl bg-gray-900 shadow-2xl transition-all duration-200 flex flex-col',
           sizeClasses[size],
           isAnimating
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-4 scale-95 opacity-0',
         )}
       >
-        <div className="flex items-center justify-between border-b border-gray-700 px-6 py-4">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-700 px-6 py-4">
           <h2
             id="modal-title"
             className="text-lg font-semibold text-orange-500"
@@ -119,7 +116,7 @@ export function Modal({
             </button>
           )}
         </div>
-        <div className="px-6 py-4">{children}</div>
+        <div className="overflow-y-auto px-6 py-4">{children}</div>
       </div>
     </div>,
     document.body,

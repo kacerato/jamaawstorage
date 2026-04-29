@@ -26,7 +26,7 @@ interface WithdrawalSummary {
 }
 
 export function WorksitesPage() {
-  const { } = useAuth()
+  useAuth()
 
   const [worksites, setWorksites] = useState<WorksiteWithStats[]>([])
   const [loading, setLoading] = useState(true)
@@ -84,7 +84,7 @@ export function WorksitesPage() {
   }, [])
 
   useEffect(() => {
-    void fetchWorksites()
+    setTimeout(() => void fetchWorksites(), 0)
   }, [fetchWorksites])
 
   const fetchWithdrawalHistory = useCallback(async (worksiteId: string) => {
@@ -127,7 +127,7 @@ export function WorksitesPage() {
 
     const { error: updateError } = await supabase
       .from('work_sites')
-      .update({ is_active: !worksite.is_active, updated_at: new Date().toISOString() } as never)
+      .update({ is_active: !worksite.is_active, updated_at: new Date().toISOString() })
       .eq('id', worksite.id)
 
     if (updateError) {

@@ -78,7 +78,7 @@ export function WithdrawalsPage() {
         query = query.ilike('code', `%${searchCode.trim()}%`)
       }
       if (statusFilter) {
-        query = query.eq('status', statusFilter)
+        query = query.eq('status', statusFilter as any)
       }
       if (leaderFilter) {
         query = query.eq('requested_by', leaderFilter)

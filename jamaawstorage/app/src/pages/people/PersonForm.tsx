@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import type { Tables, TablesInsert, AppRole } from '../../types/database'
+import type { Tables, TablesInsert, TablesUpdate, AppRole } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { Alert, Button, Input, Select } from '../../components/ui'
@@ -43,13 +43,13 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
 
   useEffect(() => {
     if (person) {
-      setForm({
+      setTimeout(() => setForm({
         full_name: person.full_name,
         employee_id: person.employee_id ?? '',
         role: person.role,
         sector: person.sector ?? '',
         photo_url: person.photo_url ?? '',
-      })
+      }), 0)
     }
   }, [person])
 
@@ -132,7 +132,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
 
     try {
       if (isEditing && person) {
-        const updateData: Partial<TablesInsert<'people'>> & Record<string, unknown> = {
+        const updateData: TablesUpdate<'people'> = {
           full_name: form.full_name.trim(),
           employee_id: form.employee_id.trim() || null,
           role: form.role,
@@ -143,7 +143,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
 
         const { data, error } = await supabase
           .from('people')
-          .update(updateData as never)
+          .update(updateData)
           .eq('id', person.id)
           .select()
           .single<Tables<'people'>>()
@@ -163,7 +163,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
 
         const { data, error } = await supabase
           .from('people')
-          .insert(insertData as never)
+          .insert(insertData)
           .select()
           .single<Tables<'people'>>()
 

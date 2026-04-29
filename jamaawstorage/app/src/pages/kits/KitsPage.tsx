@@ -23,7 +23,7 @@ type KitItemInsert = TablesInsert<'kit_items'>
 type ModalMode = 'create' | 'edit' | 'deactivate' | 'detail' | null
 
 export function KitsPage() {
-  const { } = useAuth()
+  useAuth()
 
   const [kits, setKits] = useState<KitWithItems[]>([])
   const [loading, setLoading] = useState(true)
@@ -56,7 +56,7 @@ export function KitsPage() {
   }, [])
 
   useEffect(() => {
-    fetchKits()
+    setTimeout(() => void fetchKits(), 0)
   }, [fetchKits])
 
   const filteredKits = kits.filter((kit) => {
@@ -107,9 +107,9 @@ export function KitsPage() {
       .insert({
         name: data.name,
         description: data.description,
-      } as never)
+      })
       .select()
-      .single<any>()
+      .single<{ id: string }>()
 
     if (insertError) {
       setSubmitError(insertError.message)
@@ -126,7 +126,7 @@ export function KitsPage() {
 
       const { error: itemsInsertError } = await supabase
         .from('kit_items')
-        .insert(kitItems as never)
+        .insert(kitItems)
 
       if (itemsInsertError) {
         setSubmitError(
@@ -160,7 +160,7 @@ export function KitsPage() {
         name: data.name,
         description: data.description,
         updated_at: new Date().toISOString(),
-      } as never)
+      })
       .eq('id', selectedKit.id)
 
     if (updateError) {
@@ -193,7 +193,7 @@ export function KitsPage() {
 
       const { error: itemsInsertError } = await supabase
         .from('kit_items')
-        .insert(kitItems as never)
+        .insert(kitItems)
 
       if (itemsInsertError) {
         setSubmitError(
@@ -224,7 +224,7 @@ export function KitsPage() {
       .update({
         is_active: newIsActive,
         updated_at: new Date().toISOString(),
-      } as never)
+      })
       .eq('id', selectedKit.id)
 
     if (updateError) {

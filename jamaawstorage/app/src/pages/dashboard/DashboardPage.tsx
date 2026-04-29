@@ -57,8 +57,8 @@ export function DashboardPage() {
       const todayStr = today.toISOString().split('T')[0]
 
       const [
-        stockResult,
-        _lowStockResult,
+      stockResult,
+      ,
         withdrawalsResult,
         peopleResult,
         recentWithdrawalsResult,
@@ -96,13 +96,13 @@ export function DashboardPage() {
         .from('stock_items')
         .select('*')
 
-      const lowItems = ((allStockItems as any[]) ?? []).filter(
-        (item) => item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity
-      )
+const lowItems = ((allStockItems ?? []) as Tables<'stock_items'>[]).filter(
+      (item) => item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity
+    )
 
-      setLowStockItems(
-        lowItems.map((item) => ({ ...item, is_low_stock: true }))
-      )
+    setLowStockItems(
+      lowItems.map((item) => ({ ...item, is_low_stock: true }))
+    )
 
       const { count: todayWithdrawalsCount } = withdrawalsResult
       const { count: activePeopleCount } = peopleResult

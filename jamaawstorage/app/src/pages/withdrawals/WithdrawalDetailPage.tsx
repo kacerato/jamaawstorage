@@ -78,7 +78,7 @@ export function WithdrawalDetailPage() {
 
     const { error: updateError } = await supabase
       .from('withdrawals')
-      .update({ status: 'rejected' as const } as never)
+      .update({ status: 'rejected' as const })
       .eq('id', withdrawal.id)
 
     if (updateError) {

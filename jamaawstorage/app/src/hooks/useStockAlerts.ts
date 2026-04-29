@@ -28,7 +28,7 @@ export function useStockAlerts(): StockAlertState {
   }, [])
 
   useEffect(() => {
-    void fetchLowStock()
+    setTimeout(() => void fetchLowStock(), 0)
   }, [fetchLowStock])
 
   useEffect(() => {

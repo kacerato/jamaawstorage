@@ -210,7 +210,7 @@ export function NewWithdrawalPage() {
 
     const { data: withdrawal, error: withdrawalError } = await supabase
       .from('withdrawals')
-      .insert(withdrawalInsert as never)
+      .insert(withdrawalInsert)
       .select('id')
       .single<{ id: string }>()
 
@@ -230,7 +230,7 @@ export function NewWithdrawalPage() {
 
     const { error: itemsError } = await supabase
       .from('withdrawal_items')
-      .insert(itemInserts as never)
+      .insert(itemInserts)
 
     if (itemsError) {
       await supabase.from('withdrawals').delete().eq('id', withdrawal.id)

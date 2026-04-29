@@ -74,11 +74,13 @@ export function PersonInventoryModal({
 
   useEffect(() => {
     if (isOpen) {
-      void fetchStockItems()
-      setSelectedItemId('')
-      setQuantity('')
-      setError(null)
-      setSuccess(false)
+      setTimeout(() => {
+        void fetchStockItems()
+        setSelectedItemId('')
+        setQuantity('')
+        setError(null)
+        setSuccess(false)
+      }, 0)
     }
   }, [isOpen, fetchStockItems])
 
@@ -98,7 +100,7 @@ export function PersonInventoryModal({
       person_id: personId,
       stock_item_id: selectedItemId,
       quantity: Number(quantity),
-    } as never)
+    })
 
     if (insertError) {
       setError(insertError.message)

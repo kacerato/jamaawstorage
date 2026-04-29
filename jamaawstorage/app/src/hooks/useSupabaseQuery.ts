@@ -28,7 +28,7 @@ export function useSupabaseQuery<T>(
   }, [queryFn])
 
   useEffect(() => {
-    void fetchData()
+    setTimeout(() => void fetchData(), 0)
   }, [fetchData])
 
   return { data, error, loading, refetch: fetchData }

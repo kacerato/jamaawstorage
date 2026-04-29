@@ -130,7 +130,7 @@ export function AuditPage() {
     if (data) {
       setSupervisors([
         { value: '', label: 'Todos os usuários' },
-        ...(data as any[]).map((p) => ({ value: p.id, label: p.full_name })),
+        ...(data as { id: string; full_name: string }[]).map((p) => ({ value: p.id, label: p.full_name })),
       ])
     }
   }, [])
@@ -199,11 +199,11 @@ export function AuditPage() {
   }, [buildQuery])
 
   useEffect(() => {
-    void fetchSupervisors()
+    setTimeout(() => void fetchSupervisors(), 0)
   }, [fetchSupervisors])
 
   useEffect(() => {
-    void fetchLogs()
+    setTimeout(() => void fetchLogs(), 0)
   }, [fetchLogs])
 
   const handleApplyFilters = () => {

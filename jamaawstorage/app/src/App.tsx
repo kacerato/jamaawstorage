@@ -10,6 +10,7 @@ import { KitsPage } from './pages/kits'
 import { WorksitesPage } from './pages/worksites'
 import { ReportsPage } from './pages/reports'
 import { AuditPage } from './pages/audit'
+import { ProfilePage } from './pages/profile'
 
 function App() {
   return (
@@ -31,8 +32,9 @@ function App() {
             <Route path="/kits" element={<KitsPage />} />
             <Route path="/worksites" element={<WorksitesPage />} />
             <Route path="/reports" element={<ReportsPage />} />
-            <Route path="/audit" element={<AuditPage />} />
-          </Route>
+<Route path="/audit" element={<AuditPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
+      </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </AuthProvider>

@@ -1,12 +1,17 @@
-import { createContext, useEffect, useState, useCallback } from 'react'
+import { createContext, useEffect, useState, useCallback, useRef } from 'react'
 import type { ReactNode } from 'react'
-import type { User, Session } from '@supabase/supabase-js'
+import type { User } from '@supabase/supabase-js'
 import type { Tables, TablesInsert } from '../types/database'
 import { supabase } from '../lib/supabase'
 
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type ProfileRow = Tables<'profiles'>
+type ProfileInsert = TablesInsert<'profiles'>
+
 interface AuthContextType {
   user: User | null
-  profile: Tables<'profiles'> | null
+  profile: ProfileRow | null
   loading: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signUp: (
@@ -17,113 +22,179 @@ interface AuthContextType {
   signOut: () => Promise<void>
 }
 
+// ─── Context ──────────────────────────────────────────────────────────────────
+
 const AuthContext = createContext<AuthContextType | null>(null)
 
-type ProfileRow = Tables<'profiles'>
-type ProfileInsert = TablesInsert<'profiles'>
+// ─── Error Translation ────────────────────────────────────────────────────────
+
+const ERROR_MAP: Record<string, string> = {
+  'Invalid login credentials': 'E-mail ou senha inválidos.',
+  'Email not confirmed': 'Confirme seu e-mail antes de entrar.',
+  'User already registered': 'Já existe uma conta com este e-mail.',
+  'Password should be at least 6 characters': 'A senha deve ter pelo menos 6 caracteres.',
+  'Too many requests': 'Muitas tentativas. Aguarde alguns minutos.',
+  'Network request failed': 'Sem conexão com a internet.',
+  'invalid_grant': 'Sessão expirada. Faça login novamente.',
+}
+
+function translateError(msg: string): string {
+  for (const [key, val] of Object.entries(ERROR_MAP)) {
+    if (msg.includes(key)) return val
+  }
+  return 'Ocorreu um erro inesperado. Tente novamente.'
+}
+
+// ─── Provider ─────────────────────────────────────────────────────────────────
 
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
+  const mountedRef = useRef(true)
 
-  const createMissingProfile = useCallback(async (authUser: User): Promise<ProfileRow | null> => {
-    const fullNameFromMetadata =
-      typeof authUser.user_metadata?.full_name === 'string'
-        ? authUser.user_metadata.full_name.trim()
-        : ''
-
-    const employeeIdFromMetadata =
-      typeof authUser.user_metadata?.employee_id === 'string'
-        ? authUser.user_metadata.employee_id.trim()
-        : ''
-
-    const fallbackProfile: ProfileInsert = {
-      id: authUser.id,
-      full_name:
-        fullNameFromMetadata ||
-        authUser.email?.split('@')[0]?.trim() ||
-        'Supervisor',
-      employee_id: employeeIdFromMetadata || null,
-      role: 'supervisor',
-      is_active: true,
-    }
-
-    const { data, error } = await supabase
-      .from('profiles')
-      .upsert(fallbackProfile as never, { onConflict: 'id' })
-      .select('*')
-      .maybeSingle<ProfileRow>()
-
-    if (error) {
-      console.error('Error creating missing profile:', error.message)
-      return null
-    }
-
-    return data ?? null
-  }, [])
+  // ── Profile fetch (no sign-out side effects) ────────────────────────────────
 
   const fetchProfile = useCallback(async (authUser: User): Promise<ProfileRow | null> => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .eq('id', authUser.id)
-      .maybeSingle<ProfileRow>()
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', authUser.id)
+        .maybeSingle()
 
-    if (error) {
-      console.error('Error fetching profile:', error.message)
+      if (error) {
+        console.error('[Auth] Erro ao buscar perfil:', error.message)
+        return null
+      }
+
+      if (data) return data as ProfileRow
+
+      // Auto-create supervisor profile if missing
+      const fullName =
+        typeof authUser.user_metadata?.full_name === 'string'
+          ? authUser.user_metadata.full_name.trim()
+          : authUser.email?.split('@')[0]?.trim() ?? 'Supervisor'
+
+      const employeeId =
+        typeof authUser.user_metadata?.employee_id === 'string'
+          ? authUser.user_metadata.employee_id.trim()
+          : null
+
+      const fallback = {
+        id: authUser.id,
+        full_name: fullName || 'Supervisor',
+        employee_id: employeeId,
+        role: 'supervisor',
+        is_active: true,
+      } satisfies ProfileInsert
+
+      const { data: created, error: createErr } = await supabase
+        .from('profiles')
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .upsert(fallback as any, { onConflict: 'id' })
+        .select('*')
+        .maybeSingle()
+
+      if (createErr) {
+        console.error('[Auth] Erro ao criar perfil:', createErr.message)
+        return null
+      }
+
+      return (created as ProfileRow | null) ?? null
+    } catch (err) {
+      console.error('[Auth] Erro inesperado no perfil:', err)
       return null
     }
+  }, [])
 
-    let resolvedProfile = data
+  // ── Resolve a user session into state ───────────────────────────────────────
 
-    if (!resolvedProfile) {
-      console.warn('Profile not found for authenticated user. Creating a supervisor profile automatically.')
-      resolvedProfile = await createMissingProfile(authUser)
+  const resolveSession = useCallback(async (authUser: User | null) => {
+    if (!authUser) {
+      if (mountedRef.current) {
+        setUser(null)
+        setProfile(null)
+      }
+      return
     }
 
-    if (!resolvedProfile) {
-      return null
-    }
+    const prof = await fetchProfile(authUser)
 
-    if (resolvedProfile.role !== 'supervisor' || !resolvedProfile.is_active) {
-      console.error('Access denied: only active supervisor accounts are allowed')
+    if (!mountedRef.current) return
+
+    // If not a supervisor or inactive, sign out quietly
+    if (prof && (prof.role !== 'supervisor' || !prof.is_active)) {
+      console.error('[Auth] Acesso negado: somente supervisores ativos.')
+      setUser(null)
+      setProfile(null)
       await supabase.auth.signOut()
-      return null
+      return
     }
 
-    return resolvedProfile
-  }, [createMissingProfile])
+    setUser(authUser)
+    setProfile(prof)
+  }, [fetchProfile])
+
+  // ── Bootstrap: get existing session + subscribe to changes ──────────────────
+  // Use onAuthStateChange which emits INITIAL_SESSION automatically.
+  // This prevents concurrent getSession calls that cause GoTrue deadlocks.
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event: string, session: Session | null) => {
-        setLoading(true)
-        const currentUser = session?.user ?? null
-        setUser(currentUser)
+    let ignore = false
+    mountedRef.current = true
 
-        if (currentUser) {
-          const fetchedProfile = await fetchProfile(currentUser)
-          setProfile(fetchedProfile)
-        } else {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      async (event, session) => {
+        if (ignore) return
+
+        const authUser = session?.user ?? null
+
+        if (event === 'SIGNED_OUT') {
+          setUser(null)
           setProfile(null)
+          setLoading(false)
+          return
         }
 
-        setLoading(false)
+        if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session?.expires_at) {
+            const expiresAt = session.expires_at * 1000
+            if (Date.now() > expiresAt) {
+              console.warn(`[Auth] Sessão expirada (${event}). Limpando...`)
+              setUser(null)
+              setProfile(null)
+              setLoading(false)
+              // Don't await signOut here to avoid another possible lock issue if network is down
+              void supabase.auth.signOut()
+              return
+            }
+          }
+
+          await resolveSession(authUser)
+          if (!ignore) {
+            setLoading(false)
+          }
+        }
       }
     )
 
     return () => {
+      ignore = true
+      mountedRef.current = false
       subscription.unsubscribe()
     }
-  }, [fetchProfile])
+  }, [resolveSession])
+
+  // ── Auth actions ──────────────────────────────────────────────────────────────
 
   const signIn = useCallback(
     async (email: string, password: string): Promise<{ error: string | null }> => {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
       if (error) {
-        return { error: error.message }
+        return { error: translateError(error.message) }
       }
+      // The onAuthStateChange listener will handle setting user/profile
       return { error: null }
     },
     []
@@ -146,30 +217,23 @@ function AuthProvider({ children }: { children: ReactNode }) {
         },
       })
 
-      if (authError) {
-        return { error: authError.message }
-      }
+      if (authError) return { error: translateError(authError.message) }
+      if (!authData.user) return { error: 'Não foi possível criar a conta.' }
 
-      if (!authData.user) {
-        return { error: 'Failed to create user account' }
-      }
-
-      const newProfile: ProfileInsert = {
+      const newProfile = {
         id: authData.user.id,
         full_name: profileData.full_name,
         employee_id: profileData.employee_id ?? null,
         role: 'supervisor',
         is_active: true,
-      }
+      } satisfies ProfileInsert
 
       const { error: profileError } = await supabase
         .from('profiles')
-        .insert(newProfile as never)
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .insert(newProfile as any)
 
-      if (profileError) {
-        return { error: profileError.message }
-      }
-
+      if (profileError) return { error: translateError(profileError.message) }
       return { error: null }
     },
     []
@@ -181,14 +245,9 @@ function AuthProvider({ children }: { children: ReactNode }) {
     await supabase.auth.signOut()
   }, [])
 
-  const value: AuthContextType = {
-    user,
-    profile,
-    loading,
-    signIn,
-    signUp,
-    signOut,
-  }
+  // ── Context value ─────────────────────────────────────────────────────────────
+
+  const value: AuthContextType = { user, profile, loading, signIn, signUp, signOut }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }

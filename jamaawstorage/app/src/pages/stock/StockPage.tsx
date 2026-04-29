@@ -16,6 +16,10 @@ import {
 } from '../../components/ui'
 import { PackageIcon } from '../../components/icons'
 import { StockItemForm } from './StockItemForm'
+import alicateImg from '../../assets/alicate.png'
+import capceteImg from '../../assets/capcete.png'
+import materialImg from '../../assets/material.png'
+import fardamentoImg from '../../assets/fardamento.png'
 
 type StockItemRow = Tables<'stock_items'>
 
@@ -49,6 +53,28 @@ const STATUS_FILTER_OPTIONS = [
 ]
 
 type StockRowRecord = StockItemWithLowStock & Record<string, unknown>
+
+const ICON_MAP: Record<string, string> = {
+  capacete: capceteImg,
+  alicate: alicateImg,
+  material: materialImg,
+  fardamento: fardamentoImg,
+  helmet: capceteImg,
+  pliers: alicateImg,
+  vest: fardamentoImg,
+}
+
+function ItemIcon({ iconKey, size = 28 }: { iconKey: string | null; size?: number }) {
+  if (!iconKey) return <PackageIcon size={Math.round(size * 0.6)} />
+  if (iconKey.startsWith('data:image/')) {
+    return <img src={iconKey} alt="foto" style={{ width: size, height: size, objectFit: 'contain', borderRadius: 4 }} />
+  }
+  const src = ICON_MAP[iconKey]
+  if (src) {
+    return <img src={src} alt={iconKey} style={{ width: size, height: size, objectFit: 'contain' }} draggable={false} />
+  }
+  return <PackageIcon size={Math.round(size * 0.6)} />
+}
 
 export function StockPage() {
   const { profile } = useAuth()
@@ -95,7 +121,7 @@ export function StockPage() {
   }, [])
 
   useEffect(() => {
-    fetchItems()
+    setTimeout(() => void fetchItems(), 0)
   }, [fetchItems])
 
   const fetchItemDetails = useCallback(async (itemId: string) => {
@@ -120,14 +146,14 @@ export function StockPage() {
     const typedWithdrawals: WithdrawalWithDetails[] = []
     if (withdrawalItemsResult.data) {
       for (const wi of withdrawalItemsResult.data) {
-        const w = (wi as any).withdrawal as any
+        const w = (wi as Record<string, unknown>).withdrawal as Record<string, unknown> | undefined
         if (w) {
           typedWithdrawals.push({
-            id: w.id,
-            code: w.code,
-            status: w.status,
-            created_at: w.created_at,
-            requested_by_person: w.requested_by_person,
+            id: w.id as string,
+            code: w.code as string | null,
+            status: w.status as string,
+            created_at: w.created_at as string,
+            requested_by_person: w.requested_by_person as { full_name: string } | null,
             quantity: (wi as { quantity: number }).quantity,
           })
         }
@@ -192,27 +218,36 @@ export function StockPage() {
   }
 
   const handleCreateSubmit = async (data: TablesInsert<'stock_items'>) => {
-    setIsSubmitting(true)
-    setSubmitError(null)
-
-    const insertData: TablesInsert<'stock_items'> = {
-      ...data,
-      created_by: profile?.id ?? null,
-    }
-
-    const { error: insertError } = await supabase
-      .from('stock_items')
-      .insert(insertData as never)
-
-    if (insertError) {
-      setSubmitError(insertError.message)
-      setIsSubmitting(false)
+    if (!profile?.id) {
+      setSubmitError('Sessão expirada. Faça login novamente.')
       return
     }
 
-    setIsSubmitting(false)
-    handleCloseModal()
-    fetchItems()
+    setIsSubmitting(true)
+    setSubmitError(null)
+
+    try {
+      const insertData: TablesInsert<'stock_items'> = {
+        ...data,
+        created_by: profile.id,
+      }
+
+      const { error: insertError } = await supabase
+        .from('stock_items')
+        .insert(insertData)
+
+      if (insertError) {
+        setSubmitError(insertError.message)
+        return
+      }
+
+      handleCloseModal()
+      fetchItems()
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Erro inesperado ao criar item.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   const handleEditSubmit = async (data: TablesUpdate<'stock_items'>) => {
@@ -221,24 +256,28 @@ export function StockPage() {
     setIsSubmitting(true)
     setSubmitError(null)
 
-    const updateData: TablesUpdate<'stock_items'> = {
-      ...data,
-    }
+    try {
+      const updateData: TablesUpdate<'stock_items'> = {
+        ...data,
+      }
 
-    const { error: updateError } = await supabase
-      .from('stock_items')
-      .update(updateData as never)
-      .eq('id', selectedItem.id)
+      const { error: updateError } = await supabase
+        .from('stock_items')
+        .update(updateData)
+        .eq('id', selectedItem.id)
 
-    if (updateError) {
-      setSubmitError(updateError.message)
+      if (updateError) {
+        setSubmitError(updateError.message)
+        return
+      }
+
+      handleCloseModal()
+      fetchItems()
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Erro inesperado ao editar item.')
+    } finally {
       setIsSubmitting(false)
-      return
     }
-
-    setIsSubmitting(false)
-    handleCloseModal()
-    fetchItems()
   }
 
   const handleDelete = async () => {
@@ -247,23 +286,27 @@ export function StockPage() {
     setIsSubmitting(true)
     setSubmitError(null)
 
-    const { error: deleteError } = await supabase
-      .from('stock_items')
-      .update({
-        is_active: false,
-        updated_at: new Date().toISOString(),
-      } as never)
-      .eq('id', selectedItem.id)
+    try {
+      const { error: deleteError } = await supabase
+        .from('stock_items')
+        .update({
+          is_active: false,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', selectedItem.id)
 
-    if (deleteError) {
-      setSubmitError(deleteError.message)
+      if (deleteError) {
+        setSubmitError(deleteError.message)
+        return
+      }
+
+      handleCloseModal()
+      fetchItems()
+    } catch (err: unknown) {
+      setSubmitError(err instanceof Error ? err.message : 'Erro inesperado ao desativar item.')
+    } finally {
       setIsSubmitting(false)
-      return
     }
-
-    setIsSubmitting(false)
-    handleCloseModal()
-    fetchItems()
   }
 
   const quantityColor = (
@@ -293,8 +336,16 @@ export function StockPage() {
 
   const columns = [
     {
+      key: 'svg_icon_key',
+      header: '',
+      sortable: false,
+      render: (_value: unknown, row: StockRowRecord) => (
+        <ItemIcon iconKey={row.svg_icon_key as string | null} size={28} />
+      ),
+    },
+    {
       key: 'code',
-      header: 'CÃ³digo',
+      header: 'Código',
       sortable: true,
       render: (_value: unknown, row: StockRowRecord) => (
         <span className="font-mono text-sm text-orange-400">{row.code}</span>
@@ -398,7 +449,7 @@ export function StockPage() {
         <div className="flex flex-col gap-3 sm:flex-row">
           <div className="flex-1">
             <Input
-              placeholder="Buscar por cÃ³digo, nome, categoria ou CA/NR..."
+              placeholder="Buscar por código, nome, categoria ou CA/NR..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               leftIcon={
@@ -519,7 +570,7 @@ export function StockPage() {
         isOpen={modalMode === 'create'}
         onClose={handleCloseModal}
         title="Novo Item"
-        size="lg"
+        size="md"
       >
         {submitError && (
           <Alert variant="danger" title="Erro ao criar item" className="mb-4">
@@ -528,7 +579,7 @@ export function StockPage() {
         )}
         <StockItemForm
           item={null}
-          onSubmit={handleCreateSubmit as any}
+          onSubmit={handleCreateSubmit as (data: TablesInsert<'stock_items'> | TablesUpdate<'stock_items'>) => Promise<void>}
           onCancel={handleCloseModal}
           isSubmitting={isSubmitting}
         />
@@ -539,7 +590,7 @@ export function StockPage() {
         isOpen={modalMode === 'edit'}
         onClose={handleCloseModal}
         title="Editar Item"
-        size="lg"
+        size="md"
       >
         {submitError && (
           <Alert variant="danger" title="Erro ao editar item" className="mb-4">
@@ -549,7 +600,7 @@ export function StockPage() {
         {selectedItem && (
           <StockItemForm
             item={selectedItem}
-            onSubmit={handleEditSubmit as any}
+            onSubmit={handleEditSubmit as (data: TablesInsert<'stock_items'> | TablesUpdate<'stock_items'>) => Promise<void>}
             onCancel={handleCloseModal}
             isSubmitting={isSubmitting}
           />
@@ -605,12 +656,19 @@ export function StockPage() {
         title="Detalhes do Item"
         size="xl"
       >
-        {selectedItem && (
-          <div className="flex flex-col gap-6">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+    {selectedItem && (
+    <div className="flex flex-col gap-6">
+      <div className="flex items-center gap-4 rounded-xl border border-gray-700/50 bg-gray-900/50 p-4 shadow-sm shadow-orange-500/5">
+        <ItemIcon iconKey={selectedItem.svg_icon_key} size={56} />
+        <div>
+          <p className="text-lg font-semibold text-white">{selectedItem.name}</p>
+          <p className="text-sm font-mono text-orange-400">{selectedItem.code}</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <p className="text-xs font-medium uppercase text-gray-500">
-                  CÃ³digo
+                  Código
                 </p>
                 <p className="mt-1 text-sm font-mono text-orange-400">
                   {selectedItem.code}

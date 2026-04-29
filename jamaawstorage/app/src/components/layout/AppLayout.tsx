@@ -1,12 +1,12 @@
 import { useState, useCallback } from 'react'
-
+import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { Header } from './Header'
-
-import { Outlet } from 'react-router-dom'
+import { useNotifications } from '../../hooks/useNotifications'
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const { notifications, lowStockItems } = useNotifications()
 
   const toggleSidebar = useCallback(() => {
     setSidebarOpen((prev) => !prev)
@@ -21,7 +21,11 @@ export function AppLayout() {
       <Sidebar isOpen={sidebarOpen} onClose={closeSidebar} />
 
       <div className="lg:pl-64">
-        <Header onToggleSidebar={toggleSidebar} />
+        <Header
+          onToggleSidebar={toggleSidebar}
+          lowStockCount={lowStockItems.length}
+          notifications={notifications}
+        />
 
         <main className="p-4 lg:p-6">
           <Outlet />

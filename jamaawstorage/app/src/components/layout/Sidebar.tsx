@@ -11,6 +11,7 @@ import {
   BuildingIcon,
   ChartIcon,
   SignatureIcon,
+  UserIcon,
 } from '../icons'
 import { useAuth } from '../../hooks/useAuth'
 
@@ -29,6 +30,7 @@ const navItems: NavItem[] = [
   { label: 'Obras', path: '/worksites', icon: <BuildingIcon size={20} /> },
   { label: 'Relatórios', path: '/reports', icon: <ChartIcon size={20} /> },
   { label: 'Auditoria', path: '/audit', icon: <SignatureIcon size={20} /> },
+  { label: 'Perfil', path: '/profile', icon: <UserIcon size={20} /> },
 ]
 
 interface SidebarProps {
