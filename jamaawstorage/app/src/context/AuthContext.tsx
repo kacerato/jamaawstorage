@@ -4,7 +4,6 @@ import type { User } from '@supabase/supabase-js'
 import type { Tables } from '../types/database'
 import {
   signIn as authSignIn,
-  signUp as authSignUp,
   signOut as authSignOut,
   createSupervisor as authCreateSupervisor,
   fetchProfile,
@@ -20,7 +19,6 @@ interface AuthContextType {
   error: string | null
   isAuthenticated: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
-  signUp: (email: string, password: string, metadata?: Record<string, unknown>) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   createSupervisor: (data: {
     email: string
@@ -85,23 +83,6 @@ function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const signUp = useCallback(async (email: string, password: string, metadata?: Record<string, unknown>) => {
-    setError(null)
-    try {
-      const { user: authUser, error: signUpError } = await authSignUp(email, password, metadata)
-      if (signUpError || !authUser) {
-        const msg = signUpError || 'Erro ao criar conta'
-        setError(msg)
-        return { error: msg }
-      }
-      return { error: null }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Erro ao criar conta'
-      setError(msg)
-      return { error: msg }
-    }
-  }, [])
-
   const signOut = useCallback(async () => {
     setLoading(true)
     try {
@@ -150,7 +131,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
   const value: AuthContextType = {
     user, profile, loading, error, isAuthenticated,
-    signIn, signUp, signOut, createSupervisor, retry,
+    signIn, signOut, createSupervisor, retry,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
