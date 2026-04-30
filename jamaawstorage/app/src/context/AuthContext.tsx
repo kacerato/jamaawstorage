@@ -33,57 +33,79 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
-const STARTUP_TIMEOUT_MS = 10_000
+const INIT_TIMEOUT_MS = 15_000
 
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const unsubscribeRef = useRef<(() => void) | null>(null)
+  const unsubRef = useRef<(() => void) | null>(null)
   const signingOutRef = useRef(false)
+  const initIdRef = useRef(0)
 
   const isAuthenticated = !!user && !!profile
 
   function initAuth() {
-    let cancelled = false
-    let initialSessionDone = false
+    const myInitId = ++initIdRef.current
+    const isStale = () => myInitId !== initIdRef.current
     let hadSession = false
 
-    const timeoutId = setTimeout(() => {
-      if (cancelled || initialSessionDone) return
+    let timeoutId: ReturnType<typeof setTimeout>
 
-      getSession().then((result) => {
-        if (cancelled) return
+    async function loadSession() {
+      if (isStale()) return
+
+      try {
+        const result = await getSession()
+
+        if (isStale()) return
 
         if (result.error) {
           setError(result.error)
+          setUser(null)
+          setProfile(null)
           setLoading(false)
-        } else if (result.session) {
-          setUser(result.session.user)
-          setProfile(result.session.profile)
-          if (result.session.fetchError) {
-            setError(result.session.fetchError)
-          } else {
-            setError(null)
-          }
-          setLoading(false)
-        } else {
+          return
+        }
+
+        if (!result.session) {
           setUser(null)
           setProfile(null)
           setError(null)
           setLoading(false)
+          return
         }
-      })
-    }, STARTUP_TIMEOUT_MS)
 
-    const unsubscribe = onAuthStateChange((session, event) => {
-      if (cancelled) return
+        hadSession = true
+        setUser(result.session.user)
+        setProfile(result.session.profile)
 
-      if (event === 'INITIAL_SESSION') {
-        initialSessionDone = true
-        clearTimeout(timeoutId)
+        if (result.session.fetchError) {
+          setError(result.session.fetchError)
+        } else {
+          setError(null)
+        }
+        setLoading(false)
+      } catch {
+        if (isStale()) return
+        setError('Erro ao carregar sessão. Tente novamente.')
+        setLoading(false)
       }
+    }
+
+    loadSession()
+
+    timeoutId = setTimeout(() => {
+      if (isStale()) return
+      setError('Tempo esgotado ao carregar. Tente novamente.')
+      setLoading(false)
+    }, INIT_TIMEOUT_MS)
+
+    const unsubscribe = onAuthStateChange((session, _event) => {
+      if (isStale()) return
+
+      clearTimeout(timeoutId)
 
       if (!session) {
         setUser(null)
@@ -109,19 +131,18 @@ function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false)
     })
 
-    unsubscribeRef.current = unsubscribe
-
-    return () => {
-      cancelled = true
-      clearTimeout(timeoutId)
-      unsubscribe()
-      unsubscribeRef.current = null
-    }
+    unsubRef.current = unsubscribe
   }
 
   useEffect(() => {
-    const cleanup = initAuth()
-    return cleanup
+    initAuth()
+    return () => {
+      if (unsubRef.current) {
+        unsubRef.current()
+        unsubRef.current = null
+      }
+      ++initIdRef.current
+    }
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -189,16 +210,15 @@ function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const retry = useCallback(() => {
-    if (unsubscribeRef.current) {
-      unsubscribeRef.current()
-      unsubscribeRef.current = null
+    if (unsubRef.current) {
+      unsubRef.current()
+      unsubRef.current = null
     }
 
     setLoading(true)
     setError(null)
 
-    const cleanup = initAuth()
-    return cleanup
+    initAuth()
   }, [])
 
   const value: AuthContextType = {
