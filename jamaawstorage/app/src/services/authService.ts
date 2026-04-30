@@ -53,18 +53,6 @@ function formatError(error: unknown): string {
   return 'Ocorreu um erro inesperado. Tente novamente.'
 }
 
-function isTokenExpired(accessToken: string): boolean {
-  try {
-    const parts = accessToken.split('.')
-    if (parts.length !== 3) return true
-    const payload = JSON.parse(atob(parts[1]))
-    const clockSkew = 30
-    return payload.exp != null && Date.now() / 1000 >= payload.exp - clockSkew
-  } catch {
-    return true
-  }
-}
-
 export async function signIn(
   email: string,
   password: string
@@ -109,55 +97,6 @@ export async function fetchProfile(userId: string): Promise<FetchProfileResult> 
     return { profile: data as Profile | null, error: null }
   } catch (err) {
     return { profile: null, error: formatError(err) }
-  }
-}
-
-export async function getSession(): Promise<{
-  session: Session | null
-  error: string | null
-}> {
-  try {
-    const {
-      data: { session: supabaseSession },
-    } = await supabase.auth.getSession()
-
-    if (!supabaseSession?.user) {
-      return { session: null, error: null }
-    }
-
-    if (isTokenExpired(supabaseSession.access_token)) {
-      const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession()
-
-      if (refreshError || !refreshData.session?.user) {
-        return { session: null, error: 'Sessão expirada. Faça login novamente.' }
-      }
-
-      const result = await fetchProfile(refreshData.session.user.id)
-      if (result.error) {
-        return {
-          session: { user: refreshData.session.user, profile: null, fetchError: result.error },
-          error: null,
-        }
-      }
-      return {
-        session: { user: refreshData.session.user, profile: result.profile },
-        error: null,
-      }
-    }
-
-    const result = await fetchProfile(supabaseSession.user.id)
-    if (result.error) {
-      return {
-        session: { user: supabaseSession.user, profile: null, fetchError: result.error },
-        error: null,
-      }
-    }
-    return {
-      session: { user: supabaseSession.user, profile: result.profile },
-      error: null,
-    }
-  } catch (err) {
-    return { session: null, error: formatError(err) }
   }
 }
 
@@ -227,10 +166,6 @@ export function onAuthStateChange(
     data: { subscription },
   } = supabase.auth.onAuthStateChange(async (event, supabaseSession) => {
     try {
-      if (event === 'INITIAL_SESSION') {
-        return
-      }
-
       if (event === 'SIGNED_OUT' || !supabaseSession?.user) {
         callback(null, event)
         return
