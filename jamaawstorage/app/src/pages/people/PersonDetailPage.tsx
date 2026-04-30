@@ -103,15 +103,15 @@ export function PersonDetailPage() {
       is_active: raw.is_active,
       created_at: raw.created_at,
       updated_at: raw.updated_at,
-      inventory: (raw.person_inventories ?? []).map((inv) => ({
-        id: inv.id,
-        person_id: inv.person_id,
-        stock_item_id: inv.stock_item_id,
-        quantity: inv.quantity,
-        created_at: inv.created_at,
-        updated_at: inv.updated_at,
-        stock_items: inv.stock_items as Tables<'stock_items'>,
-      })),
+  inventory: (raw.person_inventories ?? []).map((inv) => ({
+    id: inv.id,
+    person_id: inv.person_id,
+    stock_item_id: inv.stock_item_id,
+    quantity: inv.quantity,
+    last_withdrawal_id: inv.last_withdrawal_id,
+    updated_at: inv.updated_at,
+    stock_items: inv.stock_items as Tables<'stock_items'>,
+  })),
     }
 
     setPerson(enriched)
@@ -138,23 +138,24 @@ export function PersonDetailPage() {
 
     const mapped: WithdrawalRow[] = (data ?? []).map((row) => {
       const raw = row as unknown as RawWithdrawalRow
-      return {
-        id: raw.id,
-        code: raw.code,
-        requested_by: raw.requested_by,
-        collaborator_id: raw.collaborator_id,
-        work_site_id: raw.work_site_id,
-        destination_type: raw.destination_type as WithdrawalDestinationType,
-        authorized_by: raw.authorized_by,
-        sector: raw.sector,
-        status: raw.status as 'pending' | 'approved' | 'rejected' | 'completed',
-        notes: raw.notes,
-        photo_url: raw.photo_url,
-        supervisor_signature: raw.supervisor_signature,
-        requester_signature: raw.requester_signature,
-        witness_signature: raw.witness_signature,
-        created_at: raw.created_at,
-        updated_at: raw.updated_at,
+  return {
+    id: raw.id,
+    code: raw.code,
+    requested_by: raw.requested_by,
+    collaborator_id: raw.collaborator_id,
+    work_site_id: raw.work_site_id,
+    destination_type: raw.destination_type as WithdrawalDestinationType,
+    authorized_by: raw.authorized_by,
+    sector: raw.sector,
+    status: raw.status as 'pending' | 'approved' | 'rejected' | 'completed',
+    notes: raw.notes,
+    photo_url: raw.photo_url,
+    supervisor_signature: raw.supervisor_signature,
+    requester_signature: raw.requester_signature,
+    witness_signature: raw.witness_signature,
+    withdrawn_at: raw.withdrawn_at,
+    created_at: raw.created_at,
+    updated_at: raw.updated_at,
         withdrawal_items: (raw.withdrawal_items ?? []).map((item) => ({
           id: item.id,
           withdrawal_id: item.withdrawal_id,
@@ -793,7 +794,7 @@ interface RawPersonDetailRow {
     person_id: string
     stock_item_id: string
     quantity: number
-    created_at: string
+    last_withdrawal_id: string | null
     updated_at: string
     stock_items: Tables<'stock_items'>
   }[]
@@ -814,6 +815,7 @@ interface RawWithdrawalRow {
   supervisor_signature: string | null
   requester_signature: string | null
   witness_signature: string | null
+  withdrawn_at: string | null
   created_at: string
   updated_at: string
   withdrawal_items: {

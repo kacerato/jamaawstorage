@@ -176,31 +176,31 @@ export interface Database {
         }
         Relationships: []
       }
-      person_inventories: {
-        Row: {
-          id: string
-          person_id: string
-          stock_item_id: string
-          quantity: number
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          person_id: string
-          stock_item_id: string
-          quantity: number
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          person_id?: string
-          stock_item_id?: string
-          quantity?: number
-          created_at?: string
-          updated_at?: string
-        }
+  person_inventories: {
+    Row: {
+      id: string
+      person_id: string
+      stock_item_id: string
+      quantity: number
+      last_withdrawal_id: string | null
+      updated_at: string
+    }
+    Insert: {
+      id?: string
+      person_id: string
+      stock_item_id: string
+      quantity: number
+      last_withdrawal_id?: string | null
+      updated_at?: string
+    }
+    Update: {
+      id?: string
+      person_id?: string
+      stock_item_id?: string
+      quantity?: number
+      last_withdrawal_id?: string | null
+      updated_at?: string
+    }
         Relationships: [
           {
             foreignKeyName: "person_inventories_person_id_fkey"
@@ -218,61 +218,61 @@ export interface Database {
           }
         ]
       }
-      withdrawals: {
-        Row: {
-          id: string
-          code: string
-          authorized_by: string | null
-          requested_by: string
-          destination_type: WithdrawalDestinationType
-          collaborator_id: string | null
-          work_site_id: string | null
-          status: 'pending' | 'approved' | 'rejected' | 'completed'
-          notes: string | null
-          photo_url: string | null
-          supervisor_signature: string | null
-          requester_signature: string | null
-          witness_signature: string | null
-
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          code?: string
-          authorized_by?: string | null
-          requested_by: string
-          destination_type?: WithdrawalDestinationType
-          collaborator_id?: string | null
-          work_site_id?: string | null
-          status?: 'pending' | 'approved' | 'rejected' | 'completed'
-          notes?: string | null
-          photo_url?: string | null
-          supervisor_signature?: string | null
-          requester_signature?: string | null
-          witness_signature?: string | null
-
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          code?: string
-          authorized_by?: string | null
-          requested_by?: string
-          destination_type?: WithdrawalDestinationType
-          collaborator_id?: string | null
-          work_site_id?: string | null
-          status?: 'pending' | 'approved' | 'rejected' | 'completed'
-          notes?: string | null
-          photo_url?: string | null
-          supervisor_signature?: string | null
-          requester_signature?: string | null
-          witness_signature?: string | null
-
-          created_at?: string
-          updated_at?: string
-        }
+  withdrawals: {
+    Row: {
+      id: string
+      code: string
+      authorized_by: string | null
+      requested_by: string
+      destination_type: WithdrawalDestinationType
+      collaborator_id: string | null
+      work_site_id: string | null
+      status: 'pending' | 'approved' | 'rejected' | 'completed'
+      notes: string | null
+      photo_url: string | null
+      supervisor_signature: string | null
+      requester_signature: string | null
+      witness_signature: string | null
+      withdrawn_at: string | null
+      created_at: string
+      updated_at: string
+    }
+    Insert: {
+      id?: string
+      code?: string
+      authorized_by?: string | null
+      requested_by: string
+      destination_type?: WithdrawalDestinationType
+      collaborator_id?: string | null
+      work_site_id?: string | null
+      status?: 'pending' | 'approved' | 'rejected' | 'completed'
+      notes?: string | null
+      photo_url?: string | null
+      supervisor_signature?: string | null
+      requester_signature?: string | null
+      witness_signature?: string | null
+      withdrawn_at?: string | null
+      created_at?: string
+      updated_at?: string
+    }
+    Update: {
+      id?: string
+      code?: string
+      authorized_by?: string | null
+      requested_by?: string
+      destination_type?: WithdrawalDestinationType
+      collaborator_id?: string | null
+      work_site_id?: string | null
+      status?: 'pending' | 'approved' | 'rejected' | 'completed'
+      notes?: string | null
+      photo_url?: string | null
+      supervisor_signature?: string | null
+      requester_signature?: string | null
+      witness_signature?: string | null
+      withdrawn_at?: string | null
+      created_at?: string
+      updated_at?: string
+    }
         Relationships: [
           {
             foreignKeyName: "withdrawals_requested_by_fkey"
@@ -297,31 +297,34 @@ export interface Database {
           }
         ]
       }
-      withdrawal_items: {
-        Row: {
-          id: string
-          withdrawal_id: string
-          stock_item_id: string
-          lot_id: string | null
-          quantity: number
-          unit: string
-        }
-        Insert: {
-          id?: string
-          withdrawal_id: string
-          stock_item_id: string
-          lot_id?: string | null
-          quantity: number
-          unit: string
-        }
-        Update: {
-          id?: string
-          withdrawal_id?: string
-          stock_item_id?: string
-          lot_id?: string | null
-          quantity?: number
-          unit?: string
-        }
+  withdrawal_items: {
+    Row: {
+      id: string
+      withdrawal_id: string
+      stock_item_id: string
+      lot_id: string | null
+      quantity: number
+      unit: string
+      created_at: string
+    }
+    Insert: {
+      id?: string
+      withdrawal_id: string
+      stock_item_id: string
+      lot_id?: string | null
+      quantity: number
+      unit: string
+      created_at?: string
+    }
+    Update: {
+      id?: string
+      withdrawal_id?: string
+      stock_item_id?: string
+      lot_id?: string | null
+      quantity?: number
+      unit?: string
+      created_at?: string
+    }
         Relationships: [
           {
             foreignKeyName: "withdrawal_items_withdrawal_id_fkey"
@@ -346,31 +349,37 @@ export interface Database {
           }
         ]
       }
-      work_sites: {
-        Row: {
-          id: string
-          name: string
-          location: string | null
-          is_active: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          name: string
-          location?: string | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          name?: string
-          location?: string | null
-          is_active?: boolean
-          created_at?: string
-          updated_at?: string
-        }
+  work_sites: {
+    Row: {
+      id: string
+      name: string
+      description: string | null
+      location: string | null
+      is_active: boolean
+      created_by: string | null
+      created_at: string
+      updated_at: string
+    }
+    Insert: {
+      id?: string
+      name: string
+      description?: string | null
+      location?: string | null
+      is_active?: boolean
+      created_by?: string | null
+      created_at?: string
+      updated_at?: string
+    }
+    Update: {
+      id?: string
+      name?: string
+      description?: string | null
+      location?: string | null
+      is_active?: boolean
+      created_by?: string | null
+      created_at?: string
+      updated_at?: string
+    }
         Relationships: []
       }
     kits: {
@@ -485,12 +494,22 @@ export interface Database {
       }
     }
     Views: Record<string, never>
-    Functions: {
-      check_low_stock: {
-        Args: Record<string, never>
-        Returns: Database['public']['Tables']['stock_items']['Row'][]
-      }
+  Functions: {
+    check_low_stock: {
+      Args: Record<string, never>
+      Returns: Database['public']['Tables']['stock_items']['Row'][]
     }
+    create_supervisor_account: {
+      Args: {
+        p_email: string
+        p_password: string
+        p_full_name: string
+        p_employee_id?: string | null
+        p_sector?: string | null
+      }
+      Returns: string
+    }
+  }
     Enums: {
       app_role: 'supervisor' | 'leader' | 'collaborator'
       withdrawal_status: 'pending' | 'approved' | 'rejected' | 'completed'

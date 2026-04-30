@@ -67,16 +67,18 @@ export function WorksitesPage() {
 
     const mapped: WorksiteWithStats[] = (data as unknown as RawWorksiteRow[]).map((row) => {
       const withdrawals = row.withdrawals ?? []
-      return {
-        id: row.id,
-        name: row.name,
-        location: row.location,
-        is_active: row.is_active,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        total_withdrawals: withdrawals.length,
-        total_items_dispatched: 0,
-      }
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description,
+      location: row.location,
+      is_active: row.is_active,
+      created_by: row.created_by,
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+      total_withdrawals: withdrawals.length,
+      total_items_dispatched: 0,
+    }
     })
 
     setWorksites(mapped)
@@ -507,8 +509,10 @@ function ConfirmToggleModal({ worksite, onConfirm, onCancel }: ConfirmToggleModa
 interface RawWorksiteRow {
   id: string
   name: string
+  description: string | null
   location: string | null
   is_active: boolean
+  created_by: string | null
   created_at: string
   updated_at: string
   withdrawals: { id: string }[]

@@ -8,34 +8,13 @@ export type Session = {
   profile: Profile | null
 }
 
-type Unsubscribe = () => void
-
-const AUTH_TIMEOUT = 8000
-const SESSION_CACHE_KEY = 'auth_session_cache'
-
-function createTimeoutPromise<T>(operation: Promise<T>, timeoutMs: number): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(new Error('Tempo de operação excedido'))
-    }, timeoutMs)
-
-    operation
-      .then((result) => {
-        clearTimeout(timeoutId)
-        resolve(result)
-      })
-      .catch((error) => {
-        clearTimeout(timeoutId)
-        reject(error)
-      })
-  })
-}
+export type Unsubscribe = () => void
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
     const message = error.message.toLowerCase()
 
-    if (message.includes('network') || message.includes('fetch') || message.includes('tempo')) {
+    if (message.includes('network') || message.includes('fetch')) {
       return 'Erro de conexão. Verifique sua internet e tente novamente.'
     }
     if (message.includes('invalid login credentials')) {
@@ -60,63 +39,20 @@ function formatError(error: unknown): string {
       return 'Verifique seu e-mail para confirmar o cadastro.'
     }
 
-    return error.message
+    return 'Ocorreu um erro inesperado. Tente novamente.'
   }
 
   return 'Ocorreu um erro inesperado. Tente novamente.'
 }
-
-function getCachedSession(): Session | null {
-  try {
-    const cached = localStorage.getItem(SESSION_CACHE_KEY)
-    if (cached) {
-      return JSON.parse(cached)
-    }
-  } catch {
-    // Falha silenciosa no cache
-  }
-  return null
-}
-
-function setCachedSession(session: Session | null): void {
-  try {
-    if (session) {
-      localStorage.setItem(SESSION_CACHE_KEY, JSON.stringify(session))
-    } else {
-      localStorage.removeItem(SESSION_CACHE_KEY)
-    }
-  } catch {
-    // Falha silenciosa no cache
-  }
-}
-
 export async function getSession(): Promise<Session | null> {
   try {
-    const { data, error } = await createTimeoutPromise(
-      supabase.auth.getSession(),
-      AUTH_TIMEOUT
-    )
+    const { data, error } = await supabase.auth.getSession()
+    if (error || !data.session?.user) return null
 
-    if (error) {
-      const cached = getCachedSession()
-      return cached
-    }
-
-    if (!data.session?.user) {
-      setCachedSession(null)
-      return null
-    }
-
-    const user = data.session.user
-    const profile = await fetchProfile(user.id)
-
-    const session: Session = { user, profile }
-    setCachedSession(session)
-
-    return session
-  } catch (error) {
-    const cached = getCachedSession()
-    return cached
+    const profile = await fetchProfile(data.session.user.id)
+    return { user: data.session.user, profile }
+  } catch {
+    return null
   }
 }
 
@@ -125,22 +61,10 @@ export async function signIn(
   password: string
 ): Promise<{ user: User | null; error: string | null }> {
   try {
-    const { data, error } = await createTimeoutPromise(
-      supabase.auth.signInWithPassword({ email, password }),
-      AUTH_TIMEOUT
-    )
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password })
 
-    if (error) {
-      return { user: null, error: formatError(error) }
-    }
-
-    if (!data.user) {
-      return { user: null, error: 'Falha ao autenticar. Tente novamente.' }
-    }
-
-    const profile = await fetchProfile(data.user.id)
-    const session: Session = { user: data.user, profile }
-    setCachedSession(session)
+    if (error) return { user: null, error: formatError(error) }
+    if (!data.user) return { user: null, error: 'Falha ao autenticar. Tente novamente.' }
 
     return { user: data.user, error: null }
   } catch (error) {
@@ -154,22 +78,14 @@ export async function signUp(
   metadata?: Record<string, unknown>
 ): Promise<{ user: User | null; error: string | null }> {
   try {
-    const { data, error } = await createTimeoutPromise(
-      supabase.auth.signUp({
-        email,
-        password,
-        options: { data: metadata }
-      }),
-      AUTH_TIMEOUT
-    )
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: metadata },
+    })
 
-    if (error) {
-      return { user: null, error: formatError(error) }
-    }
-
-    if (!data.user) {
-      return { user: null, error: 'Falha ao criar conta. Tente novamente.' }
-    }
+    if (error) return { user: null, error: formatError(error) }
+    if (!data.user) return { user: null, error: 'Falha ao criar conta. Tente novamente.' }
 
     return { user: data.user, error: null }
   } catch (error) {
@@ -179,38 +95,48 @@ export async function signUp(
 
 export async function signOut(): Promise<void> {
   try {
-    await createTimeoutPromise(
-      supabase.auth.signOut(),
-      AUTH_TIMEOUT
-    )
+    await supabase.auth.signOut()
   } catch {
-    // Ignora erro no signOut
-  } finally {
-    setCachedSession(null)
+    // best-effort
   }
 }
 
 export async function fetchProfile(userId: string): Promise<Profile | null> {
   try {
-    // Executa a query e espera o resultado
-    const query = supabase
+    const { data, error } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .maybeSingle()
 
-    const { data, error } = await createTimeoutPromise(
-      Promise.resolve(query),
-      AUTH_TIMEOUT
-    )
-
-    if (error) {
-      return null
-    }
-
+    if (error) return null
     return data as Profile | null
   } catch {
     return null
+  }
+}
+
+export async function createSupervisor(data: {
+  email: string
+  password: string
+  full_name: string
+  employee_id?: string
+  sector?: string
+}): Promise<{ userId: string | null; error: string | null }> {
+  try {
+    const { data: result, error } = await supabase.rpc('create_supervisor_account', {
+      p_email: data.email.trim(),
+      p_password: data.password,
+      p_full_name: data.full_name.trim(),
+      p_employee_id: data.employee_id?.trim() || null,
+      p_sector: data.sector?.trim() || null,
+    })
+
+    if (error) return { userId: null, error: formatError(error) }
+
+    return { userId: result as string, error: null }
+  } catch (error) {
+    return { userId: null, error: formatError(error) }
   }
 }
 
@@ -219,27 +145,17 @@ export function onAuthStateChange(callback: (session: Session | null) => void): 
     async (event, supabaseSession) => {
       try {
         if (event === 'SIGNED_OUT' || !supabaseSession?.user) {
-          setCachedSession(null)
           callback(null)
           return
         }
 
-        const user = supabaseSession.user
-        const profile = await fetchProfile(user.id)
-        const session: Session = { user, profile }
-        setCachedSession(session)
-        callback(session)
+        const profile = await fetchProfile(supabaseSession.user.id)
+        callback({ user: supabaseSession.user, profile })
       } catch {
         callback(null)
       }
     }
   )
 
-  return () => {
-    try {
-      subscription.unsubscribe()
-    } catch {
-      // Ignora erro ao cancelar subscription
-    }
-  }
+  return () => subscription.unsubscribe()
 }
