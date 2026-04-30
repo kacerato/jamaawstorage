@@ -159,6 +159,25 @@ export async function createSupervisor(data: {
   }
 }
 
+export async function processSession(supabaseSession: any): Promise<Session | null> {
+  if (!supabaseSession?.user) return null
+
+  const result = await fetchProfile(supabaseSession.user.id)
+
+  if (result.error) {
+    return {
+      user: supabaseSession.user,
+      profile: null,
+      fetchError: result.error,
+    }
+  }
+
+  return {
+    user: supabaseSession.user,
+    profile: result.profile,
+  }
+}
+
 export function onAuthStateChange(
   callback: (session: Session | null, event: AuthChangeEvent) => void
 ): Unsubscribe {
@@ -171,16 +190,8 @@ export function onAuthStateChange(
         return
       }
 
-      const result = await fetchProfile(supabaseSession.user.id)
-
-      if (result.error) {
-        callback(
-          { user: supabaseSession.user, profile: null, fetchError: result.error },
-          event
-        )
-      } else {
-        callback({ user: supabaseSession.user, profile: result.profile }, event)
-      }
+      const session = await processSession(supabaseSession)
+      callback(session, event)
     } catch {
       callback(null, event)
     }

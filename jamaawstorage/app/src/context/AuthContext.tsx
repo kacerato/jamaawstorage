@@ -7,6 +7,7 @@ import {
   signOut as authSignOut,
   createSupervisor as authCreateSupervisor,
   onAuthStateChange,
+  processSession,
 } from '../services/authService'
 import { supabase } from '../lib/supabase'
 
@@ -42,28 +43,59 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const isAuthenticated = !!user && !!profile
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChange((session, event) => {
-      if (!session) {
-        setUser(null)
-        setProfile(null)
-        if (event !== 'INITIAL_SESSION' && !signingOutRef.current) {
-          setError('Sessão expirada. Faça login novamente.')
-        } else {
-          setError(null)
-        }
-      } else {
-        setUser(session.user)
-        setProfile(session.profile)
-        if (session.fetchError) {
-          setError(session.fetchError)
-        } else {
-          setError(null)
-        }
-      }
-      setLoading(false)
-    })
+    let mounted = true
+    let unsubscribe: (() => void) | null = null
 
-    return unsubscribe
+    async function initialize() {
+      try {
+        // 1. Check for current session immediately
+        const { data: { session: supabaseSession } } = await supabase.auth.getSession()
+        
+        if (!mounted) return
+
+        if (supabaseSession) {
+          const session = await processSession(supabaseSession)
+          if (mounted) {
+            setUser(session?.user ?? null)
+            setProfile(session?.profile ?? null)
+            if (session?.fetchError) setError(session.fetchError)
+          }
+        }
+      } catch (err) {
+        console.error('Auth initialization error:', err)
+        if (mounted) setError('Erro ao conectar ao serviço de autenticação.')
+      } finally {
+        if (mounted) setLoading(false)
+      }
+
+      // 2. Set up listener for future changes
+      if (mounted) {
+        unsubscribe = onAuthStateChange((session) => {
+          if (!mounted) return
+          
+          if (!session) {
+            setUser(null)
+            setProfile(null)
+            // Only set error if not intentionally signing out
+            if (!signingOutRef.current) {
+              setError(null) // Clear errors on logout unless we want to show expiration
+            }
+          } else {
+            setUser(session.user)
+            setProfile(session.profile)
+            setError(session.fetchError ?? null)
+          }
+          setLoading(false)
+        })
+      }
+    }
+
+    initialize()
+
+    return () => {
+      mounted = false
+      if (unsubscribe) unsubscribe()
+    }
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -106,10 +138,25 @@ function AuthProvider({ children }: { children: ReactNode }) {
     return { error: null }
   }, [])
 
-  const retry = useCallback(() => {
+  const retry = useCallback(async () => {
     setLoading(true)
     setError(null)
-    supabase.auth.getSession()
+    try {
+      const { data: { session: supabaseSession } } = await supabase.auth.getSession()
+      if (supabaseSession) {
+        const session = await processSession(supabaseSession)
+        setUser(session?.user ?? null)
+        setProfile(session?.profile ?? null)
+        if (session?.fetchError) setError(session.fetchError)
+      } else {
+        setUser(null)
+        setProfile(null)
+      }
+    } catch {
+      setError('Erro ao tentar novamente. Verifique sua conexão.')
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   const value: AuthContextType = {
