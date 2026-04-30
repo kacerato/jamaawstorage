@@ -38,24 +38,18 @@ function formatError(error: unknown): string {
     if (message.includes('confirm')) {
       return 'Verifique seu e-mail para confirmar o cadastro.'
     }
+    if (message.includes('access denied') || message.includes('acesso negado')) {
+      return 'Acesso negado. Somente supervisores ativos podem criar contas.'
+    }
+    if (message.includes('perfil nao encontrado') || message.includes('profile not found')) {
+      return 'Perfil do usuário não encontrado. Tente novamente.'
+    }
 
     return 'Ocorreu um erro inesperado. Tente novamente.'
   }
 
   return 'Ocorreu um erro inesperado. Tente novamente.'
 }
-export async function getSession(): Promise<Session | null> {
-  try {
-    const { data, error } = await supabase.auth.getSession()
-    if (error || !data.session?.user) return null
-
-    const profile = await fetchProfile(data.session.user.id)
-    return { user: data.session.user, profile }
-  } catch {
-    return null
-  }
-}
-
 export async function signIn(
   email: string,
   password: string
@@ -65,27 +59,6 @@ export async function signIn(
 
     if (error) return { user: null, error: formatError(error) }
     if (!data.user) return { user: null, error: 'Falha ao autenticar. Tente novamente.' }
-
-    return { user: data.user, error: null }
-  } catch (error) {
-    return { user: null, error: formatError(error) }
-  }
-}
-
-export async function signUp(
-  email: string,
-  password: string,
-  metadata?: Record<string, unknown>
-): Promise<{ user: User | null; error: string | null }> {
-  try {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: metadata },
-    })
-
-    if (error) return { user: null, error: formatError(error) }
-    if (!data.user) return { user: null, error: 'Falha ao criar conta. Tente novamente.' }
 
     return { user: data.user, error: null }
   } catch (error) {
@@ -124,17 +97,52 @@ export async function createSupervisor(data: {
   sector?: string
 }): Promise<{ userId: string | null; error: string | null }> {
   try {
-    const { data: result, error } = await supabase.rpc('create_supervisor_account', {
-      p_email: data.email.trim(),
-      p_password: data.password,
+    const { data: currentSession } = await supabase.auth.getSession()
+    const currentAccessToken = currentSession.session?.access_token ?? null
+    const currentRefreshToken = currentSession.session?.refresh_token ?? null
+
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email: data.email.trim(),
+      password: data.password,
+      options: {
+        data: {
+          full_name: data.full_name.trim(),
+          employee_id: data.employee_id?.trim() || null,
+        },
+      },
+    })
+
+    if (signUpError) {
+      if (currentAccessToken && currentRefreshToken) {
+        await supabase.auth.setSession({ access_token: currentAccessToken, refresh_token: currentRefreshToken })
+      }
+      return { userId: null, error: formatError(signUpError) }
+    }
+    if (!signUpData.user) {
+      if (currentAccessToken && currentRefreshToken) {
+        await supabase.auth.setSession({ access_token: currentAccessToken, refresh_token: currentRefreshToken })
+      }
+      return { userId: null, error: 'Falha ao criar conta. Tente novamente.' }
+    }
+
+    const newUserId = signUpData.user.id
+
+    const { error: activateError } = await supabase.rpc('activate_supervisor_profile', {
+      p_user_id: newUserId,
       p_full_name: data.full_name.trim(),
       p_employee_id: data.employee_id?.trim() || null,
       p_sector: data.sector?.trim() || null,
     })
 
-    if (error) return { userId: null, error: formatError(error) }
+    if (currentAccessToken && currentRefreshToken) {
+      await supabase.auth.setSession({ access_token: currentAccessToken, refresh_token: currentRefreshToken })
+    }
 
-    return { userId: result as string, error: null }
+    if (activateError) {
+      return { userId: null, error: formatError(activateError) }
+    }
+
+    return { userId: newUserId, error: null }
   } catch (error) {
     return { userId: null, error: formatError(error) }
   }

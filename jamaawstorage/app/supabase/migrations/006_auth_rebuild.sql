@@ -36,11 +36,13 @@ CREATE TABLE IF NOT EXISTS profiles (
   role app_role NOT NULL DEFAULT 'supervisor',
   sector TEXT,
   photo_url TEXT,
-  is_active BOOLEAN NOT NULL DEFAULT true,
+  is_active BOOLEAN NOT NULL DEFAULT false,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT profiles_role_check CHECK (role = 'supervisor')
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE profiles DROP CONSTRAINT IF EXISTS profiles_role_check;
+ALTER TABLE profiles ALTER COLUMN is_active SET DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS people (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -645,16 +647,92 @@ END;
 $$ LANGUAGE plpgsql STABLE;
 
 -- ----------------------------------------------------------------------------
--- 1.8 handle_new_user() — REMOVED
--- Auto-creating a supervisor profile on every signup is a CRITICAL security
--- flaw: any user calling supabase.auth.signUp() would become a supervisor.
--- Accounts are created exclusively via create_supervisor_account() RPC,
--- which enforces is_active_supervisor(). No trigger on auth.users is needed.
--- The function is kept (dropped + recreated as no-op) to avoid errors if
--- the trigger still exists from a previous migration.
+-- 1.8 handle_new_user() — SAFE auto-profile creation
+-- When a user signs up via supabase.auth.signUp(), this trigger creates a
+-- profile row with is_active = false. The user cannot access any data
+-- until a supervisor activates their account via activate_supervisor_profile().
+-- This is SAFE because inactive users pass no RLS policy checks.
 -- ----------------------------------------------------------------------------
-DROP TRIGGER IF EXISTS trg_auth_user_created ON auth.users;
-DROP FUNCTION IF EXISTS public.handle_new_user();
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, role, is_active)
+  VALUES (
+    NEW.id,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', NEW.email, 'Sem nome'),
+    'supervisor',
+    false
+  );
+  RETURN NEW;
+EXCEPTION WHEN others THEN
+  RETURN NEW;
+END;
+$$;
+
+COMMENT ON FUNCTION public.handle_new_user() IS 'Trigger: auto-creates an INACTIVE supervisor profile on auth.users insert. Safe because is_active=false blocks all RLS access. Activation requires activate_supervisor_profile() RPC.';
+
+-- ----------------------------------------------------------------------------
+-- 1.8b activate_supervisor_profile() — RPC for supervisors to activate users
+-- Only active supervisors can call this. It updates the profile to set
+-- is_active = true, full_name, employee_id, and sector.
+-- ----------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.activate_supervisor_profile(
+  p_user_id UUID,
+  p_full_name TEXT,
+  p_employee_id TEXT DEFAULT NULL,
+  p_sector TEXT DEFAULT NULL
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  target_id UUID;
+BEGIN
+  IF NOT public.is_active_supervisor() THEN
+    RAISE EXCEPTION 'Acesso negado: somente supervisores ativos podem ativar contas.';
+  END IF;
+
+  IF p_user_id IS NULL THEN
+    RAISE EXCEPTION 'ID do usuario e obrigatorio.';
+  END IF;
+
+  IF p_full_name IS NULL OR trim(p_full_name) = '' THEN
+    RAISE EXCEPTION 'Nome completo e obrigatorio.';
+  END IF;
+
+  UPDATE public.profiles
+  SET
+    full_name = p_full_name,
+    employee_id = p_employee_id,
+    sector = p_sector,
+    is_active = true,
+    updated_at = now()
+  WHERE id = p_user_id
+  RETURNING id INTO target_id;
+
+  IF target_id IS NULL THEN
+    RAISE EXCEPTION 'Perfil nao encontrado para o usuario informado.';
+  END IF;
+
+  INSERT INTO public.audit_logs (user_id, action, table_name, record_id, old_data, new_data)
+  VALUES (
+    auth.uid(), 'UPDATE', 'profiles', target_id,
+    jsonb_build_object('is_active', false),
+    jsonb_build_object('id', target_id, 'full_name', p_full_name, 'role', 'supervisor', 'is_active', true, 'activated_by_rpc', true)
+  );
+
+  RETURN target_id;
+END;
+$$;
+
+COMMENT ON FUNCTION public.activate_supervisor_profile(UUID, TEXT, TEXT, TEXT)
+IS 'RPC: activates an existing supervisor profile. Only callable by active supervisors. Uses SECURITY DEFINER.';
 
 -- ----------------------------------------------------------------------------
 -- 1.9 Recreate all triggers (DROP IF EXISTS + CREATE for idempotency)
@@ -828,56 +906,41 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public
 ALTER DEFAULT PRIVILEGES IN SCHEMA public
   GRANT EXECUTE ON FUNCTIONS TO authenticated, service_role;
 
-GRANT EXECUTE ON FUNCTION public.create_supervisor_account(TEXT, TEXT, TEXT, TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.activate_supervisor_profile(UUID, TEXT, TEXT, TEXT) TO authenticated;
 
 COMMIT;
 
 -- ============================================================================
--- Phase 2: OUTSIDE transaction — trigger on auth.users REMOVED
--- The handle_new_user trigger has been removed for security.
--- All account creation goes through create_supervisor_account() RPC.
--- No trigger on auth.users is needed or desired.
+-- Phase 2: OUTSIDE transaction — create trigger on auth.users
+-- Supabase does not allow triggers on auth.users inside transaction blocks.
+-- The handle_new_user() function was created inside the transaction above;
+-- this step only attaches it as a trigger.
 -- ============================================================================
+DROP TRIGGER IF EXISTS trg_auth_user_created ON auth.users;
+CREATE TRIGGER trg_auth_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW
+EXECUTE FUNCTION public.handle_new_user();
 
 -- ============================================================================
 -- Phase 3: SEED — EXECUTE SEPARATELY IF DATABASE IS EMPTY
 -- ============================================================================
 -- When the database has NO supervisor accounts, is_active_supervisor()
--- returns false for everyone, making create_supervisor_account() unusable.
--- The handle_new_user() trigger handles regular Supabase Auth signups,
--- but for the VERY FIRST admin, run this block manually in the SQL Editor.
+-- returns false for everyone, making activate_supervisor_profile() unusable.
+-- For the VERY FIRST admin, use the Supabase Dashboard:
+--   1. Authentication > Users > Add User (mark "Auto Confirm User")
+--   2. Then run the UPDATE below in the SQL Editor to activate the profile.
 --
--- INSTRUCTIONS:
--- 1. Replace email, password, full_name, employee_id with real values
--- 2. Paste ONLY the block below into the Supabase SQL Editor
--- 3. Execute it separately (not together with this migration)
--- 4. After the first supervisor exists, use create_supervisor_account() for all others
+-- The handle_new_user() trigger auto-creates the profile as is_active=false
+-- when you add the user via Dashboard. You just need to activate it:
 -- ============================================================================
 
 /*
-INSERT INTO auth.users (
-  id, aud, role, email, encrypted_password, email_confirmed_at,
-  raw_app_meta_data, raw_user_meta_data, created_at, updated_at
-) VALUES (
-  gen_random_uuid(),
-  'authenticated',
-  'authenticated',
-  '<SEU_EMAIL_AQUI>',
-  crypt('<SUA_SENHA_AQUI>', gen_salt('bf')),
-  now(),
-  '{"provider":"email","providers":["email"]}',
-  '{"full_name":"<NOME_COMPLETO>", "employee_id":"<MATRICULA>"}',
-  now(),
-  now()
-);
-
-INSERT INTO public.profiles (id, full_name, employee_id, role, sector, is_active)
-VALUES (
-  (SELECT id FROM auth.users WHERE email = '<SEU_EMAIL_AQUI>'),
-  '<NOME_COMPLETO>',
-  '<MATRICULA>',
-  'supervisor',
-  'Almoxarifado',
-  true
-);
+UPDATE public.profiles
+SET
+  full_name = '<NOME_COMPLETO>',
+  employee_id = '<MATRICULA>',
+  sector = 'Almoxarifado',
+  is_active = true
+WHERE id = (SELECT id FROM auth.users WHERE email = '<SEU_EMAIL_AQUI>');
 */

@@ -495,21 +495,30 @@ export interface Database {
     }
     Views: Record<string, never>
   Functions: {
-    check_low_stock: {
-      Args: Record<string, never>
-      Returns: Database['public']['Tables']['stock_items']['Row'][]
-    }
-    create_supervisor_account: {
-      Args: {
-        p_email: string
-        p_password: string
-        p_full_name: string
-        p_employee_id?: string | null
-        p_sector?: string | null
-      }
-      Returns: string
-    }
+  check_low_stock: {
+    Args: Record<string, never>
+    Returns: Database['public']['Tables']['stock_items']['Row'][]
   }
+  create_supervisor_account: {
+    Args: {
+      p_email: string
+      p_password: string
+      p_full_name: string
+      p_employee_id?: string | null
+      p_sector?: string | null
+    }
+    Returns: string
+  }
+  activate_supervisor_profile: {
+    Args: {
+      p_user_id: string
+      p_full_name: string
+      p_employee_id?: string | null
+      p_sector?: string | null
+    }
+    Returns: string
+  }
+}
     Enums: {
       app_role: 'supervisor' | 'leader' | 'collaborator'
       withdrawal_status: 'pending' | 'approved' | 'rejected' | 'completed'
