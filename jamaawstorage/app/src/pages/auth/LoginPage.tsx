@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import logoJamaaw from '../../assets/logojamaaw.png'
 
@@ -26,11 +26,20 @@ function EyeIcon({ open }: { open: boolean }) {
 
 export function LoginPage() {
   const { signIn, user, loading: authLoading } = useAuth()
+  const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const redirectReason = searchParams.get('reason')
+
+  const displayError = error || (redirectReason === 'no_profile'
+    ? 'Perfil do usuário não encontrado. Contate o administrador.'
+    : redirectReason === 'session_expired'
+    ? 'Sessão expirada. Faça login novamente.'
+    : null)
 
   // Redirect if already logged in
   if (user) {
@@ -61,6 +70,8 @@ export function LoginPage() {
 
     setIsSubmitting(false)
   }
+
+  const showError = displayError
 
   return (
     <>
@@ -140,15 +151,15 @@ export function LoginPage() {
               </div>
             </div>
 
-            {/* Error message */}
-            {error && (
-              <div className="login-error" role="alert">
-                <svg width={15} height={15} viewBox="0 0 24 24" fill="none">
-                  <circle cx="12" cy="12" r="10" stroke="#f87171" strokeWidth="2" />
-                  <path d="M12 8v4" stroke="#f87171" strokeWidth="2" strokeLinecap="round" />
-                  <circle cx="12" cy="16" r="1" fill="#f87171" />
-                </svg>
-                <span>{error}</span>
+      {/* Error message */}
+      {showError && (
+        <div className="login-error" role="alert">
+          <svg width={15} height={15} viewBox="0 0 24 24" fill="none">
+            <circle cx="12" cy="12" r="10" stroke="#f87171" strokeWidth="2" />
+            <path d="M12 8v4" stroke="#f87171" strokeWidth="2" strokeLinecap="round" />
+            <circle cx="12" cy="16" r="1" fill="#f87171" />
+          </svg>
+          <span>{showError}</span>
               </div>
             )}
 

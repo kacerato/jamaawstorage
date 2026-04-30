@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
-import { AlertCircle, RefreshCw, Loader2 } from 'lucide-react'
+import { AlertCircle, RefreshCw, Loader2, LogIn } from 'lucide-react'
 
 interface ProtectedRouteProps {
   children: ReactNode
@@ -9,6 +9,7 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, profile, loading, error, retry } = useAuth()
+  const navigate = useNavigate()
 
   if (loading) {
     return (
@@ -19,6 +20,16 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   }
 
   if (error) {
+    const isSessionError = error.toLowerCase().includes('sessão expirada')
+
+    const handleAction = () => {
+      if (isSessionError) {
+        navigate('/login?reason=session_expired', { replace: true })
+      } else {
+        retry()
+      }
+    }
+
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-gray-950 p-4">
         <div className="flex max-w-md flex-col items-center gap-6 text-center">
@@ -32,19 +43,32 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
             <p className="text-gray-400">{error}</p>
           </div>
           <button
-            onClick={retry}
+            onClick={handleAction}
             className="flex items-center gap-2 rounded-lg bg-blue-600 px-6 py-3 font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-950"
           >
-            <RefreshCw className="h-4 w-4" />
-            Tentar novamente
+            {isSessionError ? (
+              <>
+                <LogIn className="h-4 w-4" />
+                Fazer login
+              </>
+            ) : (
+              <>
+                <RefreshCw className="h-4 w-4" />
+                Tentar novamente
+              </>
+            )}
           </button>
         </div>
       </div>
     )
   }
 
-  if (!user || !profile) {
+  if (!user) {
     return <Navigate to="/login" replace />
+  }
+
+  if (!profile) {
+    return <Navigate to="/login?reason=no_profile" replace />
   }
 
   return <>{children}</>

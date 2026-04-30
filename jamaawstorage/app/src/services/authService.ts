@@ -1,11 +1,13 @@
-import type { User } from '@supabase/supabase-js'
+import type { User, AuthChangeEvent } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Tables } from '../types/database'
 
 export type Profile = Tables<'profiles'>
+
 export type Session = {
   user: User | null
   profile: Profile | null
+  fetchError?: string
 }
 
 export type Unsubscribe = () => void
@@ -50,6 +52,7 @@ function formatError(error: unknown): string {
 
   return 'Ocorreu um erro inesperado. Tente novamente.'
 }
+
 export async function signIn(
   email: string,
   password: string
@@ -74,7 +77,12 @@ export async function signOut(): Promise<void> {
   }
 }
 
-export async function fetchProfile(userId: string): Promise<Profile | null> {
+export type FetchProfileResult = {
+  profile: Profile | null
+  error: string | null
+}
+
+export async function fetchProfile(userId: string): Promise<FetchProfileResult> {
   try {
     const { data, error } = await supabase
       .from('profiles')
@@ -82,10 +90,49 @@ export async function fetchProfile(userId: string): Promise<Profile | null> {
       .eq('id', userId)
       .maybeSingle()
 
-    if (error) return null
-    return data as Profile | null
-  } catch {
-    return null
+    if (error) {
+      return { profile: null, error: formatError(error) }
+    }
+
+    return { profile: data as Profile | null, error: null }
+  } catch (err) {
+    return { profile: null, error: formatError(err) }
+  }
+}
+
+export async function getSession(): Promise<{
+  session: Session | null
+  error: string | null
+}> {
+  try {
+    const {
+      data: { session: supabaseSession },
+      error,
+    } = await supabase.auth.getSession()
+
+    if (error) {
+      return { session: null, error: formatError(error) }
+    }
+
+    if (!supabaseSession?.user) {
+      return { session: null, error: null }
+    }
+
+    const result = await fetchProfile(supabaseSession.user.id)
+
+    if (result.error) {
+      return {
+        session: { user: supabaseSession.user, profile: null, fetchError: result.error },
+        error: null,
+      }
+    }
+
+    return {
+      session: { user: supabaseSession.user, profile: result.profile },
+      error: null,
+    }
+  } catch (err) {
+    return { session: null, error: formatError(err) }
   }
 }
 
@@ -148,22 +195,32 @@ export async function createSupervisor(data: {
   }
 }
 
-export function onAuthStateChange(callback: (session: Session | null) => void): Unsubscribe {
-  const { data: { subscription } } = supabase.auth.onAuthStateChange(
-    async (event, supabaseSession) => {
-      try {
-        if (event === 'SIGNED_OUT' || !supabaseSession?.user) {
-          callback(null)
-          return
-        }
-
-        const profile = await fetchProfile(supabaseSession.user.id)
-        callback({ user: supabaseSession.user, profile })
-      } catch {
-        callback(null)
+export function onAuthStateChange(
+  callback: (session: Session | null, event: AuthChangeEvent) => void
+): Unsubscribe {
+  const {
+    data: { subscription },
+  } = supabase.auth.onAuthStateChange(async (event, supabaseSession) => {
+    try {
+      if (event === 'SIGNED_OUT' || !supabaseSession?.user) {
+        callback(null, event)
+        return
       }
+
+      const result = await fetchProfile(supabaseSession.user.id)
+
+      if (result.error) {
+        callback(
+          { user: supabaseSession.user, profile: null, fetchError: result.error },
+          event
+        )
+      } else {
+        callback({ user: supabaseSession.user, profile: result.profile }, event)
+      }
+    } catch {
+      callback(null, event)
     }
-  )
+  })
 
   return () => subscription.unsubscribe()
 }

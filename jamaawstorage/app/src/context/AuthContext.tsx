@@ -8,6 +8,7 @@ import {
   createSupervisor as authCreateSupervisor,
   fetchProfile,
   onAuthStateChange,
+  getSession,
 } from '../services/authService'
 
 type ProfileRow = Tables<'profiles'>
@@ -32,31 +33,95 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+const STARTUP_TIMEOUT_MS = 10_000
+
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const initialized = useRef(false)
+  const unsubscribeRef = useRef<(() => void) | null>(null)
+  const signingOutRef = useRef(false)
 
   const isAuthenticated = !!user && !!profile
 
-  useEffect(() => {
-    if (initialized.current) return
-    initialized.current = true
+  function initAuth() {
+    let cancelled = false
+    let initialSessionDone = false
+    let hadSession = false
 
-    const unsubscribe = onAuthStateChange((session) => {
+    const timeoutId = setTimeout(() => {
+      if (cancelled || initialSessionDone) return
+
+      getSession().then((result) => {
+        if (cancelled) return
+
+        if (result.error) {
+          setError(result.error)
+          setLoading(false)
+        } else if (result.session) {
+          setUser(result.session.user)
+          setProfile(result.session.profile)
+          if (result.session.fetchError) {
+            setError(result.session.fetchError)
+          } else {
+            setError(null)
+          }
+          setLoading(false)
+        } else {
+          setUser(null)
+          setProfile(null)
+          setError(null)
+          setLoading(false)
+        }
+      })
+    }, STARTUP_TIMEOUT_MS)
+
+    const unsubscribe = onAuthStateChange((session, event) => {
+      if (cancelled) return
+
+      if (event === 'INITIAL_SESSION') {
+        initialSessionDone = true
+        clearTimeout(timeoutId)
+      }
+
       if (!session) {
         setUser(null)
         setProfile(null)
+        if (hadSession && !signingOutRef.current) {
+          setError('Sessão expirada. Faça login novamente.')
+        } else {
+          setError(null)
+        }
+        setLoading(false)
+        return
+      }
+
+      hadSession = true
+      setUser(session.user)
+      setProfile(session.profile)
+
+      if (session.fetchError) {
+        setError(session.fetchError)
       } else {
-        setUser(session.user)
-        setProfile(session.profile)
+        setError(null)
       }
       setLoading(false)
-      setError(null)
     })
-    return () => { unsubscribe() }
+
+    unsubscribeRef.current = unsubscribe
+
+    return () => {
+      cancelled = true
+      clearTimeout(timeoutId)
+      unsubscribe()
+      unsubscribeRef.current = null
+    }
+  }
+
+  useEffect(() => {
+    const cleanup = initAuth()
+    return cleanup
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
@@ -70,9 +135,18 @@ function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false)
         return { error: msg }
       }
-      const userProfile = await fetchProfile(authUser.id)
+
+      const { profile: userProfile, error: profileError } = await fetchProfile(authUser.id)
       setUser(authUser)
       setProfile(userProfile)
+
+      if (profileError) {
+        setError(profileError)
+        setLoading(false)
+        return { error: profileError }
+      }
+
+      setError(null)
       setLoading(false)
       return { error: null }
     } catch (err) {
@@ -84,6 +158,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signOut = useCallback(async () => {
+    signingOutRef.current = true
     setLoading(true)
     try {
       await authSignOut()
@@ -94,6 +169,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       setProfile(null)
       setError(null)
       setLoading(false)
+      signingOutRef.current = false
     }
   }, [])
 
@@ -113,20 +189,16 @@ function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const retry = useCallback(() => {
-    initialized.current = false
+    if (unsubscribeRef.current) {
+      unsubscribeRef.current()
+      unsubscribeRef.current = null
+    }
+
     setLoading(true)
     setError(null)
-    void onAuthStateChange((session) => {
-      if (!session) {
-        setUser(null)
-        setProfile(null)
-      } else {
-        setUser(session.user)
-        setProfile(session.profile)
-      }
-      setLoading(false)
-      setError(null)
-    })
+
+    const cleanup = initAuth()
+    return cleanup
   }, [])
 
   const value: AuthContextType = {
