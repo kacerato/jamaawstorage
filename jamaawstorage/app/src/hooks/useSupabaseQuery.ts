@@ -4,21 +4,19 @@ import { supabase } from '../lib/supabase'
 
 const FETCH_TIMEOUT = 30000
 
-function isPostgrestError(err: unknown): err is PostgrestError {
-  return typeof err === 'object' && err !== null && 'message' in err && 'details' in err && 'hint' in err && 'code' in err
-}
-
 function toPostgrestError(err: unknown): PostgrestError {
-  if (isPostgrestError(err)) return err
+  if (typeof err === 'object' && err !== null && 'details' in err && 'hint' in err && 'code' in err) {
+    return err as PostgrestError
+  }
   const message = err instanceof Error ? err.message : 'Erro inesperado'
-  return { message, details: '', hint: '', code: 'UNKNOWN', name: 'PostgrestError', toJSON: () => ({ message, details: '', hint: '', code: 'UNKNOWN', name: 'PostgrestError' }) }
+  const base = { message, details: '', hint: '', code: 'UNKNOWN' as const, name: 'PostgrestError' as const }
+  return { ...base, toJSON: () => base }
 }
 
 interface QueryState<T> {
   data: T | null
   error: PostgrestError | null
   loading: boolean
-  connectionError: string | null
   refetch: () => Promise<void>
 }
 
@@ -28,63 +26,48 @@ export function useSupabaseQuery<T>(
   const [data, setData] = useState<T | null>(null)
   const [error, setError] = useState<PostgrestError | null>(null)
   const [loading, setLoading] = useState(true)
-  const [connectionError, setConnectionError] = useState<string | null>(null)
-  const retryCountRef = useRef(0)
   const mountedRef = useRef(true)
+  const retryRef = useRef(false)
 
-  const executeWithTimeout = useCallback(async (): Promise<{ data: T | null; error: PostgrestError | null }> => {
+  const executeWithTimeout = useCallback(async () => {
     let timeoutId: ReturnType<typeof setTimeout>
     const timeoutPromise = new Promise<never>((_, reject) => {
-      timeoutId = setTimeout(() => reject(new Error('Tempo limite excedido')), FETCH_TIMEOUT)
+      timeoutId = setTimeout(() => reject(new Error('Tempo limite excedido. Verifique sua conexão.')), FETCH_TIMEOUT)
     })
-
     try {
-      const result = await Promise.race([queryFn(supabase), timeoutPromise])
-      return result
+      return await Promise.race([queryFn(supabase), timeoutPromise])
     } finally {
       clearTimeout(timeoutId!)
     }
   }, [queryFn])
 
-  const attemptFetch = useCallback(async (): Promise<void> => {
+  const fetchData = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
     try {
       const result = await executeWithTimeout()
+      if (!mountedRef.current) return
 
       if (result.error) {
-        throw result.error
+        setError(result.error)
+      } else {
+        setData(result.data)
       }
-
-      if (!mountedRef.current) return
-      setData(result.data)
-      setError(null)
-      setConnectionError(null)
-      retryCountRef.current = 0
-      setLoading(false)
     } catch (err) {
       if (!mountedRef.current) return
 
-      setConnectionError('Conexão perdida. Tentando reconectar...')
-
-      if (retryCountRef.current === 0) {
-        retryCountRef.current = 1
-        setTimeout(() => { if (mountedRef.current) void attemptFetch() }, 1000)
-      } else if (retryCountRef.current === 1) {
-        retryCountRef.current = 2
-        setTimeout(() => { if (mountedRef.current) void attemptFetch() }, 3000)
-      } else {
-        setError(toPostgrestError(err))
-        setLoading(false)
+      if (!retryRef.current) {
+        retryRef.current = true
+        setTimeout(() => void fetchData(), 1500)
+        return
       }
+
+      setError(toPostgrestError(err))
+    } finally {
+      if (mountedRef.current) setLoading(false)
     }
   }, [executeWithTimeout])
-
-  const fetchData = useCallback(async () => {
-    retryCountRef.current = 0
-    setLoading(true)
-    setError(null)
-    setConnectionError(null)
-    await attemptFetch()
-  }, [attemptFetch])
 
   useEffect(() => {
     mountedRef.current = true
@@ -92,5 +75,5 @@ export function useSupabaseQuery<T>(
     return () => { mountedRef.current = false }
   }, [fetchData])
 
-  return { data, error, loading, connectionError, refetch: fetchData }
+  return { data, error, loading, refetch: fetchData }
 }

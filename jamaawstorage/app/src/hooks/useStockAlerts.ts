@@ -45,7 +45,7 @@ export function useStockAlerts(): StockAlertState {
           void fetchLowStock()
         }
       )
-      .subscribe({ reconnect: true } as never)
+      .subscribe()
 
     return () => {
       void supabase.removeChannel(channel)

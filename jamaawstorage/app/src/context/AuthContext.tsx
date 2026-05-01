@@ -19,7 +19,6 @@ interface AuthContextType {
   loading: boolean
   error: string | null
   isAuthenticated: boolean
-  isOnline: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   createSupervisor: (data: {
@@ -35,15 +34,11 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null)
 
 function AuthProvider({ children }: { children: ReactNode }) {
-const [user, setUser] = useState<User | null>(null)
+  const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [isOnline, setIsOnline] = useState(true)
   const signingOutRef = useRef(false)
-  const refreshingRef = useRef(false)
-  const userRef = useRef(user)
-  userRef.current = user
 
   const isAuthenticated = !!user && !!profile
 
@@ -62,85 +57,30 @@ const [user, setUser] = useState<User | null>(null)
           if (mounted) {
             setUser(session?.user ?? null)
             setProfile(session?.profile ?? null)
-            if (session?.fetchError) {
-              setError(session.fetchError)
-              setIsOnline(false)
-            }
+            if (session?.fetchError) setError(session.fetchError)
           }
         }
       } catch (err) {
         console.error('Auth initialization error:', err)
-        if (mounted) {
-          setError('Erro ao conectar ao serviço de autenticação.')
-          setIsOnline(false)
-        }
+        if (mounted) setError('Erro ao conectar ao serviço de autenticação.')
       } finally {
         if (mounted) setLoading(false)
       }
 
       if (mounted) {
-        unsubscribe = onAuthStateChange((session, event) => {
+        unsubscribe = onAuthStateChange((session) => {
           if (!mounted) return
-
-          if (event === 'TOKEN_REFRESHED') {
-            if (session) {
-              setUser(session.user)
-              setProfile(session.profile)
-              setError(session.fetchError ?? null)
-              setIsOnline(true)
-            }
-            setLoading(false)
-            return
-          }
-
-          if (event === 'SIGNED_OUT') {
-            if (signingOutRef.current) {
-              setUser(null)
-              setProfile(null)
-              setError(null)
-              setIsOnline(true)
-              setLoading(false)
-              return
-            }
-
-            if (!refreshingRef.current) {
-              refreshingRef.current = true
-              supabase.auth.refreshSession().then(({ data: { session: refreshedSession } }) => {
-                if (!mounted) return
-                refreshingRef.current = false
-                if (refreshedSession) {
-                  processSession(refreshedSession).then((processed) => {
-                    if (!mounted) return
-                    setUser(processed?.user ?? null)
-                    setProfile(processed?.profile ?? null)
-                    setError(processed?.fetchError ?? null)
-                    setIsOnline(true)
-                    setLoading(false)
-                  })
-                } else {
-                  setUser(null)
-                  setProfile(null)
-                  setError('Sessão expirada. Faça login novamente.')
-                  setIsOnline(false)
-                  setLoading(false)
-                }
-              })
-            }
-            return
-          }
 
           if (!session) {
             setUser(null)
             setProfile(null)
             if (!signingOutRef.current) {
               setError(null)
-              setIsOnline(true)
             }
           } else {
             setUser(session.user)
             setProfile(session.profile)
             setError(session.fetchError ?? null)
-            setIsOnline(!session.fetchError)
           }
           setLoading(false)
         })
@@ -149,52 +89,17 @@ const [user, setUser] = useState<User | null>(null)
 
     initialize()
 
-    const healthCheckInterval = setInterval(async () => {
-      if (!mounted) return
-
-      const { data: { session: currentSession } } = await supabase.auth.getSession()
-
-      if (!currentSession) {
-        if (userRef.current && !refreshingRef.current) {
-          refreshingRef.current = true
-          const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
-          refreshingRef.current = false
-          if (!mounted) return
-
-          if (refreshedSession) {
-            const processed = await processSession(refreshedSession)
-            if (!mounted) return
-            setUser(processed?.user ?? null)
-            setProfile(processed?.profile ?? null)
-            setError(processed?.fetchError ?? null)
-            setIsOnline(true)
-          } else {
-            setUser(null)
-            setProfile(null)
-            setError('Sessão expirada. Faça login novamente.')
-            setIsOnline(false)
-            setLoading(false)
-          }
-        }
-      } else {
-        setIsOnline(true)
-      }
-    }, 60000)
-
     return () => {
       mounted = false
-      clearInterval(healthCheckInterval)
       if (unsubscribe) unsubscribe()
     }
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null)
-    setIsOnline(true)
     const { error: signInError } = await authSignIn(email.trim(), password)
     if (signInError) {
       setError(signInError)
-      setIsOnline(false)
       return { error: signInError }
     }
     return { error: null }
@@ -210,7 +115,6 @@ const [user, setUser] = useState<User | null>(null)
       setUser(null)
       setProfile(null)
       setError(null)
-      setIsOnline(true)
       setLoading(false)
       signingOutRef.current = false
     }
@@ -234,31 +138,26 @@ const [user, setUser] = useState<User | null>(null)
   const retry = useCallback(async () => {
     setLoading(true)
     setError(null)
-    setIsOnline(true)
     try {
       const { data: { session: supabaseSession } } = await supabase.auth.getSession()
       if (supabaseSession) {
         const session = await processSession(supabaseSession)
         setUser(session?.user ?? null)
         setProfile(session?.profile ?? null)
-        if (session?.fetchError) {
-          setError(session.fetchError)
-          setIsOnline(false)
-        }
+        if (session?.fetchError) setError(session.fetchError)
       } else {
         setUser(null)
         setProfile(null)
       }
     } catch {
       setError('Erro ao tentar novamente. Verifique sua conexão.')
-      setIsOnline(false)
     } finally {
       setLoading(false)
     }
   }, [])
 
   const value: AuthContextType = {
-    user, profile, loading, error, isAuthenticated, isOnline,
+    user, profile, loading, error, isAuthenticated,
     signIn, signOut, createSupervisor, retry,
   }
 
