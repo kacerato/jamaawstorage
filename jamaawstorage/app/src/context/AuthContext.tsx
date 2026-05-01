@@ -35,13 +35,15 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null)
 
 function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null)
+const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isOnline, setIsOnline] = useState(true)
   const signingOutRef = useRef(false)
   const refreshingRef = useRef(false)
+  const userRef = useRef(user)
+  userRef.current = user
 
   const isAuthenticated = !!user && !!profile
 
@@ -153,7 +155,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       const { data: { session: currentSession } } = await supabase.auth.getSession()
 
       if (!currentSession) {
-        if (user && !refreshingRef.current) {
+        if (userRef.current && !refreshingRef.current) {
           refreshingRef.current = true
           const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
           refreshingRef.current = false

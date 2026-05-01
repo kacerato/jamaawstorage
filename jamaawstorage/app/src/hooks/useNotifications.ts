@@ -169,7 +169,7 @@ export function useNotifications() {
         { event: '*', schema: 'public', table: 'withdrawals' },
         () => { void refetch() }
       )
-      .subscribe({ reconnect: true })
+      .subscribe({ reconnect: true } as never)
 
     return () => {
       void supabase.removeChannel(channel)

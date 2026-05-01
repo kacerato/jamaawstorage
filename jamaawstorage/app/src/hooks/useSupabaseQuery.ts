@@ -11,7 +11,7 @@ function isPostgrestError(err: unknown): err is PostgrestError {
 function toPostgrestError(err: unknown): PostgrestError {
   if (isPostgrestError(err)) return err
   const message = err instanceof Error ? err.message : 'Erro inesperado'
-  return { message, details: '', hint: '', code: 'UNKNOWN' }
+  return { message, details: '', hint: '', code: 'UNKNOWN', name: 'PostgrestError', toJSON: () => ({ message, details: '', hint: '', code: 'UNKNOWN', name: 'PostgrestError' }) }
 }
 
 interface QueryState<T> {
