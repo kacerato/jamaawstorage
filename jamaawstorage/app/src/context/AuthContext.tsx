@@ -19,6 +19,7 @@ interface AuthContextType {
   loading: boolean
   error: string | null
   isAuthenticated: boolean
+  isOnline: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   createSupervisor: (data: {
@@ -38,7 +39,9 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<ProfileRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [isOnline, setIsOnline] = useState(true)
   const signingOutRef = useRef(false)
+  const refreshingRef = useRef(false)
 
   const isAuthenticated = !!user && !!profile
 
@@ -48,9 +51,8 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
     async function initialize() {
       try {
-        // 1. Check for current session immediately
         const { data: { session: supabaseSession } } = await supabase.auth.getSession()
-        
+
         if (!mounted) return
 
         if (supabaseSession) {
@@ -58,32 +60,85 @@ function AuthProvider({ children }: { children: ReactNode }) {
           if (mounted) {
             setUser(session?.user ?? null)
             setProfile(session?.profile ?? null)
-            if (session?.fetchError) setError(session.fetchError)
+            if (session?.fetchError) {
+              setError(session.fetchError)
+              setIsOnline(false)
+            }
           }
         }
       } catch (err) {
         console.error('Auth initialization error:', err)
-        if (mounted) setError('Erro ao conectar ao serviço de autenticação.')
+        if (mounted) {
+          setError('Erro ao conectar ao serviço de autenticação.')
+          setIsOnline(false)
+        }
       } finally {
         if (mounted) setLoading(false)
       }
 
-      // 2. Set up listener for future changes
       if (mounted) {
-        unsubscribe = onAuthStateChange((session) => {
+        unsubscribe = onAuthStateChange((session, event) => {
           if (!mounted) return
-          
+
+          if (event === 'TOKEN_REFRESHED') {
+            if (session) {
+              setUser(session.user)
+              setProfile(session.profile)
+              setError(session.fetchError ?? null)
+              setIsOnline(true)
+            }
+            setLoading(false)
+            return
+          }
+
+          if (event === 'SIGNED_OUT') {
+            if (signingOutRef.current) {
+              setUser(null)
+              setProfile(null)
+              setError(null)
+              setIsOnline(true)
+              setLoading(false)
+              return
+            }
+
+            if (!refreshingRef.current) {
+              refreshingRef.current = true
+              supabase.auth.refreshSession().then(({ data: { session: refreshedSession } }) => {
+                if (!mounted) return
+                refreshingRef.current = false
+                if (refreshedSession) {
+                  processSession(refreshedSession).then((processed) => {
+                    if (!mounted) return
+                    setUser(processed?.user ?? null)
+                    setProfile(processed?.profile ?? null)
+                    setError(processed?.fetchError ?? null)
+                    setIsOnline(true)
+                    setLoading(false)
+                  })
+                } else {
+                  setUser(null)
+                  setProfile(null)
+                  setError('Sessão expirada. Faça login novamente.')
+                  setIsOnline(false)
+                  setLoading(false)
+                }
+              })
+            }
+            return
+          }
+
           if (!session) {
             setUser(null)
             setProfile(null)
-            // Only set error if not intentionally signing out
             if (!signingOutRef.current) {
-              setError(null) // Clear errors on logout unless we want to show expiration
+              setError(null)
+              setIsOnline(true)
             }
           } else {
             setUser(session.user)
             setProfile(session.profile)
             setError(session.fetchError ?? null)
+            setIsOnline(!session.fetchError)
           }
           setLoading(false)
         })
@@ -92,17 +147,52 @@ function AuthProvider({ children }: { children: ReactNode }) {
 
     initialize()
 
+    const healthCheckInterval = setInterval(async () => {
+      if (!mounted) return
+
+      const { data: { session: currentSession } } = await supabase.auth.getSession()
+
+      if (!currentSession) {
+        if (user && !refreshingRef.current) {
+          refreshingRef.current = true
+          const { data: { session: refreshedSession } } = await supabase.auth.refreshSession()
+          refreshingRef.current = false
+          if (!mounted) return
+
+          if (refreshedSession) {
+            const processed = await processSession(refreshedSession)
+            if (!mounted) return
+            setUser(processed?.user ?? null)
+            setProfile(processed?.profile ?? null)
+            setError(processed?.fetchError ?? null)
+            setIsOnline(true)
+          } else {
+            setUser(null)
+            setProfile(null)
+            setError('Sessão expirada. Faça login novamente.')
+            setIsOnline(false)
+            setLoading(false)
+          }
+        }
+      } else {
+        setIsOnline(true)
+      }
+    }, 60000)
+
     return () => {
       mounted = false
+      clearInterval(healthCheckInterval)
       if (unsubscribe) unsubscribe()
     }
   }, [])
 
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null)
+    setIsOnline(true)
     const { error: signInError } = await authSignIn(email.trim(), password)
     if (signInError) {
       setError(signInError)
+      setIsOnline(false)
       return { error: signInError }
     }
     return { error: null }
@@ -118,6 +208,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null)
       setProfile(null)
       setError(null)
+      setIsOnline(true)
       setLoading(false)
       signingOutRef.current = false
     }
@@ -141,26 +232,31 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const retry = useCallback(async () => {
     setLoading(true)
     setError(null)
+    setIsOnline(true)
     try {
       const { data: { session: supabaseSession } } = await supabase.auth.getSession()
       if (supabaseSession) {
         const session = await processSession(supabaseSession)
         setUser(session?.user ?? null)
         setProfile(session?.profile ?? null)
-        if (session?.fetchError) setError(session.fetchError)
+        if (session?.fetchError) {
+          setError(session.fetchError)
+          setIsOnline(false)
+        }
       } else {
         setUser(null)
         setProfile(null)
       }
     } catch {
       setError('Erro ao tentar novamente. Verifique sua conexão.')
+      setIsOnline(false)
     } finally {
       setLoading(false)
     }
   }, [])
 
   const value: AuthContextType = {
-    user, profile, loading, error, isAuthenticated,
+    user, profile, loading, error, isAuthenticated, isOnline,
     signIn, signOut, createSupervisor, retry,
   }
 
