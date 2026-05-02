@@ -22,14 +22,27 @@ type KitItemInsert = TablesInsert<'kit_items'>
 
 type ModalMode = 'create' | 'edit' | 'deactivate' | 'detail' | null
 
-export function KitsPage() {
+const kitsPageCache: {
+  kits: KitWithItems[]
+} = {
+  kits: [],
+}
+
+export function KitsPage({
+  embedded = false,
+  initialQuery = '',
+}: {
+  embedded?: boolean
+  initialQuery?: string
+}) {
   useAuth()
 
-  const [kits, setKits] = useState<KitWithItems[]>([])
-  const [loading, setLoading] = useState(true)
+  const [kits, setKits] = useState<KitWithItems[]>(kitsPageCache.kits)
+  const [loading, setLoading] = useState(kitsPageCache.kits.length === 0)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(initialQuery)
 
   const [modalMode, setModalMode] = useState<ModalMode>(null)
   const [selectedKit, setSelectedKit] = useState<KitWithItems | null>(null)
@@ -37,7 +50,12 @@ export function KitsPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
 
   const fetchKits = useCallback(async () => {
-    setLoading(true)
+    const shouldShowFullLoading = kits.length === 0
+    if (shouldShowFullLoading) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
+    }
     setError(null)
 
     const { data, error: fetchError } = await supabase
@@ -51,13 +69,20 @@ export function KitsPage() {
       return
     }
 
-    setKits((data as KitWithItems[]) ?? [])
+    const nextKits = (data as KitWithItems[]) ?? []
+    kitsPageCache.kits = nextKits
+    setKits(nextKits)
     setLoading(false)
-  }, [])
+    setRefreshing(false)
+  }, [kits.length])
 
   useEffect(() => {
-    setTimeout(() => void fetchKits(), 0)
+    void fetchKits()
   }, [fetchKits])
+
+  useEffect(() => {
+    setSearchQuery(initialQuery)
+  }, [initialQuery])
 
   const filteredKits = kits.filter((kit) => {
     if (searchQuery === '') return true
@@ -242,10 +267,21 @@ export function KitsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Kits de Retirada</h2>
-          <p className="mt-1 text-sm text-gray-400">
-            Gerencie kits de EPIs pré-montados para retiradas rápidas
-          </p>
+          {embedded ? (
+            <>
+              <h3 className="text-xl font-semibold text-white">Kits de Retirada</h3>
+              <p className="mt-1 text-sm text-gray-400">
+                Monte e ajuste kits no mesmo contexto do estoque
+              </p>
+            </>
+          ) : (
+            <>
+              <h2 className="text-2xl font-bold text-white">Kits de Retirada</h2>
+              <p className="mt-1 text-sm text-gray-400">
+                Gerencie kits de EPIs pré-montados para retiradas rápidas
+              </p>
+            </>
+          )}
         </div>
         <Button onClick={handleOpenCreate} leftIcon={<KitIcon size={16} />}>
           Novo Kit
@@ -287,6 +323,12 @@ export function KitsPage() {
             </svg>
           }
         />
+        {refreshing && (
+          <div className="mt-3 inline-flex items-center gap-2 text-xs text-orange-200/75">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+            Atualizando kits...
+          </div>
+        )}
       </Card>
 
       {loading ? (

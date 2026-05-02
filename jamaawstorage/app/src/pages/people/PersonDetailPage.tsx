@@ -311,7 +311,7 @@ export function PersonDetailPage() {
       <div className="flex flex-col gap-4">
         <Alert variant="danger">{error}</Alert>
         <Button variant="secondary" onClick={() => navigate('/people')}>
-          Voltar para Pessoas
+          Voltar para Colaboradores
         </Button>
       </div>
     )
@@ -322,7 +322,7 @@ export function PersonDetailPage() {
       <div className="flex flex-col gap-4">
         <p className="text-gray-400">Pessoa não encontrada.</p>
         <Button variant="secondary" onClick={() => navigate('/people')}>
-          Voltar para Pessoas
+          Voltar para Colaboradores
         </Button>
       </div>
     )
@@ -449,7 +449,7 @@ export function PersonDetailPage() {
             <path d="M12 4L6 10L12 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <h2 className="text-2xl font-bold text-white">Detalhes da Pessoa</h2>
+        <h2 className="text-2xl font-bold text-white">Detalhes do Colaborador</h2>
       </div>
 
       {error && (
@@ -715,7 +715,7 @@ export function PersonDetailPage() {
       <Modal
         isOpen={showEditModal}
         onClose={() => setShowEditModal(false)}
-        title="Editar Pessoa"
+        title="Editar Colaborador"
         size="lg"
       >
         <PersonForm
@@ -728,7 +728,7 @@ export function PersonDetailPage() {
       <Modal
         isOpen={showToggleModal}
         onClose={() => setShowToggleModal(false)}
-        title={person.is_active ? 'Desativar Pessoa' : 'Reativar Pessoa'}
+        title={person.is_active ? 'Desativar Colaborador' : 'Reativar Colaborador'}
         size="sm"
       >
         <div className="flex flex-col gap-4">
@@ -759,7 +759,6 @@ export function PersonDetailPage() {
         size="md"
       >
         <PersonInventoryModal
-          isOpen={showInventoryModal}
           onClose={() => setShowInventoryModal(false)}
           personId={person.id}
           personName={person.full_name}

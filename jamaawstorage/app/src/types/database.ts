@@ -60,7 +60,7 @@ export interface Database {
         }
         Insert: {
           id?: string
-          code: string
+          code?: string
           name: string
           description?: string | null
           unit: string
@@ -506,6 +506,51 @@ export interface Database {
       p_full_name: string
       p_employee_id?: string | null
       p_sector?: string | null
+    }
+    Returns: string
+  }
+  adjust_stock_item_quantity: {
+    Args: {
+      p_stock_item_id: string
+      p_delta: number
+    }
+    Returns: number
+  }
+  update_stock_item_details_and_quantity: {
+    Args: {
+      p_stock_item_id: string
+      p_name: string
+      p_description?: string | null
+      p_category?: string | null
+      p_unit?: string | null
+      p_ca_nr?: string | null
+      p_minimum_quantity?: number
+      p_svg_icon_key?: string | null
+      p_stock_adjustment?: number
+    }
+    Returns: number
+  }
+  assign_inventory_item_to_person: {
+    Args: {
+      p_person_id: string
+      p_stock_item_id: string
+      p_quantity: number
+    }
+    Returns: number
+  }
+  create_completed_withdrawal: {
+    Args: {
+      p_requested_by: string
+      p_destination_type: WithdrawalDestinationType
+      p_collaborator_id?: string | null
+      p_work_site_id?: string | null
+      p_authorized_by?: string | null
+      p_notes?: string | null
+      p_photo_url?: string | null
+      p_supervisor_signature?: string | null
+      p_requester_signature?: string | null
+      p_witness_signature?: string | null
+      p_items?: Record<string, unknown>[]
     }
     Returns: string
   }

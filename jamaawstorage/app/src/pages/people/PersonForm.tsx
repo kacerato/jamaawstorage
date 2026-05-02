@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
-import type { Tables, TablesInsert, TablesUpdate, AppRole } from '../../types/database'
+import { useEffect, useRef, useState, type ChangeEvent } from 'react'
+import type { AppRole, Tables, TablesInsert, TablesUpdate } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
+import { DEFAULT_IMAGE_UPLOAD_OPTIONS, imageFileToDataUrl } from '../../lib/utils'
 import { Alert, Button, Input, Select } from '../../components/ui'
 
 interface PersonFormProps {
@@ -12,7 +13,6 @@ interface PersonFormProps {
 
 interface FormState {
   full_name: string
-  employee_id: string
   role: AppRole
   sector: string
   photo_url: string
@@ -20,110 +20,78 @@ interface FormState {
 
 interface FormErrors {
   full_name?: string
-  employee_id?: string
   role?: string
   form?: string
+}
+
+function getAutoEmployeeIdLabel(role: AppRole): string {
+  return role === 'leader' ? 'JMW-001' : 'JMW-001'
 }
 
 export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
   const { user, profile } = useAuth()
   const isEditing = person != null
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const [form, setForm] = useState<FormState>({
     full_name: '',
-    employee_id: '',
     role: 'collaborator',
     sector: '',
     photo_url: '',
   })
   const [errors, setErrors] = useState<FormErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [employeeIdAvailable, setEmployeeIdAvailable] = useState<boolean | null>(null)
-  const [checkingEmployeeId, setCheckingEmployeeId] = useState(false)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
   useEffect(() => {
-    if (person) {
-      setTimeout(() => setForm({
-        full_name: person.full_name,
-        employee_id: person.employee_id ?? '',
-        role: person.role,
-        sector: person.sector ?? '',
-        photo_url: person.photo_url ?? '',
-      }), 0)
-    }
+    if (!person) return
+    setForm({
+      full_name: person.full_name,
+      role: person.role,
+      sector: person.sector ?? '',
+      photo_url: person.photo_url ?? '',
+    })
+    setPhotoPreview(person.photo_url ?? null)
   }, [person])
 
-  const checkEmployeeIdUnique = useCallback(async (empId: string) => {
-    if (!empId.trim()) {
-      setEmployeeIdAvailable(null)
-      return
-    }
-    if (isEditing && person && empId === (person.employee_id ?? '')) {
-      setEmployeeIdAvailable(true)
-      return
-    }
-
-    setCheckingEmployeeId(true)
-    const { data, error } = await supabase
-      .from('people')
-      .select('id')
-      .eq('employee_id', empId.trim())
-      .maybeSingle<{ id: string }>()
-
-    if (error) {
-      setEmployeeIdAvailable(null)
-      setErrors((prev) => ({
-        ...prev,
-        employee_id: 'Não foi possível validar a matrícula agora.',
-      }))
-      setCheckingEmployeeId(false)
-      return
-    }
-
-    setEmployeeIdAvailable(data == null)
-    setCheckingEmployeeId(false)
-  }, [isEditing, person])
-
-  const handleEmployeeIdBlur = () => {
-    const empId = form.employee_id.trim()
-    if (empId) {
-      void checkEmployeeIdUnique(empId)
-    }
-  }
-
   const validate = (): boolean => {
-    const newErrors: FormErrors = {}
-
-    if (!form.full_name.trim()) {
-      newErrors.full_name = 'Nome completo é obrigatório'
-    }
-
-    if (!form.employee_id.trim()) {
-      newErrors.employee_id = 'Matrícula é obrigatória'
-    } else if (employeeIdAvailable === false) {
-      newErrors.employee_id = 'Esta matrícula já está em uso'
-    }
-
-    if (!form.role) {
-      newErrors.role = 'Cargo é obrigatório'
-    }
-
-    setErrors(newErrors)
-    return Object.keys(newErrors).length === 0
+    const next: FormErrors = {}
+    if (!form.full_name.trim()) next.full_name = 'Nome completo é obrigatório'
+    if (!form.role) next.role = 'Cargo é obrigatório'
+    setErrors(next)
+    return Object.keys(next).length === 0
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const updatePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const dataUrl = await imageFileToDataUrl(file, DEFAULT_IMAGE_UPLOAD_OPTIONS)
+      setPhotoPreview(dataUrl)
+      setForm((prev) => ({ ...prev, photo_url: dataUrl }))
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  const clearPhoto = () => {
+    setPhotoPreview(null)
+    setForm((prev) => ({ ...prev, photo_url: '' }))
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault()
     if (!validate()) return
+
     if (!user) {
       setErrors((prev) => ({ ...prev, form: 'Sua sessão expirou. Faça login novamente.' }))
       return
     }
+
     if (!profile) {
-      setErrors((prev) => ({
-        ...prev,
-        form: 'Seu usuário autenticado ainda não possui perfil de supervisor disponível.',
-      }))
+      setErrors((prev) => ({ ...prev, form: 'Seu perfil de supervisor não foi encontrado.' }))
       return
     }
 
@@ -134,7 +102,6 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
       if (isEditing && person) {
         const updateData: TablesUpdate<'people'> = {
           full_name: form.full_name.trim(),
-          employee_id: form.employee_id.trim() || null,
           role: form.role,
           sector: form.sector.trim() || null,
           photo_url: form.photo_url.trim() || null,
@@ -153,7 +120,6 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
       } else {
         const insertData: TablesInsert<'people'> = {
           full_name: form.full_name.trim(),
-          employee_id: form.employee_id.trim() || null,
           role: form.role,
           sector: form.sector.trim() || null,
           photo_url: form.photo_url.trim() || null,
@@ -170,20 +136,9 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
         if (error) throw error
         if (data) onSubmit(data)
       }
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Erro ao salvar pessoa'
-      const lower = message.toLowerCase()
-      let friendlyMessage = message
-
-      if (lower.includes('people_created_by_fkey') || lower.includes('foreign key')) {
-        friendlyMessage =
-          'O usuário logado não possui um perfil válido em profiles. Refaça o login após aplicar a migration do Supabase.'
-      } else if (lower.includes('permission denied')) {
-        friendlyMessage =
-          'Seu usuário não tem permissão para cadastrar pessoas. Verifique as policies e grants do Supabase.'
-      }
-
-      setErrors((prev) => ({ ...prev, form: friendlyMessage }))
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Erro ao salvar colaborador'
+      setErrors((prev) => ({ ...prev, form: message }))
     } finally {
       setIsSubmitting(false)
     }
@@ -196,78 +151,99 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+      <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/80">
+          Identidade
+        </p>
+
+        <div className="flex flex-col gap-4 lg:flex-row">
+          <div className="flex items-center gap-4">
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-white/5">
+              {photoPreview ? (
+                <img src={photoPreview} alt="Foto do colaborador" className="h-full w-full rounded-full object-cover" />
+              ) : (
+                <span className="text-xl font-semibold text-orange-300">
+                  {form.full_name
+                    .split(' ')
+                    .map((part) => part[0])
+                    .filter(Boolean)
+                    .slice(0, 2)
+                    .join('')
+                    .toUpperCase() || 'JW'}
+                </span>
+              )}
+              {photoPreview && (
+                <button
+                  type="button"
+                  onClick={clearPhoto}
+                  className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-sm text-white"
+                >
+                  x
+                </button>
+              )}
+            </div>
+            <div className="space-y-2">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-200 transition-colors hover:bg-orange-500/16"
+              >
+                Enviar foto
+              </button>
+              <p className="text-xs text-gray-500">JPG ou PNG, até {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={updatePhoto}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          <div className="flex-1 rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-3">
+            <p className="text-sm font-medium text-gray-200">Matrícula</p>
+            <p className="mt-1 text-sm text-orange-300">
+              {isEditing ? person?.employee_id ?? 'Gerada automaticamente' : 'Gerada automaticamente ao salvar'}
+            </p>
+            <p className="mt-1 text-xs text-gray-500">Sequência padrão do sistema, ex.: {getAutoEmployeeIdLabel(form.role)}</p>
+          </div>
+        </div>
+      </div>
+
       <Input
-        label="Nome Completo"
+        label="Nome completo"
         value={form.full_name}
-        onChange={(e) => setForm((prev) => ({ ...prev, full_name: e.target.value }))}
+        onChange={(event) => setForm((prev) => ({ ...prev, full_name: event.target.value }))}
         error={errors.full_name}
         required
         placeholder="Ex: João da Silva"
       />
 
-      <Input
-        label="Matrícula / ID"
-        value={form.employee_id}
-        onChange={(e) => {
-          setForm((prev) => ({ ...prev, employee_id: e.target.value }))
-          setEmployeeIdAvailable(null)
-        }}
-        onBlur={handleEmployeeIdBlur}
-        error={errors.employee_id}
-        helperText={
-          checkingEmployeeId
-            ? 'Verificando...'
-            : employeeIdAvailable === true
-              ? 'Matrícula disponível'
-              : employeeIdAvailable === false
-                ? undefined
-                : undefined
-        }
-        required
-        placeholder="Ex: EMP-001"
-      />
-
       <Select
         label="Cargo"
         value={form.role}
-        onChange={(e) => setForm((prev) => ({ ...prev, role: e.target.value as AppRole }))}
+        onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as AppRole }))}
         options={roleOptions}
         error={errors.role}
         required
       />
 
       <Input
-        label="Setor / Obra Padrão"
+        label="Setor / Obra padrão"
         value={form.sector}
-        onChange={(e) => setForm((prev) => ({ ...prev, sector: e.target.value }))}
+        onChange={(event) => setForm((prev) => ({ ...prev, sector: event.target.value }))}
         placeholder="Ex: Construção Civil, Manutenção"
       />
 
-      <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-300">Foto de Perfil</label>
-        <input
-          type="file"
-          accept="image/*"
-          className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-gray-300 file:mr-3 file:rounded-md file:border-0 file:bg-orange-500 file:px-3 file:py-1 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
-          onChange={() => {
-            // File upload for future Supabase Storage integration
-          }}
-        />
-        <p className="text-sm text-gray-500">Envio de foto disponível em breve</p>
-      </div>
+      {errors.form && <Alert variant="danger">{errors.form}</Alert>}
 
-      {errors.form && (
-        <Alert variant="danger">
-          {errors.form}
-        </Alert>
-      )}
-
-      <div className="flex justify-end gap-3 border-t border-gray-700 pt-4">
+      <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancelar
         </Button>
         <Button type="submit" isLoading={isSubmitting}>
-          {isEditing ? 'Salvar Alterações' : 'Cadastrar Pessoa'}
+          {isEditing ? 'Salvar alterações' : 'Cadastrar colaborador'}
         </Button>
       </div>
     </form>

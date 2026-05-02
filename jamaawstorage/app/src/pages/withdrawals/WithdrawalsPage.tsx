@@ -1,15 +1,23 @@
-import { useState, useEffect, useMemo } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import type { WithdrawalListItem, WithdrawalStatus } from '../../types'
 import type { Tables } from '../../types/database'
 import { Button, Input, Select, Badge, DataTable, EmptyState } from '../../components/ui'
 import { ClipboardIcon } from '../../components/icons'
 import { formatDateTime } from '../../lib/utils'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 type PeopleRow = Tables<'people'>
-
 type WithdrawalRowForTable = WithdrawalListItem & Record<string, unknown>
+
+const withdrawalsPageCache: {
+  withdrawals: WithdrawalListItem[]
+  leaders: PeopleRow[]
+} = {
+  withdrawals: [],
+  leaders: [],
+}
 
 const statusOptions = [
   { value: '', label: 'Todas' },
@@ -35,21 +43,26 @@ const statusLabels: Record<WithdrawalStatus, string> = {
 
 export function WithdrawalsPage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialQuery = searchParams.get('q') ?? ''
+  const [withdrawals, setWithdrawals] = useState<WithdrawalListItem[]>(withdrawalsPageCache.withdrawals)
+  const [leaders, setLeaders] = useState<PeopleRow[]>(withdrawalsPageCache.leaders)
+  const [loading, setLoading] = useState(withdrawalsPageCache.withdrawals.length === 0)
+  const [refreshing, setRefreshing] = useState(false)
 
-  const [withdrawals, setWithdrawals] = useState<WithdrawalListItem[]>([])
-  const [leaders, setLeaders] = useState<PeopleRow[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const [searchCode, setSearchCode] = useState('')
+  const [searchCode, setSearchCode] = useState(initialQuery)
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [leaderFilter, setLeaderFilter] = useState<string>('')
   const [dateFrom, setDateFrom] = useState<string>('')
   const [dateTo, setDateTo] = useState<string>('')
+  const debouncedSearchCode = useDebouncedValue(searchCode, 220)
 
   useEffect(() => {
     let cancelled = false
 
-    supabase
+    if (withdrawalsPageCache.leaders.length > 0) return
+
+    void supabase
       .from('people')
       .select('*')
       .eq('is_active', true)
@@ -57,16 +70,29 @@ export function WithdrawalsPage() {
       .order('full_name')
       .then(({ data }) => {
         if (cancelled) return
-        if (data) setLeaders(data as PeopleRow[])
+        if (data) {
+          const nextLeaders = data as PeopleRow[]
+          withdrawalsPageCache.leaders = nextLeaders
+          setLeaders(nextLeaders)
+        }
       })
 
-    return () => { cancelled = true }
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   useEffect(() => {
     let cancelled = false
 
     const fetchWithdrawals = async () => {
+      const shouldShowFullLoading = withdrawals.length === 0
+      if (shouldShowFullLoading) {
+        setLoading(true)
+      } else {
+        setRefreshing(true)
+      }
+
       let query = supabase
         .from('withdrawals')
         .select(
@@ -80,11 +106,11 @@ export function WithdrawalsPage() {
         .order('created_at', { ascending: false })
         .limit(100)
 
-      if (searchCode.trim()) {
-        query = query.ilike('code', `%${searchCode.trim()}%`)
+      if (debouncedSearchCode.trim()) {
+        query = query.ilike('code', `%${debouncedSearchCode.trim()}%`)
       }
       if (statusFilter) {
-        query = query.eq('status', statusFilter as any)
+        query = query.eq('status', statusFilter as never)
       }
       if (leaderFilter) {
         query = query.eq('requested_by', leaderFilter)
@@ -99,39 +125,48 @@ export function WithdrawalsPage() {
       const { data, error } = await query
 
       if (cancelled) return
+
       if (error) {
         console.error('Error fetching withdrawals:', error.message)
         setWithdrawals([])
       } else {
-        setWithdrawals((data as WithdrawalListItem[]) ?? [])
+        const nextWithdrawals = (data as WithdrawalListItem[]) ?? []
+        withdrawalsPageCache.withdrawals = nextWithdrawals
+        setWithdrawals(nextWithdrawals)
       }
+
       setLoading(false)
+      setRefreshing(false)
     }
 
-    const timeout = setTimeout(() => {
-      fetchWithdrawals()
-    }, 300)
+    void fetchWithdrawals()
 
     return () => {
-      clearTimeout(timeout)
       cancelled = true
     }
-  }, [searchCode, statusFilter, leaderFilter, dateFrom, dateTo])
+  }, [debouncedSearchCode, statusFilter, leaderFilter, dateFrom, dateTo, withdrawals.length])
+
+  useEffect(() => {
+    const nextQuery = searchParams.get('q') ?? ''
+    if (nextQuery !== searchCode) {
+      setSearchCode(nextQuery)
+    }
+  }, [searchParams, searchCode])
 
   const leaderOptions = useMemo(
     () => [
       { value: '', label: 'Todos os líderes' },
-      ...leaders.map((l) => ({
-        value: l.id,
-        label: l.full_name,
+      ...leaders.map((leader) => ({
+        value: leader.id,
+        label: leader.full_name,
       })),
     ],
-    [leaders],
+    [leaders]
   )
 
   const tableData = useMemo<WithdrawalRowForTable[]>(
     () => withdrawals as WithdrawalRowForTable[],
-    [withdrawals],
+    [withdrawals]
   )
 
   const columns = [
@@ -149,27 +184,27 @@ export function WithdrawalsPage() {
       key: 'requested_by' as const,
       header: 'Líder Solicitante',
       render: (_value: unknown, row: WithdrawalRowForTable) => {
-        const w = row as unknown as WithdrawalListItem
-        return w.requested_by_person?.full_name ?? '-'
+        const withdrawal = row as unknown as WithdrawalListItem
+        return withdrawal.requested_by_person?.full_name ?? '-'
       },
     },
     {
       key: 'destination_type' as const,
       header: 'Destino',
       render: (_value: unknown, row: WithdrawalRowForTable) => {
-        const w = row as unknown as WithdrawalListItem
-        if (w.destination_type === 'collaborator') {
-          return w.collaborator?.full_name ?? 'Colaborador'
+        const withdrawal = row as unknown as WithdrawalListItem
+        if (withdrawal.destination_type === 'collaborator') {
+          return withdrawal.collaborator?.full_name ?? 'Colaborador'
         }
-        return w.work_site?.name ?? 'Obra'
+        return withdrawal.work_site?.name ?? 'Obra'
       },
     },
     {
       key: 'item_count' as const,
       header: 'Qtd Itens',
       render: (_value: unknown, row: WithdrawalRowForTable) => {
-        const w = row as unknown as WithdrawalListItem
-        return w.withdrawal_items?.length ?? 0
+        const withdrawal = row as unknown as WithdrawalListItem
+        return withdrawal.withdrawal_items?.length ?? 0
       },
       className: 'text-center',
     },
@@ -178,18 +213,18 @@ export function WithdrawalsPage() {
       header: 'Data',
       sortable: true,
       render: (_value: unknown, row: WithdrawalRowForTable) => {
-        const w = row as unknown as WithdrawalListItem
-        return formatDateTime(w.created_at)
+        const withdrawal = row as unknown as WithdrawalListItem
+        return formatDateTime(withdrawal.created_at)
       },
     },
     {
       key: 'status' as const,
       header: 'Status',
       render: (_value: unknown, row: WithdrawalRowForTable) => {
-        const w = row as unknown as WithdrawalListItem
+        const withdrawal = row as unknown as WithdrawalListItem
         return (
-          <Badge variant={statusBadgeVariant[w.status]} dot size="sm">
-            {statusLabels[w.status]}
+          <Badge variant={statusBadgeVariant[withdrawal.status]} dot size="sm">
+            {statusLabels[withdrawal.status]}
           </Badge>
         )
       },
@@ -198,8 +233,8 @@ export function WithdrawalsPage() {
       key: 'signatures' as const,
       header: 'Assinaturas',
       render: (_value: unknown, row: WithdrawalRowForTable) => {
-        const w = row as unknown as WithdrawalListItem
-        const both = !!w.supervisor_signature && !!w.requester_signature
+        const withdrawal = row as unknown as WithdrawalListItem
+        const both = !!withdrawal.supervisor_signature && !!withdrawal.requester_signature
         return both ? (
           <span className="text-emerald-400">✓</span>
         ) : (
@@ -227,13 +262,25 @@ export function WithdrawalsPage() {
         </Button>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-xl border border-gray-700 bg-gray-900 p-4">
+      <div className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 p-4">
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-48">
             <Input
               placeholder="Buscar por código..."
               value={searchCode}
-              onChange={(e) => setSearchCode(e.target.value)}
+              onChange={(e) => {
+                const nextValue = e.target.value
+                setSearchCode(nextValue)
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev)
+                  if (nextValue.trim()) {
+                    next.set('q', nextValue)
+                  } else {
+                    next.delete('q')
+                  }
+                  return next
+                })
+              }}
             />
           </div>
           <div className="w-44">
@@ -269,6 +316,13 @@ export function WithdrawalsPage() {
             />
           </div>
         </div>
+
+        {refreshing && (
+          <div className="inline-flex items-center gap-2 text-xs text-orange-200/75">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+            Atualizando retiradas...
+          </div>
+        )}
       </div>
 
       {!loading && withdrawals.length === 0 && !searchCode && !statusFilter && !leaderFilter ? (
@@ -289,8 +343,8 @@ export function WithdrawalsPage() {
           isLoading={loading}
           emptyMessage="Nenhuma retirada encontrada com os filtros aplicados"
           onRowClick={(row) => {
-            const w = row as unknown as WithdrawalListItem
-            navigate(`/withdrawals/${w.id}`)
+            const withdrawal = row as unknown as WithdrawalListItem
+            navigate(`/withdrawals/${withdrawal.id}`)
           }}
         />
       )}

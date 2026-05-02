@@ -1,25 +1,25 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useCallback, useEffect, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import type { Tables, TablesInsert, TablesUpdate } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { cn, formatQuantity, formatDateTime } from '../../lib/utils'
+import { cn, formatDateTime, formatQuantity } from '../../lib/utils'
 import {
-  Button,
-  Input,
   Alert,
   Badge,
+  Button,
   Card,
-  Modal,
   DataTable,
   EmptyState,
+  Input,
+  Modal,
   Spinner,
 } from '../../components/ui'
 import { PackageIcon } from '../../components/icons'
+import { ItemVisual } from '../../components/items/ItemVisual'
 import { StockItemForm } from './StockItemForm'
-import alicateImg from '../../assets/alicate.png'
-import capceteImg from '../../assets/capcete.png'
-import materialImg from '../../assets/material.png'
-import fardamentoImg from '../../assets/fardamento.png'
+import { KitsPage } from '../kits/KitsPage'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 type StockItemRow = Tables<'stock_items'>
 
@@ -37,6 +37,7 @@ interface WithdrawalWithDetails {
 }
 
 type ModalMode = 'detail' | 'create' | 'edit' | 'delete'
+type StockRowRecord = StockItemWithLowStock & Record<string, unknown>
 
 const CATEGORY_FILTER_OPTIONS = [
   { value: '', label: 'Todas as categorias' },
@@ -52,44 +53,36 @@ const STATUS_FILTER_OPTIONS = [
   { value: 'inactive', label: 'Inativos' },
 ]
 
-type StockRowRecord = StockItemWithLowStock & Record<string, unknown>
-
-const ICON_MAP: Record<string, string> = {
-  capacete: capceteImg,
-  alicate: alicateImg,
-  material: materialImg,
-  fardamento: fardamentoImg,
-  helmet: capceteImg,
-  pliers: alicateImg,
-  vest: fardamentoImg,
+const stockPageCache: {
+  items: StockItemWithLowStock[]
+  totalCount: number
+} = {
+  items: [],
+  totalCount: 0,
 }
 
 function ItemIcon({ iconKey, size = 28 }: { iconKey: string | null; size?: number }) {
-  if (!iconKey) return <PackageIcon size={Math.round(size * 0.6)} />
-  if (iconKey.startsWith('data:image/')) {
-    return <img src={iconKey} alt="foto" style={{ width: size, height: size, objectFit: 'contain', borderRadius: 4 }} />
-  }
-  const src = ICON_MAP[iconKey]
-  if (src) {
-    return <img src={src} alt={iconKey} style={{ width: size, height: size, objectFit: 'contain' }} draggable={false} />
-  }
-  return <PackageIcon size={Math.round(size * 0.6)} />
+  return <ItemVisual iconKey={iconKey} size={size} />
 }
 
 export function StockPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const { profile } = useAuth()
+  const activeTab = searchParams.get('tab') === 'kits' ? 'kits' : 'items'
+  const initialQuery = searchParams.get('q') ?? ''
 
-  const [items, setItems] = useState<StockItemWithLowStock[]>([])
-  const [loading, setLoading] = useState(true)
+  const [items, setItems] = useState<StockItemWithLowStock[]>(stockPageCache.items)
+  const [loading, setLoading] = useState(stockPageCache.items.length === 0)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [searchQuery, setSearchQuery] = useState('')
+  const [searchQuery, setSearchQuery] = useState(initialQuery)
+  const debouncedSearchQuery = useDebouncedValue(searchQuery, 220)
   const [categoryFilter, setCategoryFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('active')
-  
-  // Paginação
+
   const [currentPage, setCurrentPage] = useState(0)
-  const [totalCount, setTotalCount] = useState(0)
+  const [totalCount, setTotalCount] = useState(stockPageCache.totalCount)
   const PAGE_SIZE = 50
 
   const [modalMode, setModalMode] = useState<ModalMode | null>(null)
@@ -97,103 +90,90 @@ export function StockPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const [itemLots, setItemLots] = useState<Tables<'stock_item_lots'>[]>([])
   const [itemWithdrawals, setItemWithdrawals] = useState<WithdrawalWithDetails[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
 
-  // OTIMIZADO: Paginação server-side com filtros no banco
   const fetchItems = useCallback(async (page = 0) => {
-    setLoading(true)
+    const shouldShowFullLoading = items.length === 0
+    if (shouldShowFullLoading) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
+    }
     setError(null)
 
     try {
-      // Build query com colunas específicas (não SELECT *)
       let query = supabase
         .from('stock_items')
         .select(
-          'id, code, name, category, ca_nr, current_quantity, minimum_quantity, unit, is_active, svg_icon_key, description',
+          'id, code, name, category, ca_nr, current_quantity, minimum_quantity, unit, is_active, svg_icon_key, description, created_at, updated_at',
           { count: 'exact' }
         )
         .order('name', { ascending: true })
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
-      // Filtro de status no servidor
       if (statusFilter === 'active') {
         query = query.eq('is_active', true)
       } else if (statusFilter === 'inactive') {
         query = query.eq('is_active', false)
       }
 
-      // Filtro de categoria no servidor
       if (categoryFilter) {
         query = query.eq('category', categoryFilter)
       }
 
-      // Busca por texto no servidor (usa índice GIN se disponível)
-      if (searchQuery.trim()) {
-        const searchTerm = searchQuery.trim().toLowerCase()
-        query = query.or(`name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%`)
+      if (debouncedSearchQuery.trim()) {
+        const searchTerm = debouncedSearchQuery.trim()
+        query = query.or(`name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%,ca_nr.ilike.%${searchTerm}%`)
       }
 
       const { data, error: fetchError, count } = await query
-
       if (fetchError) {
         setError(fetchError.message)
         return
       }
 
-      const mapped = ((data as unknown as StockItemRow[]) ?? []).map((item) => ({
+      const mapped = ((data as StockItemRow[]) ?? []).map((item) => ({
         ...item,
         is_low_stock: item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity,
       }))
 
+      stockPageCache.items = mapped
+      stockPageCache.totalCount = count || 0
       setItems(mapped)
       setTotalCount(count || 0)
-    } catch (err: unknown) {
+    } catch (err) {
       console.error('Error fetching items:', err)
       setError('Erro ao carregar itens.')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [statusFilter, categoryFilter, searchQuery])
+  }, [categoryFilter, debouncedSearchQuery, items.length, statusFilter])
 
-  // Reset para página 0 quando filtros mudarem
   useEffect(() => {
     setCurrentPage(0)
     void fetchItems(0)
-  }, [fetchItems, statusFilter, categoryFilter])
+  }, [fetchItems])
 
-  // Busca com debounce
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setCurrentPage(0)
-      void fetchItems(0)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [fetchItems, searchQuery])
+    const nextQuery = searchParams.get('q') ?? ''
+    if (nextQuery !== searchQuery) {
+      setSearchQuery(nextQuery)
+    }
+  }, [searchParams, searchQuery])
 
   const fetchItemDetails = useCallback(async (itemId: string) => {
     setDetailLoading(true)
-
     try {
-      // Fetch lots
-      const { data: lotsData } = await supabase
-        .from('stock_item_lots')
-        .select('*')
-        .eq('stock_item_id', itemId)
-        .order('created_at', { ascending: false })
-
-      setItemLots(lotsData ?? [])
-
-      // Step 1: Fetch withdrawal items with their basic withdrawal details
       const { data: withdrawalItemsData } = await supabase
         .from('withdrawal_items')
         .select(`
           quantity,
           withdrawal:withdrawals(
-            id, 
-            code, 
-            status, 
+            id,
+            code,
+            status,
             created_at,
             requested_by
           )
@@ -202,39 +182,44 @@ export function StockPage() {
         .order('created_at', { ascending: false })
         .limit(10)
 
-      // Step 2: Extract requested_by IDs and fetch people
-      const rawWiData = (withdrawalItemsData as any[]) || []
-      
-      const requestedByIds = rawWiData
-        .map(wi => wi.withdrawal?.requested_by)
-        .filter(Boolean)
+      const rawWiData = (withdrawalItemsData as {
+        quantity: number
+        withdrawal: {
+          id: string
+          code: string | null
+          status: string
+          created_at: string
+          requested_by: string | null
+        } | null
+      }[]) ?? []
 
-      const uniqueRequestedByIds = Array.from(new Set(requestedByIds))
+      const requestedByIds = rawWiData
+        .map((entry) => entry.withdrawal?.requested_by)
+        .filter((value): value is string => Boolean(value))
 
       let peopleMap: Record<string, { full_name: string }> = {}
-      if (uniqueRequestedByIds.length > 0) {
+      if (requestedByIds.length > 0) {
         const { data: peopleData } = await supabase
           .from('people')
           .select('id, full_name')
-          .in('id', uniqueRequestedByIds)
-        
+          .in('id', Array.from(new Set(requestedByIds)))
+
         peopleMap = Object.fromEntries(
-          (peopleData || []).map(p => [p.id, { full_name: p.full_name }])
+          (peopleData ?? []).map((person) => [person.id, { full_name: person.full_name }])
         )
       }
 
-      // Step 3: Build strongly typed result array
       const typedWithdrawals: WithdrawalWithDetails[] = rawWiData
-        .filter(wi => wi.withdrawal)
-        .map(wi => ({
-          id: wi.withdrawal.id,
-          code: wi.withdrawal.code,
-          status: wi.withdrawal.status,
-          created_at: wi.withdrawal.created_at,
-          requested_by_person: wi.withdrawal.requested_by 
-            ? peopleMap[wi.withdrawal.requested_by] || null 
+        .filter((entry): entry is typeof entry & { withdrawal: NonNullable<typeof entry.withdrawal> } => Boolean(entry.withdrawal))
+        .map((entry) => ({
+          id: entry.withdrawal.id,
+          code: entry.withdrawal.code,
+          status: entry.withdrawal.status,
+          created_at: entry.withdrawal.created_at,
+          requested_by_person: entry.withdrawal.requested_by
+            ? peopleMap[entry.withdrawal.requested_by] ?? null
             : null,
-          quantity: wi.quantity,
+          quantity: entry.quantity,
         }))
 
       setItemWithdrawals(typedWithdrawals)
@@ -245,57 +230,12 @@ export function StockPage() {
     }
   }, [])
 
-  const filteredItems = items.filter((item) => {
-    const matchesSearch =
-      searchQuery === '' ||
-      item.code.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      item.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.category ?? '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (item.ca_nr ?? '').toLowerCase().includes(searchQuery.toLowerCase())
-
-    const matchesCategory =
-      categoryFilter === '' || item.category === categoryFilter
-
-    const matchesStatus =
-      statusFilter === 'all' ||
-      (statusFilter === 'active' && item.is_active !== false) ||
-      (statusFilter === 'inactive' && item.is_active === false)
-
-    return matchesSearch && matchesCategory && matchesStatus
-  })
-
-  const lowStockCount = items.filter((i) => i.is_low_stock).length
-
-  const handleOpenCreate = () => {
-    setSelectedItem(null)
-    setSubmitError(null)
-    setModalMode('create')
-  }
-
-  const handleOpenDetail = (item: StockItemRow) => {
-    setSelectedItem(item)
-    setSubmitError(null)
-    setModalMode('detail')
-    fetchItemDetails(item.id)
-  }
-
-  const handleOpenEdit = (item: StockItemRow) => {
-    setSelectedItem(item)
-    setSubmitError(null)
-    setModalMode('edit')
-  }
-
-  const handleOpenDelete = (item: StockItemRow) => {
-    setSelectedItem(item)
-    setSubmitError(null)
-    setModalMode('delete')
-  }
+  const lowStockCount = items.filter((item) => item.is_low_stock).length
 
   const handleCloseModal = () => {
     setModalMode(null)
     setSelectedItem(null)
     setSubmitError(null)
-    setItemLots([])
     setItemWithdrawals([])
   }
 
@@ -307,16 +247,13 @@ export function StockPage() {
 
     setIsSubmitting(true)
     setSubmitError(null)
-
     try {
-      const insertData: TablesInsert<'stock_items'> = {
-        ...data,
-        created_by: profile.id,
-      }
-
       const { error: insertError } = await supabase
         .from('stock_items')
-        .insert(insertData)
+        .insert({
+          ...data,
+          created_by: profile.id,
+        })
 
       if (insertError) {
         setSubmitError(insertError.message)
@@ -324,29 +261,31 @@ export function StockPage() {
       }
 
       handleCloseModal()
-      fetchItems()
-    } catch (err: unknown) {
+      void fetchItems(currentPage)
+    } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erro inesperado ao criar item.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const handleEditSubmit = async (data: TablesUpdate<'stock_items'>) => {
+  const handleEditSubmit = async (data: TablesUpdate<'stock_items'> & { stock_adjustment?: number }) => {
     if (!selectedItem) return
 
     setIsSubmitting(true)
     setSubmitError(null)
-
     try {
-      const updateData: TablesUpdate<'stock_items'> = {
-        ...data,
-      }
-
-      const { error: updateError } = await supabase
-        .from('stock_items')
-        .update(updateData)
-        .eq('id', selectedItem.id)
+      const { error: updateError } = await supabase.rpc('update_stock_item_details_and_quantity', {
+        p_stock_item_id: selectedItem.id,
+        p_name: data.name ?? selectedItem.name,
+        p_description: data.description ?? null,
+        p_category: data.category ?? null,
+        p_unit: data.unit ?? selectedItem.unit,
+        p_ca_nr: data.ca_nr ?? null,
+        p_minimum_quantity: data.minimum_quantity ?? selectedItem.minimum_quantity,
+        p_svg_icon_key: data.svg_icon_key ?? null,
+        p_stock_adjustment: data.stock_adjustment ?? 0,
+      })
 
       if (updateError) {
         setSubmitError(updateError.message)
@@ -354,8 +293,8 @@ export function StockPage() {
       }
 
       handleCloseModal()
-      fetchItems()
-    } catch (err: unknown) {
+      void fetchItems(currentPage)
+    } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erro inesperado ao editar item.')
     } finally {
       setIsSubmitting(false)
@@ -367,7 +306,6 @@ export function StockPage() {
 
     setIsSubmitting(true)
     setSubmitError(null)
-
     try {
       const { error: deleteError } = await supabase
         .from('stock_items')
@@ -383,27 +321,21 @@ export function StockPage() {
       }
 
       handleCloseModal()
-      fetchItems()
-    } catch (err: unknown) {
+      void fetchItems(currentPage)
+    } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erro inesperado ao desativar item.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
-  const quantityColor = (
-    current: number,
-    minimum: number
-  ): 'text-emerald-400' | 'text-orange-400' | 'text-red-400' => {
-    if (minimum <= 0) return 'text-emerald-400'
-    if (current > minimum) return 'text-emerald-400'
+  const quantityColor = (current: number, minimum: number) => {
+    if (minimum <= 0 || current > minimum) return 'text-emerald-400'
     if (current === minimum) return 'text-orange-400'
     return 'text-red-400'
   }
 
-  const categoryBadgeVariant = (
-    category: string | null
-  ): 'primary' | 'info' | 'success' | 'default' => {
+  const categoryBadgeVariant = (category: string | null): 'primary' | 'info' | 'success' | 'default' => {
     switch (category) {
       case 'EPI':
         return 'primary'
@@ -453,11 +385,8 @@ export function StockPage() {
       key: 'category',
       header: 'Categoria',
       render: (_value: unknown, row: StockRowRecord) => (
-        <Badge
-          variant={categoryBadgeVariant(row.category)}
-          size="sm"
-        >
-          {row.category ?? '—'}
+        <Badge variant={categoryBadgeVariant(row.category)} size="sm">
+          {row.category ?? '-'}
         </Badge>
       ),
     },
@@ -465,7 +394,7 @@ export function StockPage() {
       key: 'ca_nr',
       header: 'CA/NR',
       render: (_value: unknown, row: StockRowRecord) => (
-        <span className="text-gray-300">{row.ca_nr ?? '—'}</span>
+        <span className="text-gray-300">{row.ca_nr ?? '-'}</span>
       ),
     },
     {
@@ -473,12 +402,7 @@ export function StockPage() {
       header: 'Qtd Atual',
       sortable: true,
       render: (_value: unknown, row: StockRowRecord) => (
-        <span
-          className={cn(
-            'font-semibold',
-            quantityColor(row.current_quantity, row.minimum_quantity)
-          )}
-        >
+        <span className={cn('font-semibold', quantityColor(row.current_quantity, row.minimum_quantity))}>
           {formatQuantity(row.current_quantity, row.unit)}
         </span>
       ),
@@ -487,9 +411,7 @@ export function StockPage() {
       key: 'minimum_quantity',
       header: 'Qtd Mínima',
       render: (_value: unknown, row: StockRowRecord) => (
-        <span className="text-gray-400">
-          {formatQuantity(row.minimum_quantity, row.unit)}
-        </span>
+        <span className="text-gray-400">{formatQuantity(row.minimum_quantity, row.unit)}</span>
       ),
     },
     {
@@ -503,15 +425,54 @@ export function StockPage() {
 
   return (
     <div className="flex flex-col gap-6">
+      <div className="flex gap-2 border-b border-white/8 pb-2">
+        <button
+          type="button"
+          onClick={() => setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            next.set('tab', 'items')
+            return next
+          })}
+          className={cn(
+            'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === 'items' ? 'bg-orange-500/14 text-orange-200' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+          )}
+        >
+          Itens
+        </button>
+        <button
+          type="button"
+          onClick={() => setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            next.set('tab', 'kits')
+            return next
+          })}
+          className={cn(
+            'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === 'kits' ? 'bg-orange-500/14 text-orange-200' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+          )}
+        >
+          Kits
+        </button>
+      </div>
+
+      {activeTab === 'kits' ? (
+        <KitsPage embedded initialQuery={initialQuery} />
+      ) : (
+        <>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-white">Gestão de Estoque</h2>
           <p className="mt-1 text-sm text-gray-400">
-            Gerencie os itens do almoxarifado, lotes e níveis de estoque
+            Gerencie os itens do almoxarifado e seus níveis de estoque
           </p>
         </div>
-        <Button onClick={handleOpenCreate} leftIcon={<PackageIcon size={16} />}>
-          Novo Item
+        <Button onClick={() => {
+          setSelectedItem(null)
+          setSubmitError(null)
+          setModalMode('create')
+        }} leftIcon={<PackageIcon size={16} />}>
+          Novo item
         </Button>
       </div>
 
@@ -533,95 +494,58 @@ export function StockPage() {
             <Input
               placeholder="Buscar por código, nome, categoria ou CA/NR..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
+              onChange={(event) => {
+                const nextValue = event.target.value
+                setSearchQuery(nextValue)
+                setSearchParams((prev) => {
+                  const next = new URLSearchParams(prev)
+                  if (nextValue.trim()) {
+                    next.set('q', nextValue)
+                  } else {
+                    next.delete('q')
+                  }
+                  return next
+                })
+              }}
               leftIcon={
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <circle
-                    cx="6.5"
-                    cy="6.5"
-                    r="5.5"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  />
-                  <path
-                    d="M11 11L15 15"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                  <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="2" />
+                  <path d="M11 11L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
                 </svg>
               }
             />
           </div>
           <div className="flex gap-3">
-            <div className="relative">
-              <select
-                value={categoryFilter}
-                onChange={(e) => setCategoryFilter(e.target.value)}
-                className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 pr-10 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-              >
-                {CATEGORY_FILTER_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M4 6L8 10L12 6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-            </div>
-            <div className="relative">
-              <select
-                value={statusFilter}
-                onChange={(e) => setStatusFilter(e.target.value)}
-                className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 pr-10 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-              >
-                {STATUS_FILTER_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-gray-400">
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                >
-                  <path
-                    d="M4 6L8 10L12 6"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-                </svg>
-              </div>
-            </div>
+            <select
+              value={categoryFilter}
+              onChange={(event) => setCategoryFilter(event.target.value)}
+              className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+            >
+              {CATEGORY_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+            >
+              {STATUS_FILTER_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
+        {refreshing && (
+          <div className="mt-3 inline-flex items-center gap-2 text-xs text-orange-200/75">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+            Atualizando itens...
+          </div>
+        )}
       </Card>
 
       {loading ? (
@@ -629,12 +553,12 @@ export function StockPage() {
           <Spinner size="lg" />
           <p className="mt-4 text-sm text-gray-400">Carregando itens...</p>
         </div>
-      ) : filteredItems.length === 0 && searchQuery === '' && categoryFilter === '' ? (
+      ) : items.length === 0 && searchQuery === '' && categoryFilter === '' ? (
         <EmptyState
           icon={<PackageIcon size={48} />}
           title="Nenhum item cadastrado"
           description="Comece cadastrando o primeiro item do almoxarifado"
-          action={{ label: 'Novo Item', onClick: handleOpenCreate }}
+          action={{ label: 'Novo item', onClick: () => setModalMode('create') }}
         />
       ) : (
         <>
@@ -644,9 +568,14 @@ export function StockPage() {
             keyExtractor={(row) => row.id}
             isLoading={false}
             emptyMessage="Nenhum item encontrado com os filtros aplicados"
-            onRowClick={(row) => handleOpenDetail(row as unknown as StockItemRow)}
+            onRowClick={(row) => {
+              setSelectedItem(row as unknown as StockItemRow)
+              setSubmitError(null)
+              setModalMode('detail')
+              void fetchItemDetails(row.id)
+            }}
           />
-          {/* Paginação */}
+
           {totalCount > PAGE_SIZE && (
             <div className="flex items-center justify-between border-t border-gray-700 pt-4">
               <p className="text-sm text-gray-400">
@@ -657,9 +586,9 @@ export function StockPage() {
                   variant="secondary"
                   size="sm"
                   onClick={() => {
-                    const newPage = currentPage - 1
-                    setCurrentPage(newPage)
-                    void fetchItems(newPage)
+                    const nextPage = currentPage - 1
+                    setCurrentPage(nextPage)
+                    void fetchItems(nextPage)
                   }}
                   disabled={currentPage === 0}
                 >
@@ -672,9 +601,9 @@ export function StockPage() {
                   variant="secondary"
                   size="sm"
                   onClick={() => {
-                    const newPage = currentPage + 1
-                    setCurrentPage(newPage)
-                    void fetchItems(newPage)
+                    const nextPage = currentPage + 1
+                    setCurrentPage(nextPage)
+                    void fetchItems(nextPage)
                   }}
                   disabled={(currentPage + 1) * PAGE_SIZE >= totalCount}
                 >
@@ -686,13 +615,7 @@ export function StockPage() {
         </>
       )}
 
-      {/* Create Modal */}
-      <Modal
-        isOpen={modalMode === 'create'}
-        onClose={handleCloseModal}
-        title="Novo Item"
-        size="md"
-      >
+      <Modal isOpen={modalMode === 'create'} onClose={handleCloseModal} title="Novo Item" size="md">
         {submitError && (
           <Alert variant="danger" title="Erro ao criar item" className="mb-4">
             {submitError}
@@ -706,13 +629,7 @@ export function StockPage() {
         />
       </Modal>
 
-      {/* Edit Modal */}
-      <Modal
-        isOpen={modalMode === 'edit'}
-        onClose={handleCloseModal}
-        title="Editar Item"
-        size="md"
-      >
+      <Modal isOpen={modalMode === 'edit'} onClose={handleCloseModal} title="Editar Item" size="md">
         {submitError && (
           <Alert variant="danger" title="Erro ao editar item" className="mb-4">
             {submitError}
@@ -728,327 +645,153 @@ export function StockPage() {
         )}
       </Modal>
 
-      {/* Delete Confirmation Modal */}
-      <Modal
-        isOpen={modalMode === 'delete'}
-        onClose={handleCloseModal}
-        title="Desativar Item"
-        size="sm"
-      >
+      <Modal isOpen={modalMode === 'delete'} onClose={handleCloseModal} title="Desativar Item" size="sm">
         {submitError && (
-          <Alert
-            variant="danger"
-            title="Erro ao desativar item"
-            className="mb-4"
-          >
+          <Alert variant="danger" title="Erro ao desativar item" className="mb-4">
             {submitError}
           </Alert>
         )}
         <p className="text-gray-300">
-          Tem certeza que deseja desativar o item{' '}
-          <span className="font-semibold text-white">
-            {selectedItem?.name}
-          </span>
-          ? O item será marcado como inativo e não aparecerá nas listagens
-          padrão.
+          Tem certeza que deseja desativar o item <span className="font-semibold text-white">{selectedItem?.name}</span>?
         </p>
         <div className="mt-6 flex items-center justify-end gap-3">
-          <Button
-            variant="secondary"
-            onClick={handleCloseModal}
-            disabled={isSubmitting}
-          >
+          <Button variant="secondary" onClick={handleCloseModal} disabled={isSubmitting}>
             Cancelar
           </Button>
-          <Button
-            variant="danger"
-            onClick={handleDelete}
-            isLoading={isSubmitting}
-          >
+          <Button variant="danger" onClick={handleDelete} isLoading={isSubmitting}>
             Desativar
           </Button>
         </div>
       </Modal>
 
-      {/* Detail Modal */}
-      <Modal
-        isOpen={modalMode === 'detail'}
-        onClose={handleCloseModal}
-        title="Detalhes do Item"
-        size="xl"
-      >
-    {selectedItem && (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-center gap-4 rounded-xl border border-gray-700/50 bg-gray-900/50 p-4 shadow-sm shadow-orange-500/5">
-        <ItemIcon iconKey={selectedItem.svg_icon_key} size={56} />
-        <div>
-          <p className="text-lg font-semibold text-white">{selectedItem.name}</p>
-          <p className="text-sm font-mono text-orange-400">{selectedItem.code}</p>
-        </div>
-      </div>
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
-                  Código
-                </p>
-                <p className="mt-1 text-sm font-mono text-orange-400">
-                  {selectedItem.code}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
-                  Nome
-                </p>
-                <p className="mt-1 text-sm font-semibold text-white">
-                  {selectedItem.name}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
-                  Categoria
-                </p>
-                <p className="mt-1">
-                  <Badge
-                    variant={categoryBadgeVariant(selectedItem.category)}
-                    size="sm"
-                  >
-                    {selectedItem.category ?? '—'}
-                  </Badge>
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
-                  Unidade
-                </p>
-                <p className="mt-1 text-sm text-gray-300">
-                  {selectedItem.unit}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
-                  CA/NR
-                </p>
-                <p className="mt-1 text-sm text-gray-300">
-                  {selectedItem.ca_nr ?? '—'}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
-                  Quantidade Atual
-                </p>
-                <p
-                  className={cn(
-                    'mt-1 text-sm font-semibold',
-                    quantityColor(
-                      selectedItem.current_quantity,
-                      selectedItem.minimum_quantity
-                    )
-                  )}
-                >
-                  {formatQuantity(selectedItem.current_quantity, selectedItem.unit)}
-                </p>
-              </div>
-              <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
-                  Quantidade Mínima
-                </p>
-                <p className="mt-1 text-sm text-gray-300">
-                  {formatQuantity(selectedItem.minimum_quantity, selectedItem.unit)}
-                </p>
-              </div>
-              {selectedItem.description && (
-                <div className="sm:col-span-2">
-                  <p className="text-xs font-medium uppercase text-gray-500">
-                    Descrição
-                  </p>
-                  <p className="mt-1 text-sm text-gray-300">
-                    {selectedItem.description}
-                  </p>
+      <Modal isOpen={modalMode === 'detail'} onClose={handleCloseModal} title="Detalhes do Item" size="xl">
+        {selectedItem && (
+          <div className="flex flex-col gap-6">
+            <div className="rounded-[26px] border border-white/8 bg-[#111215] p-5">
+              <div className="mx-auto flex max-w-3xl items-center gap-4 rounded-[22px] border border-white/8 bg-white/4 p-4">
+                <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-orange-400/15 bg-orange-500/10">
+                  <ItemIcon iconKey={selectedItem.svg_icon_key} size={58} />
                 </div>
-              )}
-              {selectedItem.is_active === false && (
                 <div>
-                  <p className="text-xs font-medium uppercase text-gray-500">
-                    Status
-                  </p>
-                  <p className="mt-1 text-sm text-red-400">
-                    Inativo
-                  </p>
+                  <p className="text-lg font-semibold text-white">{selectedItem.name}</p>
+                  <p className="text-sm font-mono text-orange-400">{selectedItem.code}</p>
                 </div>
-              )}
-              <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
-                  Cadastrado em
-                </p>
-                <p className="mt-1 text-sm text-gray-300">
-                  {formatDateTime(selectedItem.created_at)}
-                </p>
               </div>
             </div>
 
-            {detailLoading ? (
-              <div className="flex justify-center py-6">
-                <Spinner size="md" />
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_1fr]">
+              <div className="rounded-2xl border border-white/8 bg-[#111215] p-5">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <DetailField label="Código" value={<span className="font-mono text-orange-400">{selectedItem.code}</span>} />
+                  <DetailField label="Nome" value={selectedItem.name} />
+                  <DetailField
+                    label="Categoria"
+                    value={<Badge variant={categoryBadgeVariant(selectedItem.category)} size="sm">{selectedItem.category ?? '-'}</Badge>}
+                  />
+                  <DetailField label="Unidade" value={selectedItem.unit} />
+                  <DetailField label="CA/NR" value={selectedItem.ca_nr ?? '-'} />
+                  <DetailField
+                    label="Quantidade Atual"
+                    value={
+                      <span className={cn('font-semibold', quantityColor(selectedItem.current_quantity, selectedItem.minimum_quantity))}>
+                        {formatQuantity(selectedItem.current_quantity, selectedItem.unit)}
+                      </span>
+                    }
+                  />
+                  <DetailField
+                    label="Quantidade Mínima"
+                    value={formatQuantity(selectedItem.minimum_quantity, selectedItem.unit)}
+                  />
+                  <DetailField label="Cadastrado em" value={formatDateTime(selectedItem.created_at)} />
+                  {selectedItem.description && (
+                    <div className="sm:col-span-2">
+                      <DetailField label="Descrição" value={selectedItem.description} />
+                    </div>
+                  )}
+                </div>
               </div>
-            ) : (
-              <>
-                {/* Lots Section */}
-                <div>
-                  <h4 className="mb-2 text-sm font-semibold text-white">
-                    Lotes ({itemLots.length})
-                  </h4>
-                  {itemLots.length === 0 ? (
-                    <p className="text-sm text-gray-500">
-                      Nenhum lote cadastrado para este item
-                    </p>
-                  ) : (
-                    <div className="overflow-hidden rounded-lg border border-gray-700">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-gray-800">
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
-                              Código
-                            </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
-                              Quantidade
-                            </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
-                              Validade
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {itemLots.map((lot) => (
-                            <tr
-                              key={lot.id}
-                              className="border-t border-gray-800"
-                            >
-                              <td className="px-3 py-2 text-sm text-gray-300">
-                                {lot.lot_code}
-                              </td>
-                              <td className="px-3 py-2 text-sm text-gray-300">
-                                {lot.quantity}
-                              </td>
-                              <td className="px-3 py-2 text-sm text-gray-300">
-                                {lot.expiry_date
-                                  ? formatDateTime(lot.expiry_date)
-                                  : '—'}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
 
-                {/* Withdrawal History Section */}
-                <div>
-                  <h4 className="mb-2 text-sm font-semibold text-white">
-                    Histórico de Retiradas ({itemWithdrawals.length})
-                  </h4>
-                  {itemWithdrawals.length === 0 ? (
-                    <p className="text-sm text-gray-500">
-                      Nenhuma retirada registrada para este item
-                    </p>
-                  ) : (
-                    <div className="overflow-hidden rounded-lg border border-gray-700">
-                      <table className="w-full">
-                        <thead>
-                          <tr className="bg-gray-800">
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
-                              Código
-                            </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
-                              Solicitante
-                            </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
-                              Qtd
-                            </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
-                              Data
-                            </th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
-                              Status
-                            </th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {itemWithdrawals.map((w) => (
-                            <tr
-                              key={w.id}
-                              className="border-t border-gray-800"
-                            >
-                              <td className="px-3 py-2 text-sm text-white">
-                                {w.code ?? '—'}
-                              </td>
-                              <td className="px-3 py-2 text-sm text-gray-300">
-                                {w.requested_by_person?.full_name ?? '—'}
-                              </td>
-                              <td className="px-3 py-2 text-sm text-gray-300">
-                                {w.quantity}
-                              </td>
-                              <td className="px-3 py-2 text-sm text-gray-300">
-                                {formatDateTime(w.created_at)}
-                              </td>
-                              <td className="px-3 py-2 text-sm">
-                                <Badge
-                                  variant={
-                                    w.status === 'approved' ||
-                                    w.status === 'completed'
-                                      ? 'success'
-                                      : w.status === 'pending'
-                                        ? 'warning'
-                                        : 'danger'
-                                  }
-                                  size="sm"
-                                >
-                                  {w.status === 'approved'
-                                    ? 'Aprovada'
-                                    : w.status === 'completed'
-                                      ? 'Concluída'
-                                      : w.status === 'pending'
-                                        ? 'Pendente'
-                                        : w.status === 'rejected'
-                                          ? 'Rejeitada'
-                                          : w.status}
-                                </Badge>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
+              <div className="rounded-2xl border border-white/8 bg-[#111215] p-5">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-gray-400">
+                  Histórico de retiradas
+                </h4>
 
-            <div className="flex items-center justify-end gap-3 border-t border-gray-700 pt-4">
-              <Button
-                variant="secondary"
-                onClick={() => {
-                  if (selectedItem) {
-                    handleOpenEdit(selectedItem)
-                  }
-                }}
-              >
+                {detailLoading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Spinner size="md" />
+                  </div>
+                ) : itemWithdrawals.length === 0 ? (
+                  <p className="text-sm text-gray-500">Nenhuma retirada registrada para este item</p>
+                ) : (
+                  <div className="overflow-hidden rounded-2xl border border-white/8">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-white/5">
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Código</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Solicitante</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Qtd</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {itemWithdrawals.map((withdrawal) => (
+                          <tr key={withdrawal.id} className="border-t border-white/8">
+                            <td className="px-3 py-2 text-sm text-white">{withdrawal.code ?? '-'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-300">{withdrawal.requested_by_person?.full_name ?? '-'}</td>
+                            <td className="px-3 py-2 text-sm text-gray-300">{withdrawal.quantity}</td>
+                            <td className="px-3 py-2 text-sm">
+                              <Badge
+                                variant={
+                                  withdrawal.status === 'approved' || withdrawal.status === 'completed'
+                                    ? 'success'
+                                    : withdrawal.status === 'pending'
+                                      ? 'warning'
+                                      : 'danger'
+                                }
+                                size="sm"
+                              >
+                                {withdrawal.status === 'approved'
+                                  ? 'Aprovada'
+                                  : withdrawal.status === 'completed'
+                                    ? 'Concluída'
+                                    : withdrawal.status === 'pending'
+                                      ? 'Pendente'
+                                      : withdrawal.status === 'rejected'
+                                        ? 'Rejeitada'
+                                        : withdrawal.status}
+                              </Badge>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 border-t border-white/8 pt-4">
+              <Button variant="secondary" onClick={() => setModalMode('edit')}>
                 Editar
               </Button>
-              <Button
-                variant="danger"
-                onClick={() => {
-                  if (selectedItem) {
-                    handleOpenDelete(selectedItem)
-                  }
-                }}
-              >
+              <Button variant="danger" onClick={() => setModalMode('delete')}>
                 Desativar
               </Button>
             </div>
           </div>
         )}
       </Modal>
+        </>
+      )}
+    </div>
+  )
+}
+
+function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-500">{label}</p>
+      <div className="text-sm text-gray-200">{value}</div>
     </div>
   )
 }

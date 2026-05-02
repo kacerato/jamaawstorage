@@ -34,23 +34,43 @@ interface RecentWithdrawal extends Tables<'withdrawals'> {
   withdrawal_items: { id: string }[]
 }
 
-export function DashboardPage() {
-  const navigate = useNavigate()
-
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [stats, setStats] = useState<DashboardStatsData>({
+const dashboardCache: {
+  stats: DashboardStatsData
+  lowStockItems: LowStockItem[]
+  recentWithdrawals: RecentWithdrawal[]
+} = {
+  stats: {
     total_items: 0,
     low_stock_count: 0,
     total_withdrawals_today: 0,
     active_people_count: 0,
-  })
-  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([])
-  const [recentWithdrawals, setRecentWithdrawals] = useState<RecentWithdrawal[]>([])
+  },
+  lowStockItems: [],
+  recentWithdrawals: [],
+}
+
+export function DashboardPage() {
+  const navigate = useNavigate()
+  const [loading, setLoading] = useState(
+    dashboardCache.lowStockItems.length === 0 && dashboardCache.recentWithdrawals.length === 0
+  )
+  const [refreshing, setRefreshing] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [stats, setStats] = useState<DashboardStatsData>(dashboardCache.stats)
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>(dashboardCache.lowStockItems)
+  const [recentWithdrawals, setRecentWithdrawals] = useState<RecentWithdrawal[]>(dashboardCache.recentWithdrawals)
 
   useEffect(() => {
     async function fetchDashboardData() {
-      setLoading(true)
+      const shouldShowFullLoading =
+        dashboardCache.lowStockItems.length === 0 && dashboardCache.recentWithdrawals.length === 0
+
+      if (shouldShowFullLoading) {
+        setLoading(true)
+      } else {
+        setRefreshing(true)
+      }
+
       setError(null)
 
       const today = new Date()
@@ -59,19 +79,13 @@ export function DashboardPage() {
       try {
         const [
           stockResult,
-          ,
           withdrawalsResult,
           peopleResult,
           recentWithdrawalsResult,
         ] = await Promise.all([
           supabase
             .from('stock_items')
-            .select('*', { count: 'exact', head: true }),
-          supabase
-            .from('stock_items')
-            .select('*')
-            .lte('current_quantity', 0)
-            .gt('minimum_quantity', 0),
+            .select('id, name, category, unit, updated_at, current_quantity, minimum_quantity', { count: 'exact' }),
           supabase
             .from('withdrawals')
             .select('*', { count: 'exact', head: true })
@@ -89,48 +103,39 @@ export function DashboardPage() {
 
         if (stockResult.error) {
           setError(stockResult.error.message)
-          setLoading(false)
           return
         }
 
-        const { data: allStockItems } = await supabase
-          .from('stock_items')
-          .select('*')
-
-        const lowItems = ((allStockItems ?? []) as Tables<'stock_items'>[]).filter(
+        const lowItems = ((stockResult.data ?? []) as Tables<'stock_items'>[]).filter(
           (item) => item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity
         )
 
-        setLowStockItems(
-          lowItems.map((item) => ({ ...item, is_low_stock: true }))
-        )
-
-        const { count: todayWithdrawalsCount } = withdrawalsResult
-        const { count: activePeopleCount } = peopleResult
-
+        const nextLowStockItems = lowItems.map((item) => ({ ...item, is_low_stock: true }))
         const typedWithdrawals = (recentWithdrawalsResult.data ?? []) as unknown as RecentWithdrawal[]
-        setRecentWithdrawals(typedWithdrawals)
-
-        setStats({
+        const nextStats = {
           total_items: stockResult.count ?? 0,
-          low_stock_count: lowItems.length,
-          total_withdrawals_today: todayWithdrawalsCount ?? 0,
-          active_people_count: activePeopleCount ?? 0,
-        })
-      } catch (err: any) {
-        console.error('Dashboard Error:', err)
-        // Se for erro de Lock do Supabase, tenta novamente após 500ms
-        if (err?.message?.includes('Lock') || err?.toString()?.includes('Lock')) {
-          setTimeout(() => fetchDashboardData(), 800)
-          return
+          low_stock_count: nextLowStockItems.length,
+          total_withdrawals_today: withdrawalsResult.count ?? 0,
+          active_people_count: peopleResult.count ?? 0,
         }
+
+        dashboardCache.lowStockItems = nextLowStockItems
+        dashboardCache.recentWithdrawals = typedWithdrawals
+        dashboardCache.stats = nextStats
+
+        setLowStockItems(nextLowStockItems)
+        setRecentWithdrawals(typedWithdrawals)
+        setStats(nextStats)
+      } catch (err) {
+        console.error('Dashboard Error:', err)
         setError(err instanceof Error ? err.message : 'Erro inesperado ao carregar dados')
       } finally {
         setLoading(false)
+        setRefreshing(false)
       }
     }
 
-    fetchDashboardData()
+    void fetchDashboardData()
   }, [])
 
   const statusBadgeVariant = (
@@ -190,6 +195,12 @@ export function DashboardPage() {
         <p className="mt-1 text-sm text-gray-400">
           Visão geral do almoxarifado e atividades recentes
         </p>
+        {refreshing && (
+          <div className="mt-2 inline-flex items-center gap-2 text-xs text-orange-200/75">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+            Atualizando painel...
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -212,7 +223,7 @@ export function DashboardPage() {
           variant="default"
         />
         <StatCard
-          title="Pessoas Ativas"
+          title="Colaboradores Ativos"
           value={stats.active_people_count}
           icon={<UsersIcon size={20} />}
           variant="default"
@@ -221,7 +232,7 @@ export function DashboardPage() {
 
       {lowStockItems.length > 0 && (
         <section>
-          <Alert variant="warning" title="⚠️ Alertas de Estoque Baixo">
+          <Alert variant="warning" title="Alertas de Estoque Baixo">
             <span>{lowStockItems.length} item(ns) com estoque abaixo do mínimo</span>
           </Alert>
           <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -260,10 +271,7 @@ export function DashboardPage() {
                   <div className="mt-3">
                     <div className="h-2 w-full overflow-hidden rounded-full bg-gray-700">
                       <div
-                        className={cn(
-                          'h-full rounded-full transition-all',
-                          barColor
-                        )}
+                        className={cn('h-full rounded-full transition-all', barColor)}
                         style={{
                           width: `${Math.min(percentage, 100)}%`,
                         }}
@@ -302,24 +310,12 @@ export function DashboardPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-800">
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
-                      Código
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
-                      Solicitante
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
-                      Destino
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
-                      Itens
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
-                      Data
-                    </th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">
-                      Status
-                    </th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Código</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Solicitante</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Destino</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Itens</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Data</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Status</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -336,9 +332,7 @@ export function DashboardPage() {
                         {withdrawal.requested_by_person?.full_name ?? '—'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">
-                        {withdrawal.destination_type === 'collaborator'
-                          ? 'Colaborador'
-                          : 'Obra'}
+                        {withdrawal.destination_type === 'collaborator' ? 'Colaborador' : 'Obra'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">
                         {withdrawal.withdrawal_items?.length ?? 0}

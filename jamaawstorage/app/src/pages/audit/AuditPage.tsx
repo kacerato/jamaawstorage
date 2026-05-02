@@ -31,7 +31,7 @@ interface AuditLogDisplay {
 
 const TABLE_OPTIONS = [
   { value: '', label: 'Todas as tabelas' },
-  { value: 'people', label: 'Pessoas' },
+  { value: 'people', label: 'Colaboradores' },
   { value: 'stock_items', label: 'Itens de Estoque' },
   { value: 'withdrawals', label: 'Retiradas' },
   { value: 'kits', label: 'Kits' },
@@ -58,12 +58,12 @@ function JsonBlock({ data }: { data: Record<string, unknown> | null }) {
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="text-xs text-orange-400 hover:text-orange-300 transition-colors"
+        className="rounded-full border border-white/10 bg-white/4 px-2.5 py-1 text-[11px] text-orange-300 transition-colors hover:bg-white/8 hover:text-orange-200"
       >
-        {expanded ? 'Fechar' : 'Ver dados'}
+        {expanded ? 'Ocultar JSON' : 'Ver JSON'}
       </button>
       {expanded && (
-        <pre className="mt-1 max-h-48 overflow-auto rounded-lg bg-gray-950 p-2 text-xs text-emerald-400 border border-gray-800">
+        <pre className="mt-2 max-h-48 overflow-auto rounded-2xl border border-white/8 bg-[#0b0b0d] p-3 text-xs text-emerald-300">
           {JSON.stringify(data, null, 2)}
         </pre>
       )}
@@ -91,7 +91,7 @@ function ActionBadge({ action }: { action: AuditAction }) {
 }
 
 const TABLE_LABEL_MAP: Record<string, string> = {
-  people: 'Pessoas',
+  people: 'Colaboradores',
   stock_items: 'Itens de Estoque',
   withdrawals: 'Retiradas',
   kits: 'Kits',

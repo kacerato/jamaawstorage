@@ -106,6 +106,31 @@ interface LeaderConsumptionItem {
   quantity: number
 }
 
+const reportsCache = {
+  movements: {
+    withdrawals: [] as WithdrawalWithItems[],
+    leaders: [] as PersonRow[],
+    collaborators: [] as PersonRow[],
+    worksites: [] as WorkSiteRow[],
+    stockItems: [] as StockItemRow[],
+  },
+  inventory: {
+    collaborators: [] as CollaboratorWithInventory[],
+  },
+  abc: {
+    items: [] as AbcItem[],
+  },
+  lowStock: {
+    items: [] as LowStockItem[],
+  },
+  leader: {
+    leaders: [] as PersonRow[],
+    consumptionData: [] as LeaderConsumptionItem[],
+    totalItems: 0,
+    totalWithdrawals: 0,
+  },
+}
+
 function exportToCSV(data: Record<string, unknown>[], filename: string) {
   if (data.length === 0) return
 
@@ -177,12 +202,12 @@ export function ReportsPage() {
 }
 
 function MovementsTab() {
-  const [withdrawals, setWithdrawals] = useState<WithdrawalWithItems[]>([])
-  const [leaders, setLeaders] = useState<PersonRow[]>([])
-  const [collaborators, setCollaborators] = useState<PersonRow[]>([])
-  const [worksites, setWorksites] = useState<WorkSiteRow[]>([])
-  const [stockItems, setStockItems] = useState<StockItemRow[]>([])
-  const [loading, setLoading] = useState(true)
+  const [withdrawals, setWithdrawals] = useState<WithdrawalWithItems[]>(reportsCache.movements.withdrawals)
+  const [leaders, setLeaders] = useState<PersonRow[]>(reportsCache.movements.leaders)
+  const [collaborators, setCollaborators] = useState<PersonRow[]>(reportsCache.movements.collaborators)
+  const [worksites, setWorksites] = useState<WorkSiteRow[]>(reportsCache.movements.worksites)
+  const [stockItems, setStockItems] = useState<StockItemRow[]>(reportsCache.movements.stockItems)
+  const [loading, setLoading] = useState(reportsCache.movements.withdrawals.length === 0)
   const [error, setError] = useState<string | null>(null)
 
   const [dateFrom, setDateFrom] = useState<string>('')
@@ -201,16 +226,30 @@ function MovementsTab() {
         supabase.from('stock_items').select('*').order('name'),
       ])
 
-      if (leadersRes.data) setLeaders(leadersRes.data as PersonRow[])
-      if (collabsRes.data) setCollaborators(collabsRes.data as PersonRow[])
-      if (worksitesRes.data) setWorksites(worksitesRes.data as WorkSiteRow[])
-      if (itemsRes.data) setStockItems(itemsRes.data as StockItemRow[])
+      if (leadersRes.data) {
+        reportsCache.movements.leaders = leadersRes.data as PersonRow[]
+        setLeaders(reportsCache.movements.leaders)
+      }
+      if (collabsRes.data) {
+        reportsCache.movements.collaborators = collabsRes.data as PersonRow[]
+        setCollaborators(reportsCache.movements.collaborators)
+      }
+      if (worksitesRes.data) {
+        reportsCache.movements.worksites = worksitesRes.data as WorkSiteRow[]
+        setWorksites(reportsCache.movements.worksites)
+      }
+      if (itemsRes.data) {
+        reportsCache.movements.stockItems = itemsRes.data as StockItemRow[]
+        setStockItems(reportsCache.movements.stockItems)
+      }
     }
     void fetchFilters()
   }, [])
 
   const fetchWithdrawals = useCallback(async () => {
-    setLoading(true)
+    if (reportsCache.movements.withdrawals.length === 0) {
+      setLoading(true)
+    }
     setError(null)
 
     let query = supabase
@@ -251,6 +290,7 @@ function MovementsTab() {
         )
       }
 
+      reportsCache.movements.withdrawals = results
       setWithdrawals(results)
     }
     setLoading(false)
@@ -482,14 +522,16 @@ function MovementsTab() {
 }
 
 function InventoryTab() {
-  const [collaborators, setCollaborators] = useState<CollaboratorWithInventory[]>([])
-  const [loading, setLoading] = useState(true)
+  const [collaborators, setCollaborators] = useState<CollaboratorWithInventory[]>(reportsCache.inventory.collaborators)
+  const [loading, setLoading] = useState(reportsCache.inventory.collaborators.length === 0)
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchInventory() {
-      setLoading(true)
+      if (reportsCache.inventory.collaborators.length === 0) {
+        setLoading(true)
+      }
       setError(null)
 
       const { data, error: fetchError } = await supabase
@@ -502,7 +544,8 @@ function InventoryTab() {
       if (fetchError) {
         setError(fetchError.message)
       } else {
-        setCollaborators((data as unknown as CollaboratorWithInventory[]) ?? [])
+        reportsCache.inventory.collaborators = (data as unknown as CollaboratorWithInventory[]) ?? []
+        setCollaborators(reportsCache.inventory.collaborators)
       }
       setLoading(false)
     }
@@ -723,12 +766,14 @@ function AbcCurveTab() {
   const [period, setPeriod] = useState<ReportPeriod>('month')
   const [customFrom, setCustomFrom] = useState<string>('')
   const [customTo, setCustomTo] = useState<string>('')
-  const [abcData, setAbcData] = useState<AbcItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const [abcData, setAbcData] = useState<AbcItem[]>(reportsCache.abc.items)
+  const [loading, setLoading] = useState(reportsCache.abc.items.length === 0)
   const [error, setError] = useState<string | null>(null)
 
   const fetchAbcData = useCallback(async () => {
-    setLoading(true)
+    if (reportsCache.abc.items.length === 0) {
+      setLoading(true)
+    }
     setError(null)
 
     let range: DateRange
@@ -795,6 +840,7 @@ function AbcCurveTab() {
       }
     })
 
+    reportsCache.abc.items = abcItems
     setAbcData(abcItems)
     setLoading(false)
   }, [period, customFrom, customTo])
@@ -1018,13 +1064,15 @@ function AbcCurveTab() {
 }
 
 function LowStockTab() {
-  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>(reportsCache.lowStock.items)
+  const [loading, setLoading] = useState(reportsCache.lowStock.items.length === 0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     async function fetchLowStock() {
-      setLoading(true)
+      if (reportsCache.lowStock.items.length === 0) {
+        setLoading(true)
+      }
       setError(null)
 
       const { data, error: fetchError } = await supabase.rpc('check_low_stock')
@@ -1038,6 +1086,7 @@ function LowStockTab() {
           const severity = item.current_quantity === 0 ? 'critical' : 'warning'
           return { ...item, deficit, severity }
         })
+        reportsCache.lowStock.items = items
         setLowStockItems(items)
       }
       setLoading(false)
@@ -1213,14 +1262,14 @@ function LowStockTab() {
 }
 
 function LeaderConsumptionTab() {
-  const [leaders, setLeaders] = useState<PersonRow[]>([])
+  const [leaders, setLeaders] = useState<PersonRow[]>(reportsCache.leader.leaders)
   const [selectedLeader, setSelectedLeader] = useState<string>('')
   const [period, setPeriod] = useState<ReportPeriod>('month')
   const [customFrom, setCustomFrom] = useState<string>('')
   const [customTo, setCustomTo] = useState<string>('')
-  const [consumptionData, setConsumptionData] = useState<LeaderConsumptionItem[]>([])
-  const [totalItems, setTotalItems] = useState(0)
-  const [totalWithdrawals, setTotalWithdrawals] = useState(0)
+  const [consumptionData, setConsumptionData] = useState<LeaderConsumptionItem[]>(reportsCache.leader.consumptionData)
+  const [totalItems, setTotalItems] = useState(reportsCache.leader.totalItems)
+  const [totalWithdrawals, setTotalWithdrawals] = useState(reportsCache.leader.totalWithdrawals)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -1233,7 +1282,10 @@ function LeaderConsumptionTab() {
         .eq('role', 'leader')
         .order('full_name')
 
-      if (data) setLeaders(data as PersonRow[])
+      if (data) {
+        reportsCache.leader.leaders = data as PersonRow[]
+        setLeaders(reportsCache.leader.leaders)
+      }
     }
     void fetchLeaders()
   }, [])
@@ -1315,6 +1367,9 @@ function LeaderConsumptionTab() {
       .sort((a, b) => b[1] - a[1])
       .map(([name, quantity]) => ({ name, quantity }))
 
+    reportsCache.leader.consumptionData = sorted
+    reportsCache.leader.totalItems = itemsTotal
+    reportsCache.leader.totalWithdrawals = withdrawalIds.size
     setConsumptionData(sorted)
     setTotalItems(itemsTotal)
     setTotalWithdrawals(withdrawalIds.size)

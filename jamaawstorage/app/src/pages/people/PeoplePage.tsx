@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { Tables, AppRole } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 
@@ -7,6 +7,7 @@ import { useAuth } from '../../hooks/useAuth'
 import { Button, Input, Select, Badge, DataTable, Modal, Alert } from '../../components/ui'
 import { UsersIcon, UserIcon, HelmetIcon } from '../../components/icons'
 import { PersonForm } from './PersonForm'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 type PersonWithInventoryCount = Tables<'people'> & {
   inventory_count: number
@@ -16,15 +17,27 @@ type PersonWithInventoryCount = Tables<'people'> & {
 type RoleFilter = 'all' | 'leader' | 'collaborator'
 type StatusFilter = 'active' | 'inactive'
 
+const peoplePageCache: {
+  people: PersonWithInventoryCount[]
+  totalCount: number
+} = {
+  people: [],
+  totalCount: 0,
+}
+
 export function PeoplePage() {
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { profile } = useAuth()
+  const initialQuery = searchParams.get('q') ?? ''
 
-  const [people, setPeople] = useState<PersonWithInventoryCount[]>([])
-  const [loading, setLoading] = useState(true)
+  const [people, setPeople] = useState<PersonWithInventoryCount[]>(peoplePageCache.people)
+  const [loading, setLoading] = useState(peoplePageCache.people.length === 0)
+  const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const [search, setSearch] = useState('')
+  const [search, setSearch] = useState(initialQuery)
+  const debouncedSearch = useDebouncedValue(search, 220)
   const [roleFilter, setRoleFilter] = useState<RoleFilter>('all')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('active')
 
@@ -34,12 +47,17 @@ export function PeoplePage() {
 
   // Paginação
   const [currentPage, setCurrentPage] = useState(0)
-  const [totalCount, setTotalCount] = useState(0)
+  const [totalCount, setTotalCount] = useState(peoplePageCache.totalCount)
   const PAGE_SIZE = 50
 
   // OTIMIZADO: Paginação server-side com query simplificada
   const fetchPeople = useCallback(async (page = 0) => {
-    setLoading(true)
+    const shouldShowFullLoading = people.length === 0
+    if (shouldShowFullLoading) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
+    }
     setError(null)
 
     try {
@@ -63,8 +81,8 @@ export function PeoplePage() {
       }
 
       // Busca por texto no servidor
-      if (search.trim()) {
-        const searchTerm = search.trim()
+      if (debouncedSearch.trim()) {
+        const searchTerm = debouncedSearch.trim()
         query = query.or(`full_name.ilike.%${searchTerm}%,employee_id.ilike.%${searchTerm}%`)
       }
 
@@ -124,30 +142,30 @@ export function PeoplePage() {
         }),
       )
 
+      peoplePageCache.people = enriched
+      peoplePageCache.totalCount = count || 0
       setPeople(enriched)
       setTotalCount(count || 0)
     } catch (err) {
       console.error('Error fetching people:', err)
-      setError('Erro ao carregar pessoas.')
+      setError('Erro ao carregar colaboradores.')
     } finally {
       setLoading(false)
+      setRefreshing(false)
     }
-  }, [statusFilter, roleFilter, search])
+  }, [statusFilter, roleFilter, debouncedSearch, people.length])
 
-  // Reset para página 0 quando filtros mudarem
   useEffect(() => {
     setCurrentPage(0)
     void fetchPeople(0)
-  }, [fetchPeople, statusFilter, roleFilter])
+  }, [fetchPeople])
 
-  // Busca com debounce
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setCurrentPage(0)
-      void fetchPeople(0)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [fetchPeople, search])
+    const nextQuery = searchParams.get('q') ?? ''
+    if (nextQuery !== search) {
+      setSearch(nextQuery)
+    }
+  }, [searchParams, search])
 
   // Não precisa mais de filteredPeople - filtros são no servidor
   const filteredPeople = people
@@ -300,7 +318,7 @@ export function PeoplePage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Gestão de Pessoas</h2>
+          <h2 className="text-2xl font-bold text-white">Gestão de Colaboradores</h2>
           <p className="mt-1 text-sm text-gray-400">
             Cadastro de colaboradores, lideranças e seus inventários
           </p>
@@ -312,7 +330,7 @@ export function PeoplePage() {
           }}
           leftIcon={<UsersIcon size={16} />}
         >
-          Nova Pessoa
+          Novo colaborador
         </Button>
       </div>
 
@@ -321,7 +339,19 @@ export function PeoplePage() {
           <Input
             placeholder="Buscar por nome ou matrícula..."
             value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            onChange={(e) => {
+              const nextValue = e.target.value
+              setSearch(nextValue)
+              setSearchParams((prev) => {
+                const next = new URLSearchParams(prev)
+                if (nextValue.trim()) {
+                  next.set('q', nextValue)
+                } else {
+                  next.delete('q')
+                }
+                return next
+              })
+            }}
             leftIcon={
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-gray-400">
                 <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="2" />
@@ -346,6 +376,13 @@ export function PeoplePage() {
         </div>
       </div>
 
+      {refreshing && (
+        <div className="inline-flex items-center gap-2 text-xs text-orange-200/75">
+          <span className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
+          Atualizando colaboradores...
+        </div>
+      )}
+
       {error && (
         <Alert variant="danger" dismissible onDismiss={() => setError(null)}>
           {error}
@@ -357,7 +394,7 @@ export function PeoplePage() {
         data={filteredPeople}
         keyExtractor={(row) => row.id}
         isLoading={loading}
-        emptyMessage="Nenhuma pessoa encontrada"
+        emptyMessage="Nenhum colaborador encontrado"
         onRowClick={(row) => navigate(`/people/${row.id}`)}
       />
 
@@ -365,7 +402,7 @@ export function PeoplePage() {
       {totalCount > PAGE_SIZE && (
         <div className="flex items-center justify-between border-t border-gray-700 pt-4">
           <p className="text-sm text-gray-400">
-            Mostrando {currentPage * PAGE_SIZE + 1} - {Math.min((currentPage + 1) * PAGE_SIZE, totalCount)} de {totalCount} pessoas
+            Mostrando {currentPage * PAGE_SIZE + 1} - {Math.min((currentPage + 1) * PAGE_SIZE, totalCount)} de {totalCount} colaboradores
           </p>
           <div className="flex items-center gap-2">
             <Button
@@ -413,7 +450,7 @@ export function PeoplePage() {
       <Modal
         isOpen={showFormModal}
         onClose={handleFormCancel}
-        title={editingPerson ? 'Editar Pessoa' : 'Nova Pessoa'}
+        title={editingPerson ? 'Editar Colaborador' : 'Novo Colaborador'}
         size="lg"
       >
         <PersonForm
@@ -441,7 +478,7 @@ function ConfirmToggleModal({ person, onConfirm, onCancel }: ConfirmToggleModalP
     <Modal
       isOpen={true}
       onClose={onCancel}
-      title={isDeactivating ? 'Desativar Pessoa' : 'Reativar Pessoa'}
+      title={isDeactivating ? 'Desativar Colaborador' : 'Reativar Colaborador'}
       size="sm"
     >
       <div className="flex flex-col gap-4">

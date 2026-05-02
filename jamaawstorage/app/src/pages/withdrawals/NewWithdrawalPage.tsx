@@ -22,7 +22,7 @@ import {
   CameraIcon,
   KitIcon,
 } from '../../components/icons'
-import { cn, generateWithdrawalCodePreview } from '../../lib/utils'
+import { cn, DEFAULT_IMAGE_UPLOAD_OPTIONS, generateWithdrawalCodePreview, imageFileToDataUrl } from '../../lib/utils'
 import { ItemSelector } from './ItemSelector'
 import { KitSelector } from './KitSelector'
 
@@ -67,6 +67,7 @@ export function NewWithdrawalPage() {
   const [notes, setNotes] = useState<string>('')
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [photoError, setPhotoError] = useState<string | null>(null)
   const [supervisorSignature, setSupervisorSignature] = useState<string>('')
   const [requesterSignature, setRequesterSignature] = useState<string>('')
   const [witnessSignature, setWitnessSignature] = useState<string>('')
@@ -135,19 +136,56 @@ export function NewWithdrawalPage() {
     setItems((prev) => prev.filter((item) => item.stock_item_id !== stockItemId))
   }
 
-  const handlePhotoChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
-    const reader = new FileReader()
-    reader.onload = () => {
-      const result = reader.result as string
+
+    try {
+      setPhotoError(null)
+      const result = await imageFileToDataUrl(file, DEFAULT_IMAGE_UPLOAD_OPTIONS)
       setPhotoPreview(result)
       setPhotoUrl(result)
+    } catch (error) {
+      setPhotoError(error instanceof Error ? error.message : 'Não foi possível enviar a foto.')
     }
-    reader.readAsDataURL(file)
   }
 
-  const validateStep = (step: number): boolean => {
+  const refreshSelectedItemsQuantities = async () => {
+    if (items.length === 0) return items
+
+    const selectedItemIds = items.map((item) => item.stock_item_id)
+    const { data, error } = await supabase
+      .from('stock_items')
+      .select('id, current_quantity, is_active')
+      .in('id', selectedItemIds)
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const stockMap = new Map(
+      ((data ?? []) as Pick<StockItemRow, 'id' | 'current_quantity' | 'is_active'>[]).map((row) => [row.id, row])
+    )
+
+    const nextItems = items.map((item) => {
+      const latest = stockMap.get(item.stock_item_id)
+      if (!latest) return item
+
+      return {
+        ...item,
+        stock_item: {
+          ...item.stock_item,
+          current_quantity: latest.current_quantity,
+          is_active: latest.is_active,
+        },
+      }
+    })
+
+    setItems(nextItems)
+    return nextItems
+  }
+
+  const validateStep = (step: number, itemsSource = items): boolean => {
     const errors: Record<string, string> = {}
 
     if (step === 0) {
@@ -159,12 +197,12 @@ export function NewWithdrawalPage() {
     }
 
     if (step === 1) {
-      if (items.length === 0) errors.items = 'Adicione ao menos um item'
-      const overStock = items.find((i) => i.quantity > i.stock_item.current_quantity)
+      if (itemsSource.length === 0) errors.items = 'Adicione ao menos um item'
+      const overStock = itemsSource.find((i) => i.quantity > i.stock_item.current_quantity)
       if (overStock) {
         errors.items = `Quantidade de "${overStock.stock_item.name}" excede o estoque disponível (${overStock.stock_item.current_quantity} ${overStock.stock_item.unit})`
       }
-      const zeroQty = items.find((i) => i.quantity <= 0)
+      const zeroQty = itemsSource.find((i) => i.quantity <= 0)
       if (zeroQty && !errors.items) {
         errors.items = 'Todas as quantidades devem ser maiores que zero'
       }
@@ -179,8 +217,20 @@ export function NewWithdrawalPage() {
     return Object.keys(errors).length === 0
   }
 
-  const handleNext = () => {
-    if (validateStep(currentStep)) {
+  const handleNext = async () => {
+    let nextItems = items
+    if (currentStep === 1) {
+      try {
+        nextItems = await refreshSelectedItemsQuantities()
+      } catch (error) {
+        setStepErrors({
+          items: error instanceof Error ? error.message : 'Não foi possível atualizar o estoque antes de continuar.',
+        })
+        return
+      }
+    }
+
+    if (validateStep(currentStep, nextItems)) {
       setCurrentStep((prev) => Math.min(prev + 1, STEPS.length - 1))
     }
   }
@@ -194,53 +244,50 @@ export function NewWithdrawalPage() {
     setSubmitting(true)
     setSubmitError(null)
 
-    const withdrawalInsert = {
-      requested_by: requestedBy,
-      destination_type: destinationType as WithdrawalDestinationType,
-      collaborator_id: destinationType === 'collaborator' ? collaboratorId : null,
-      work_site_id: destinationType === 'work_site' ? workSiteId : null,
-      authorized_by: profile.id,
-      status: 'completed' as const,
-      notes: notes || null,
-      photo_url: photoUrl,
-      supervisor_signature: supervisorSignature,
-      requester_signature: requesterSignature,
-      witness_signature: witnessSignature || null,
+    try {
+      const refreshedItems = await refreshSelectedItemsQuantities()
+      const overStock = refreshedItems.find((item) => item.quantity > item.stock_item.current_quantity)
+      if (overStock) {
+        setSubmitError(
+          `O estoque de "${overStock.stock_item.name}" mudou durante a retirada. Disponível agora: ${overStock.stock_item.current_quantity} ${overStock.stock_item.unit}.`
+        )
+        setCurrentStep(1)
+        setSubmitting(false)
+        return
+      }
+    } catch (error) {
+      setSubmitError(error instanceof Error ? error.message : 'Não foi possível validar o estoque atualizado.')
+      setSubmitting(false)
+      return
     }
 
-    const { data: withdrawal, error: withdrawalError } = await supabase
-      .from('withdrawals')
-      .insert(withdrawalInsert)
-      .select('id')
-      .single<{ id: string }>()
+    const { data: withdrawalId, error: withdrawalError } = await supabase.rpc('create_completed_withdrawal', {
+      p_requested_by: requestedBy,
+      p_destination_type: destinationType as WithdrawalDestinationType,
+      p_collaborator_id: destinationType === 'collaborator' ? collaboratorId : null,
+      p_work_site_id: destinationType === 'work_site' ? workSiteId : null,
+      p_authorized_by: profile.id,
+      p_notes: notes || null,
+      p_photo_url: photoUrl,
+      p_supervisor_signature: supervisorSignature,
+      p_requester_signature: requesterSignature,
+      p_witness_signature: witnessSignature || null,
+      p_items: items.map((item) => ({
+        stock_item_id: item.stock_item_id,
+        lot_id: item.lot_id,
+        quantity: item.quantity,
+        unit: item.unit,
+      })),
+    })
 
-    if (withdrawalError || !withdrawal) {
+    if (withdrawalError || !withdrawalId) {
       setSubmitError(withdrawalError?.message ?? 'Erro ao criar retirada')
       setSubmitting(false)
       return
     }
 
-    const itemInserts = items.map((item) => ({
-      withdrawal_id: withdrawal.id,
-      stock_item_id: item.stock_item_id,
-      lot_id: item.lot_id,
-      quantity: item.quantity,
-      unit: item.unit,
-    }))
-
-    const { error: itemsError } = await supabase
-      .from('withdrawal_items')
-      .insert(itemInserts)
-
-    if (itemsError) {
-      await supabase.from('withdrawals').delete().eq('id', withdrawal.id)
-      setSubmitError(itemsError.message ?? 'Erro ao adicionar itens da retirada')
-      setSubmitting(false)
-      return
-    }
-
     setSubmitting(false)
-    navigate(`/withdrawals/${withdrawal.id}`)
+    navigate(`/withdrawals/${withdrawalId}`)
   }
 
   const leaderOptions = leaders.map((l) => ({
@@ -588,6 +635,7 @@ export function NewWithdrawalPage() {
                 onClick={() => {
                   setPhotoPreview(null)
                   setPhotoUrl(null)
+                  setPhotoError(null)
                 }}
                 className="absolute right-2 top-2 rounded-full bg-red-600 p-1 text-white transition-colors hover:bg-red-700"
               >
@@ -597,14 +645,18 @@ export function NewWithdrawalPage() {
               </button>
             </div>
           ) : (
-            <input
-              type="file"
-              accept="image/*"
-              capture="environment"
-              onChange={handlePhotoChange}
-              className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
-            />
+            <>
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handlePhotoChange}
+                className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
+              />
+              <p className="text-xs text-gray-500">JPG ou PNG, até {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB</p>
+            </>
           )}
+          {photoError && <p className="text-xs text-red-400">{photoError}</p>}
         </div>
       </Card>
 

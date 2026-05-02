@@ -1,11 +1,9 @@
-import { useState, useEffect, useCallback } from 'react'
-
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { formatQuantity } from '../../lib/utils'
-import { Button, Input, Select, Alert } from '../../components/ui'
+import { Alert, Button, Input, Select } from '../../components/ui'
 
 interface PersonInventoryModalProps {
-  isOpen: boolean
   onClose: () => void
   personId: string
   personName: string
@@ -16,90 +14,68 @@ interface StockItemOption {
   id: string
   name: string
   unit: string
-  quantity: number
+  current_quantity: number
   minimum_quantity: number
 }
 
-interface ExistingInventoryItem {
-  stock_item_id: string
-}
-
 export function PersonInventoryModal({
-  isOpen,
   onClose,
   personId,
   personName,
   onAdded,
 }: PersonInventoryModalProps) {
   const [stockItems, setStockItems] = useState<StockItemOption[]>([])
-  const [existingItems, setExistingItems] = useState<ExistingInventoryItem[]>([])
-  const [selectedItemId, setSelectedItemId] = useState<string>('')
-  const [quantity, setQuantity] = useState<string>('')
+  const [selectedItemId, setSelectedItemId] = useState('')
+  const [quantity, setQuantity] = useState('')
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
 
   const fetchStockItems = useCallback(async () => {
     setLoading(true)
     setError(null)
 
-    const [stockRes, existingRes] = await Promise.all([
-      supabase
-        .from('stock_items')
-        .select('id, name, unit, quantity, minimum_quantity')
-        .eq('is_active', true)
-        .order('name'),
-      supabase
-        .from('person_inventories')
-        .select('stock_item_id')
-        .eq('person_id', personId),
-    ])
+    const stockRes = await supabase
+      .from('stock_items')
+      .select('id, name, unit, current_quantity, minimum_quantity')
+      .eq('is_active', true)
+      .order('name')
 
     if (stockRes.error) {
       setError(stockRes.error.message)
       setLoading(false)
       return
     }
-    if (existingRes.error) {
-      setError(existingRes.error.message)
-      setLoading(false)
-      return
-    }
 
-    setStockItems((stockRes.data ?? []) as unknown as StockItemOption[])
-    setExistingItems((existingRes.data ?? []) as ExistingInventoryItem[])
+    setStockItems((stockRes.data ?? []) as StockItemOption[])
     setLoading(false)
-  }, [personId])
+  }, [])
 
   useEffect(() => {
-    if (isOpen) {
-      setTimeout(() => {
-        void fetchStockItems()
-        setSelectedItemId('')
-        setQuantity('')
-        setError(null)
-        setSuccess(false)
-      }, 0)
-    }
-  }, [isOpen, fetchStockItems])
+    void fetchStockItems()
+    setSelectedItemId('')
+    setQuantity('')
+    setError(null)
+  }, [fetchStockItems, personId])
 
-  const availableItems = stockItems.filter(
-    (item) => !existingItems.some((ex) => ex.stock_item_id === item.id),
-  )
-
+  const availableItems = stockItems.filter((item) => item.current_quantity > 0)
   const selectedItem = stockItems.find((item) => item.id === selectedItemId)
 
   const handleSubmit = async () => {
     if (!selectedItemId || !quantity || Number(quantity) <= 0) return
 
+    if (selectedItem && Number(quantity) > selectedItem.current_quantity) {
+      setError(`Estoque insuficiente. Disponivel agora: ${selectedItem.current_quantity} ${selectedItem.unit}.`)
+      return
+    }
+
     setSubmitting(true)
     setError(null)
 
-    const { error: insertError } = await supabase.from('person_inventories').insert({
-      person_id: personId,
-      stock_item_id: selectedItemId,
-      quantity: Number(quantity),
+    const { error: insertError } = await supabase.rpc('assign_inventory_item_to_person', {
+      p_person_id: personId,
+      p_stock_item_id: selectedItemId,
+      p_quantity: Number(quantity),
     })
 
     if (insertError) {
@@ -108,16 +84,10 @@ export function PersonInventoryModal({
       return
     }
 
-    setSuccess(true)
     setSubmitting(false)
+    onClose()
     onAdded()
-
-    setTimeout(() => {
-      onClose()
-    }, 1000)
   }
-
-  if (!isOpen) return null
 
   const stockOptions = availableItems.map((item) => ({
     value: item.id,
@@ -127,7 +97,7 @@ export function PersonInventoryModal({
   return (
     <div className="flex flex-col gap-4">
       <p className="text-sm text-gray-400">
-        Adicionar item ao inventário de <span className="font-medium text-white">{personName}</span>
+        Adicionar item ao inventario de <span className="font-medium text-white">{personName}</span>
       </p>
 
       {error && (
@@ -136,17 +106,13 @@ export function PersonInventoryModal({
         </Alert>
       )}
 
-      {success && (
-        <Alert variant="success">Item adicionado ao inventário com sucesso!</Alert>
-      )}
-
       {loading ? (
         <div className="flex items-center justify-center py-8">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
         </div>
       ) : availableItems.length === 0 ? (
-        <p className="text-center text-sm text-gray-400 py-4">
-          Todos os itens ativos já estão no inventário desta pessoa.
+        <p className="py-4 text-center text-sm text-gray-400">
+          Nenhum item ativo com saldo disponivel no estoque.
         </p>
       ) : (
         <>
@@ -165,10 +131,10 @@ export function PersonInventoryModal({
                 <span className="text-gray-400">{selectedItem.unit}</span>
               </div>
               <div className="mt-2 flex gap-4 text-xs text-gray-500">
-                <span>Estoque atual: {selectedItem.quantity}</span>
-                <span>Mínimo: {selectedItem.minimum_quantity}</span>
-                {selectedItem.quantity <= selectedItem.minimum_quantity && (
-                  <span className="text-amber-400 font-medium">Estoque baixo!</span>
+                <span>Estoque atual: {selectedItem.current_quantity}</span>
+                <span>Minimo: {selectedItem.minimum_quantity}</span>
+                {selectedItem.current_quantity <= selectedItem.minimum_quantity && (
+                  <span className="font-medium text-amber-400">Estoque baixo!</span>
                 )}
               </div>
             </div>
@@ -185,7 +151,7 @@ export function PersonInventoryModal({
 
           {selectedItem && quantity && Number(quantity) > 0 && (
             <div className="rounded-lg bg-gray-800/50 p-3 text-sm text-gray-300">
-              Será adicionado:{' '}
+              Sera adicionado{' '}
               <span className="font-medium text-orange-400">
                 {formatQuantity(Number(quantity), selectedItem.unit)}
               </span>{' '}
@@ -203,7 +169,7 @@ export function PersonInventoryModal({
               isLoading={submitting}
               disabled={!selectedItemId || !quantity || Number(quantity) <= 0}
             >
-              Adicionar ao Inventário
+              Adicionar ao Inventario
             </Button>
           </div>
         </>

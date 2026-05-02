@@ -140,21 +140,21 @@ export function KitForm({ kit, onSubmit, onCancel, isSubmitting }: KitFormProps)
         )}
 
         {items.length === 0 ? (
-          <div className="flex flex-col items-center justify-center rounded-lg border border-dashed border-gray-700 py-8">
+          <div className="flex flex-col items-center justify-center rounded-2xl border border-dashed border-white/10 bg-white/4 py-8">
             <PackageIcon size={32} className="mb-2 text-gray-600" />
             <p className="text-sm text-gray-500">
               Nenhum item adicionado. Clique em &quot;Adicionar Item&quot;.
             </p>
           </div>
         ) : (
-          <div className="flex flex-col gap-2 rounded-lg border border-gray-700 p-3">
+          <div className="flex flex-col gap-2 rounded-2xl border border-white/8 bg-white/3 p-3">
             {items.map((item) => (
               <div
                 key={item.stockItem.id}
-                className="flex items-center gap-3 rounded-lg bg-gray-800 px-3 py-2"
+                className="flex items-center gap-3 rounded-2xl border border-white/6 bg-[#111217] px-3 py-2.5"
               >
-                <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-700">
-                  <PackageIcon size={14} className="text-orange-400" />
+                <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-orange-400/12 bg-orange-500/12">
+                  <PackageIcon size={14} className="text-orange-300" />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-white">
@@ -182,7 +182,7 @@ export function KitForm({ kit, onSubmit, onCancel, isSubmitting }: KitFormProps)
                         parseInt(e.target.value, 10) || 1
                       )
                     }
-                    className="w-16 rounded-lg border border-gray-600 bg-gray-900 px-2 py-1 text-center text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
+                    className="w-16 rounded-xl border border-white/10 bg-[#0d0d10] px-2 py-1.5 text-center text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-1 focus:ring-orange-500/50"
                   />
                   <span className="text-xs text-gray-400">
                     {item.stockItem.unit}
@@ -191,7 +191,7 @@ export function KitForm({ kit, onSubmit, onCancel, isSubmitting }: KitFormProps)
                 <button
                   type="button"
                   onClick={() => handleRemoveItem(item.stockItem.id)}
-                  className="flex-shrink-0 rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-red-500/20 hover:text-red-400"
+                  className="flex-shrink-0 rounded-xl p-1.5 text-gray-400 transition-colors hover:bg-red-500/20 hover:text-red-400"
                   aria-label={`Remover ${item.stockItem.name}`}
                 >
                   <svg
@@ -215,7 +215,7 @@ export function KitForm({ kit, onSubmit, onCancel, isSubmitting }: KitFormProps)
         )}
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-gray-700 pt-4">
+      <div className="flex items-center justify-end gap-3 border-t border-white/8 pt-4">
         <Button
           type="button"
           variant="secondary"

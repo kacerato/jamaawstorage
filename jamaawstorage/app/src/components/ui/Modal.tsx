@@ -78,25 +78,30 @@ export function Modal({
       />
       <div
         className={cn(
-          'relative w-full max-h-[90vh] overflow-y-auto transform rounded-2xl bg-gray-900 shadow-2xl transition-all duration-200 flex flex-col',
+          'relative flex max-h-[90vh] w-full transform flex-col overflow-y-auto rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,_rgba(20,20,24,0.98)_0%,_rgba(12,12,15,0.98)_100%)] shadow-[0_32px_90px_rgba(0,0,0,0.45)] transition-all duration-200',
           sizeClasses[size],
           isAnimating
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-4 scale-95 opacity-0',
         )}
       >
-        <div className="flex flex-shrink-0 items-center justify-between border-b border-gray-700 px-6 py-4">
-          <h2
-            id="modal-title"
-            className="text-lg font-semibold text-orange-500"
-          >
-            {title}
-          </h2>
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.12),_transparent_50%)] px-6 py-5">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-orange-200/70">
+              JamaaW
+            </p>
+            <h2
+              id="modal-title"
+              className="mt-1 text-lg font-semibold text-white"
+            >
+              {title}
+            </h2>
+          </div>
           {showCloseButton && (
             <button
               type="button"
               onClick={onClose}
-              className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+              className="rounded-2xl border border-white/8 bg-white/4 p-2 text-gray-400 transition-colors hover:bg-white/8 hover:text-white"
               aria-label="Fechar"
             >
               <svg
@@ -116,7 +121,7 @@ export function Modal({
             </button>
           )}
         </div>
-        <div className="flex-1 px-6 py-4">{children}</div>
+        <div className="flex-1 px-6 py-5">{children}</div>
       </div>
     </div>,
     document.body,

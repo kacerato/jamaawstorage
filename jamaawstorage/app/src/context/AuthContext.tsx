@@ -1,4 +1,4 @@
-import { createContext, useEffect, useState, useCallback, useRef } from 'react'
+import { createContext, useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { User } from '@supabase/supabase-js'
 import type { Tables } from '../types/database'
@@ -6,8 +6,7 @@ import {
   signIn as authSignIn,
   signOut as authSignOut,
   createSupervisor as authCreateSupervisor,
-  onAuthStateChange,
-  processSession,
+  fetchProfile,
 } from '../services/authService'
 import { supabase } from '../lib/supabase'
 
@@ -28,7 +27,7 @@ interface AuthContextType {
     employee_id?: string
     sector?: string
   }) => Promise<{ error: string | null }>
-  retry: () => void
+  retry: () => Promise<void>
 }
 
 const AuthContext = createContext<AuthContextType | null>(null)
@@ -39,78 +38,103 @@ function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const signingOutRef = useRef(false)
+  const userRef = useRef<User | null>(null)
 
-  const isAuthenticated = !!user && !!profile
+  useEffect(() => {
+    userRef.current = user
+  }, [user])
+
+  const syncSession = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession()
+
+    if (!session?.user) {
+      setUser(null)
+      setProfile(null)
+      setError(null)
+      return
+    }
+
+    const { profile: nextProfile, error: profileError } = await fetchProfile(session.user.id)
+
+    setUser(session.user)
+    setProfile((currentProfile) => nextProfile ?? (profileError ? currentProfile : null))
+    setError(profileError)
+  }, [])
 
   useEffect(() => {
     let mounted = true
-    let unsubscribe: (() => void) | null = null
 
-    async function initialize() {
+    const runInitialSync = async () => {
       try {
-        const { data: { session: supabaseSession } } = await supabase.auth.getSession()
-
-        if (!mounted) return
-
-        if (supabaseSession) {
-          const session = await processSession(supabaseSession)
-          if (mounted) {
-            setUser(session?.user ?? null)
-            setProfile(session?.profile ?? null)
-            if (session?.fetchError) setError(session.fetchError)
-          }
-        }
+        await syncSession()
       } catch (err) {
         console.error('Auth initialization error:', err)
         if (mounted) setError('Erro ao conectar ao serviço de autenticação.')
       } finally {
         if (mounted) setLoading(false)
       }
-
-      if (mounted) {
-        unsubscribe = onAuthStateChange((session) => {
-          if (!mounted) return
-
-          if (!session) {
-            setUser(null)
-            setProfile(null)
-            if (!signingOutRef.current) {
-              setError(null)
-            }
-          } else {
-            setUser(session.user)
-            setProfile(session.profile)
-            setError(session.fetchError ?? null)
-          }
-          setLoading(false)
-        })
-      }
     }
 
-    initialize()
+    void runInitialSync()
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      window.setTimeout(async () => {
+        if (!mounted) return
+
+        if (event === 'SIGNED_OUT' || !session?.user) {
+          setUser(null)
+          setProfile(null)
+          if (!signingOutRef.current) {
+            setError(null)
+          }
+          setLoading(false)
+          return
+        }
+
+        try {
+          await syncSession()
+        } catch {
+          if (mounted) setError('Erro ao sincronizar sua sessão. Tente novamente.')
+        } finally {
+          if (mounted) setLoading(false)
+        }
+      }, 0)
+    })
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== 'visible') return
+      if (!userRef.current) return
+      void syncSession()
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
       mounted = false
-      if (unsubscribe) unsubscribe()
+      subscription.unsubscribe()
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
-  }, [])
+  }, [syncSession])
 
   const signIn = useCallback(async (email: string, password: string) => {
     setError(null)
     const { error: signInError } = await authSignIn(email.trim(), password)
+
     if (signInError) {
       setError(signInError)
       return { error: signInError }
     }
+
     return { error: null }
   }, [])
 
   const signOut = useCallback(async () => {
     signingOutRef.current = true
+
     try {
       await authSignOut()
-    } catch {
-      // best-effort
     } finally {
       setUser(null)
       setProfile(null)
@@ -128,37 +152,38 @@ function AuthProvider({ children }: { children: ReactNode }) {
     sector?: string
   }) => {
     const { error: createError } = await authCreateSupervisor(data)
+
     if (createError) {
       setError(createError)
       return { error: createError }
     }
+
     return { error: null }
   }, [])
 
   const retry = useCallback(async () => {
     setLoading(true)
     setError(null)
+
     try {
-      const { data: { session: supabaseSession } } = await supabase.auth.getSession()
-      if (supabaseSession) {
-        const session = await processSession(supabaseSession)
-        setUser(session?.user ?? null)
-        setProfile(session?.profile ?? null)
-        if (session?.fetchError) setError(session.fetchError)
-      } else {
-        setUser(null)
-        setProfile(null)
-      }
+      await syncSession()
     } catch {
       setError('Erro ao tentar novamente. Verifique sua conexão.')
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [syncSession])
 
   const value: AuthContextType = {
-    user, profile, loading, error, isAuthenticated,
-    signIn, signOut, createSupervisor, retry,
+    user,
+    profile,
+    loading,
+    error,
+    isAuthenticated: !!user && !!profile,
+    signIn,
+    signOut,
+    createSupervisor,
+    retry,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

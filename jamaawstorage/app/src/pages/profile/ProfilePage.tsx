@@ -1,14 +1,14 @@
-import { useState, useCallback } from 'react'
+import { useCallback, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
-import { Button, Input, Card, Alert, Spinner } from '../../components/ui'
-
+import { DEFAULT_IMAGE_UPLOAD_OPTIONS, imageFileToDataUrl } from '../../lib/utils'
+import { Alert, Button, Card, Input, Spinner } from '../../components/ui'
 
 function getInitials(fullName: string): string {
   return fullName
     .split(' ')
-    .map((w) => w[0])
+    .map((word) => word[0])
     .filter(Boolean)
     .slice(0, 2)
     .join('')
@@ -20,11 +20,9 @@ function roleLabel(role: string): string {
     case 'supervisor':
       return 'Supervisor'
     case 'leader':
-      return 'Lider'
+      return 'Líder'
     case 'collaborator':
       return 'Colaborador'
-    case 'admin':
-      return 'Administrador'
     default:
       return role
   }
@@ -32,13 +30,28 @@ function roleLabel(role: string): string {
 
 export function ProfilePage() {
   const navigate = useNavigate()
-  const { user, profile } = useAuth()
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const { user, profile, retry } = useAuth()
 
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
-  const [employeeId, setEmployeeId] = useState(profile?.employee_id ?? '')
+  const [photoUrl, setPhotoUrl] = useState(profile?.photo_url ?? '')
   const [isLoading, setIsLoading] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
+
+  const initials = useMemo(() => getInitials(profile?.full_name ?? 'U'), [profile?.full_name])
+
+  const updatePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+
+    try {
+      const dataUrl = await imageFileToDataUrl(file, DEFAULT_IMAGE_UPLOAD_OPTIONS)
+      setPhotoUrl(dataUrl)
+    } catch (error) {
+      console.error(error)
+    }
+  }
 
   const handleSave = useCallback(async () => {
     if (!profile) return
@@ -48,31 +61,26 @@ export function ProfilePage() {
     setSuccessMessage('')
 
     try {
-      const updates = { full_name: fullName, employee_id: employeeId || null }
-        const { error } = await supabase
-          .from('profiles')
-          .update(updates)
-          .eq('id', profile.id)
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          full_name: fullName.trim(),
+          photo_url: photoUrl.trim() || null,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', profile.id)
 
       if (error) throw error
 
-      setSuccessMessage('Perfil atualizado com sucesso!')
-
-      setTimeout(() => {
-        setSuccessMessage('')
-      }, 3000)
-
-      await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', profile.id)
-        .single()
+      await retry()
+      setSuccessMessage('Perfil atualizado com sucesso.')
+      window.setTimeout(() => setSuccessMessage(''), 3000)
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'Erro ao atualizar perfil')
     } finally {
       setIsLoading(false)
     }
-  }, [profile, fullName, employeeId])
+  }, [fullName, photoUrl, profile, retry])
 
   if (!profile) {
     return (
@@ -82,15 +90,9 @@ export function ProfilePage() {
     )
   }
 
-  const initials = getInitials(profile.full_name ?? 'U')
-
   return (
     <div className="flex min-h-screen items-center justify-center bg-gray-950 p-4">
-      <Card
-        variant="bordered"
-        padding="none"
-        className="w-full max-w-md overflow-hidden"
-      >
+      <Card variant="bordered" padding="none" className="w-full max-w-md overflow-hidden">
         <div
           className="w-full"
           style={{
@@ -113,66 +115,46 @@ export function ProfilePage() {
           </span>
         </div>
 
-        <div className="flex flex-col items-center px-6 pt-6 pb-6">
-          <div className="relative mb-3">
-            <div
-              className="flex items-center justify-center rounded-full"
-              style={{
-                width: 68,
-                height: 68,
-                background:
-                  'linear-gradient(135deg, rgba(249,115,22,0.25), rgba(249,115,22,0.12))',
-                border: '2px solid rgba(249,115,22,0.4)',
-                fontSize: 24,
-                fontWeight: 700,
-                color: '#f97316',
-                fontFamily: "'Outfit', sans-serif",
-                position: 'relative',
-                zIndex: 1,
-              }}
-            >
-              {initials}
+        <div className="flex flex-col items-center px-6 pb-6 pt-6">
+          <div className="relative mb-4">
+            <div className="relative flex h-[78px] w-[78px] items-center justify-center overflow-hidden rounded-full border-2 border-orange-400/40 bg-orange-500/12">
+              {photoUrl ? (
+                <img src={photoUrl} alt={fullName || 'Supervisor'} className="h-full w-full object-cover" />
+              ) : (
+                <span className="text-2xl font-bold text-orange-300">{initials}</span>
+              )}
             </div>
-            <div
-              className="absolute rounded-full"
-              style={{
-                inset: -5,
-                border: '1.5px dashed rgba(249,115,22,0.2)',
-              }}
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="absolute -bottom-1 -right-1 rounded-full border border-white/10 bg-[#18191d] px-2 py-1 text-[11px] font-medium text-orange-200 transition-colors hover:bg-[#202228]"
+            >
+              Foto
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={updatePhoto}
+              className="hidden"
             />
           </div>
 
-          <h2
-            className="mb-4 text-center text-lg font-semibold text-white"
-            style={{ fontFamily: "'Outfit', sans-serif" }}
-          >
+          <h2 className="mb-4 text-center text-lg font-semibold text-white" style={{ fontFamily: "'Outfit', sans-serif" }}>
             Editar Perfil
           </h2>
 
-          {successMessage && (
-            <Alert variant="success" className="mb-4 w-full">
-              {successMessage}
-            </Alert>
-          )}
-
-          {errorMessage && (
-            <Alert variant="danger" className="mb-4 w-full">
-              {errorMessage}
-            </Alert>
-          )}
+          {successMessage && <Alert variant="success" className="mb-4 w-full">{successMessage}</Alert>}
+          {errorMessage && <Alert variant="danger" className="mb-4 w-full">{errorMessage}</Alert>}
 
           <div className="flex w-full flex-col gap-4">
-            <Input
-              label="Nome completo"
-              value={fullName}
-              onChange={(e) => setFullName(e.target.value)}
-            />
+            <Input label="Nome completo" value={fullName} onChange={(event) => setFullName(event.target.value)} />
 
-            <Input
-              label="Matrícula"
-              value={employeeId}
-              onChange={(e) => setEmployeeId(e.target.value)}
-            />
+            <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-3">
+              <p className="text-sm font-medium text-gray-200">Matrícula</p>
+              <p className="mt-1 text-sm text-orange-300">{profile.employee_id ?? 'Gerada pelo sistema'}</p>
+              <p className="mt-1 text-xs text-gray-500">Sequência interna automática do supervisor</p>
+            </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-gray-300">E-mail</label>
@@ -186,33 +168,14 @@ export function ProfilePage() {
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-gray-300">Função</label>
-              <span
-                className="inline-block w-fit"
-                style={{
-                  padding: '3px 10px',
-                  background: 'rgba(249,115,22,0.12)',
-                  border: '1px solid rgba(249,115,22,0.25)',
-                  borderRadius: 20,
-                  fontSize: 11,
-                  fontWeight: 600,
-                  color: '#f97316',
-                  letterSpacing: '0.4px',
-                  fontFamily: "'Inter', sans-serif",
-                }}
-              >
-                {roleLabel(profile.role ?? 'collaborator')}
+              <span className="inline-block w-fit rounded-full border border-orange-400/25 bg-orange-500/12 px-3 py-1 text-[11px] font-semibold tracking-[0.04em] text-orange-200">
+                {roleLabel(profile.role ?? 'supervisor')}
               </span>
             </div>
 
             <div className="flex flex-col gap-1.5">
               <label className="text-sm font-medium text-gray-300">Status</label>
-              <span
-                className="text-sm"
-                style={{
-                  color: profile.is_active ? '#34d399' : '#f87171',
-                  fontFamily: "'Inter', sans-serif",
-                }}
-              >
+              <span className="text-sm" style={{ color: profile.is_active ? '#34d399' : '#f87171' }}>
                 {profile.is_active ? 'Ativa' : 'Inativa'}
               </span>
             </div>
@@ -220,19 +183,10 @@ export function ProfilePage() {
             <div className="h-px w-full bg-gray-700/50" />
 
             <div className="flex gap-3">
-              <Button
-                variant="primary"
-                isLoading={isLoading}
-                onClick={handleSave}
-                className="flex-1"
-              >
-                Salvar Alterações
+              <Button variant="primary" isLoading={isLoading} onClick={handleSave} className="flex-1">
+                Salvar alterações
               </Button>
-              <Button
-                variant="secondary"
-                onClick={() => navigate(-1)}
-                className="flex-1"
-              >
+              <Button variant="secondary" onClick={() => navigate(-1)} className="flex-1">
                 Voltar
               </Button>
             </div>

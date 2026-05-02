@@ -204,7 +204,7 @@ END $$;
 CREATE OR REPLACE FUNCTION public.is_active_supervisor()
 RETURNS boolean
 LANGUAGE sql
-VOLATILE
+STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
@@ -496,6 +496,8 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE SEQUENCE IF NOT EXISTS withdrawal_code_seq START 1;
+
 CREATE OR REPLACE FUNCTION generate_withdrawal_code()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -508,7 +510,8 @@ BEGIN
     CAST(SUBSTRING(w.code FROM LENGTH(today_code) + 2) AS INTEGER)
   ), 0) + 1 INTO next_seq
   FROM withdrawals w
-  WHERE w.code LIKE today_code || '-%';
+  WHERE w.code LIKE today_code || '-%'
+  FOR UPDATE SKIP LOCKED;
 
   NEW.code := today_code || '-' || LPAD(next_seq::TEXT, 3, '0');
   RETURN NEW;
@@ -532,18 +535,16 @@ BEGIN
     RETURN NEW;
   END IF;
 
-  SELECT current_quantity INTO new_qty
-  FROM stock_items
-  WHERE id = NEW.stock_item_id;
-
-  IF new_qty < NEW.quantity THEN
-    RAISE EXCEPTION 'Insufficient stock for item %. Available: %, Requested: %',
-      NEW.stock_item_id, new_qty, NEW.quantity;
-  END IF;
-
   UPDATE stock_items
   SET current_quantity = current_quantity - NEW.quantity
-  WHERE id = NEW.stock_item_id;
+  WHERE id = NEW.stock_item_id
+    AND current_quantity >= NEW.quantity
+  RETURNING current_quantity INTO new_qty;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Insufficient stock for item %. Requested: %',
+      NEW.stock_item_id, NEW.quantity;
+  END IF;
 
   IF NEW.lot_id IS NOT NULL THEN
     UPDATE stock_item_lots
@@ -566,43 +567,46 @@ $$ LANGUAGE plpgsql;
 
 CREATE OR REPLACE FUNCTION handle_stock_restoration()
 RETURNS TRIGGER AS $$
-DECLARE
-  wi_rec RECORD;
 BEGIN
   IF OLD.status = NEW.status THEN
     RETURN NEW;
   END IF;
 
   IF NEW.status = 'rejected' AND OLD.status <> 'rejected' THEN
-    FOR wi_rec IN
-      SELECT wi.stock_item_id, wi.lot_id, wi.quantity, w.destination_type, w.collaborator_id
-      FROM withdrawal_items wi
-      JOIN withdrawals w ON w.id = wi.withdrawal_id
-      WHERE wi.withdrawal_id = NEW.id
-    LOOP
-      UPDATE stock_items
-      SET current_quantity = current_quantity + wi_rec.quantity
-      WHERE id = wi_rec.stock_item_id;
+    -- Restore stock_items in batch
+    UPDATE stock_items si
+    SET current_quantity = si.current_quantity + wi.quantity
+    FROM withdrawal_items wi
+    WHERE wi.withdrawal_id = NEW.id
+      AND si.id = wi.stock_item_id;
 
-      IF wi_rec.lot_id IS NOT NULL THEN
-        UPDATE stock_item_lots
-        SET quantity = quantity + wi_rec.quantity
-        WHERE id = wi_rec.lot_id;
-      END IF;
+    -- Restore lots in batch
+    UPDATE stock_item_lots sil
+    SET quantity = sil.quantity + wi.quantity
+    FROM withdrawal_items wi
+    WHERE wi.withdrawal_id = NEW.id
+      AND sil.id = wi.lot_id;
 
-      IF wi_rec.destination_type = 'collaborator' AND wi_rec.collaborator_id IS NOT NULL THEN
-        UPDATE person_inventories
-        SET quantity = GREATEST(quantity - wi_rec.quantity, 0),
-            updated_at = now()
-        WHERE person_id = wi_rec.collaborator_id
-          AND stock_item_id = wi_rec.stock_item_id;
+    -- Restore person inventories in batch
+    UPDATE person_inventories pi
+    SET quantity = GREATEST(pi.quantity - wi.quantity, 0),
+        updated_at = now()
+    FROM withdrawal_items wi
+    JOIN withdrawals w ON w.id = wi.withdrawal_id
+    WHERE wi.withdrawal_id = NEW.id
+      AND pi.person_id = w.collaborator_id
+      AND pi.stock_item_id = wi.stock_item_id;
 
-        DELETE FROM person_inventories
-        WHERE person_id = wi_rec.collaborator_id
-          AND stock_item_id = wi_rec.stock_item_id
-          AND quantity = 0;
-      END IF;
-    END LOOP;
+    -- Delete zeroed inventories
+    DELETE FROM person_inventories pi
+    WHERE pi.quantity = 0
+      AND EXISTS (
+        SELECT 1 FROM withdrawal_items wi
+        JOIN withdrawals w ON w.id = wi.withdrawal_id
+        WHERE wi.withdrawal_id = NEW.id
+          AND pi.person_id = w.collaborator_id
+          AND pi.stock_item_id = wi.stock_item_id
+      );
   END IF;
 
   RETURN NEW;
@@ -854,6 +858,7 @@ CREATE TRIGGER trg_person_inventories_audit
 CREATE INDEX IF NOT EXISTS idx_people_role ON people(role);
 CREATE INDEX IF NOT EXISTS idx_people_is_active ON people(is_active);
 CREATE INDEX IF NOT EXISTS idx_profiles_is_active ON profiles(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_profiles_auth_check ON profiles(id, role, is_active) WHERE is_active = true AND role = 'supervisor';
 CREATE INDEX IF NOT EXISTS idx_stock_items_code ON stock_items(code);
 CREATE INDEX IF NOT EXISTS idx_stock_items_category ON stock_items(category);
 CREATE INDEX IF NOT EXISTS idx_stock_items_current_quantity ON stock_items(current_quantity);
@@ -861,6 +866,12 @@ CREATE INDEX IF NOT EXISTS idx_stock_items_name_trgm ON stock_items USING gin (n
 CREATE INDEX IF NOT EXISTS idx_stock_items_name_lower ON stock_items(lower(name));
 CREATE INDEX IF NOT EXISTS idx_stock_items_code_lower ON stock_items(lower(code));
 CREATE INDEX IF NOT EXISTS idx_stock_items_active_name ON stock_items(is_active, name);
+CREATE INDEX IF NOT EXISTS idx_people_created_by ON people(created_by);
+CREATE INDEX IF NOT EXISTS idx_work_sites_created_by ON work_sites(created_by);
+CREATE INDEX IF NOT EXISTS idx_stock_items_created_by ON stock_items(created_by);
+CREATE INDEX IF NOT EXISTS idx_kits_created_by ON kits(created_by);
+CREATE INDEX IF NOT EXISTS idx_person_inventories_last_withdrawal ON person_inventories(last_withdrawal_id);
+CREATE INDEX IF NOT EXISTS idx_audit_logs_record_id ON audit_logs(record_id);
 CREATE INDEX IF NOT EXISTS idx_withdrawals_authorized_by ON withdrawals(authorized_by);
 CREATE INDEX IF NOT EXISTS idx_withdrawals_requested_by ON withdrawals(requested_by);
 CREATE INDEX IF NOT EXISTS idx_withdrawals_status ON withdrawals(status);

@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { Tables } from '../../types/database'
 import { Input, Badge, Spinner } from '../../components/ui'
 import { PackageIcon } from '../../components/icons'
+import { ItemVisual } from '../../components/items/ItemVisual'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 type StockItemRow = Tables<'stock_items'>
 
@@ -11,49 +13,59 @@ interface ItemSelectorProps {
   selectedIds: Set<string>
 }
 
+const itemSelectorCache: {
+  items: StockItemRow[]
+} = {
+  items: [],
+}
+
 export function ItemSelector({ onSelect, selectedIds }: ItemSelectorProps) {
   const [search, setSearch] = useState('')
-  const [items, setItems] = useState<StockItemRow[]>([])
-  const [loading, setLoading] = useState(false)
+  const debouncedSearch = useDebouncedValue(search, 180)
+  const [items, setItems] = useState<StockItemRow[]>(itemSelectorCache.items)
+  const [loading, setLoading] = useState(itemSelectorCache.items.length === 0)
+  const [refreshing, setRefreshing] = useState(false)
+
+  const fetchItems = useCallback(async (searchTerm: string) => {
+    const shouldShowFullLoading = itemSelectorCache.items.length === 0
+    if (shouldShowFullLoading) {
+      setLoading(true)
+    } else {
+      setRefreshing(true)
+    }
+
+    let queryBuilder = supabase
+      .from('stock_items')
+      .select('*')
+      .eq('is_active', true)
+      .order('name')
+
+    if (searchTerm.trim()) {
+      queryBuilder = queryBuilder.or(
+        `name.ilike.%${searchTerm}%,code.ilike.%${searchTerm}%,category.ilike.%${searchTerm}%`
+      )
+    }
+
+    const { data, error } = await queryBuilder.limit(50)
+
+    if (error) {
+      console.error('Error fetching stock items:', error.message)
+      setItems([])
+    } else {
+      const nextItems = (data as StockItemRow[]) ?? []
+      itemSelectorCache.items = nextItems
+      setItems(nextItems)
+    }
+
+    setLoading(false)
+    setRefreshing(false)
+  }, [])
 
   useEffect(() => {
-    let cancelled = false
+    void fetchItems(debouncedSearch)
+  }, [debouncedSearch, fetchItems])
 
-    const fetchItems = async () => {
-      setLoading(true)
-      let queryBuilder = supabase
-        .from('stock_items')
-        .select('*')
-        .eq('is_active', true)
-        .order('name')
-
-      if (search.trim()) {
-        queryBuilder = queryBuilder.or(
-          `name.ilike.%${search}%,code.ilike.%${search}%,category.ilike.%${search}%`
-        )
-      }
-
-      const { data, error } = await queryBuilder.limit(50)
-
-      if (cancelled) return
-      if (error) {
-        console.error('Error fetching stock items:', error.message)
-        setItems([])
-      } else {
-        setItems((data as StockItemRow[]) ?? [])
-      }
-      setLoading(false)
-    }
-
-    const timeout = setTimeout(() => {
-      fetchItems()
-    }, 300)
-
-    return () => {
-      clearTimeout(timeout)
-      cancelled = true
-    }
-  }, [search])
+  
 
   return (
     <div className="flex flex-col gap-3">
@@ -63,6 +75,13 @@ export function ItemSelector({ onSelect, selectedIds }: ItemSelectorProps) {
         onChange={(e) => setSearch(e.target.value)}
         leftIcon={<PackageIcon size={16} />}
       />
+
+      {refreshing && (
+        <div className="inline-flex items-center gap-2 text-xs text-orange-200/75">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+          Atualizando itens...
+        </div>
+      )}
 
       {loading && (
         <div className="flex items-center justify-center py-8">
@@ -100,7 +119,7 @@ export function ItemSelector({ onSelect, selectedIds }: ItemSelectorProps) {
               }`}
             >
               <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-800">
-                <PackageIcon size={16} className="text-orange-400" />
+                <ItemVisual iconKey={item.svg_icon_key} size={22} />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="truncate text-sm font-medium text-white">

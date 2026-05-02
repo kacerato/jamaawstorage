@@ -1,16 +1,8 @@
-import type { User, AuthChangeEvent } from '@supabase/supabase-js'
+import type { User } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabase'
 import type { Tables } from '../types/database'
 
 export type Profile = Tables<'profiles'>
-
-export type Session = {
-  user: User | null
-  profile: Profile | null
-  fetchError?: string
-}
-
-export type Unsubscribe = () => void
 
 function formatError(error: unknown): string {
   if (error instanceof Error) {
@@ -46,8 +38,6 @@ function formatError(error: unknown): string {
     if (message.includes('perfil nao encontrado') || message.includes('profile not found')) {
       return 'Perfil do usuário não encontrado. Tente novamente.'
     }
-
-    return 'Ocorreu um erro inesperado. Tente novamente.'
   }
 
   return 'Ocorreu um erro inesperado. Tente novamente.'
@@ -77,12 +67,7 @@ export async function signOut(): Promise<void> {
   }
 }
 
-export type FetchProfileResult = {
-  profile: Profile | null
-  error: string | null
-}
-
-export async function fetchProfile(userId: string): Promise<FetchProfileResult> {
+export async function fetchProfile(userId: string): Promise<{ profile: Profile | null; error: string | null }> {
   try {
     const { data, error } = await supabase
       .from('profiles')
@@ -95,8 +80,8 @@ export async function fetchProfile(userId: string): Promise<FetchProfileResult> 
     }
 
     return { profile: data as Profile | null, error: null }
-  } catch (err) {
-    return { profile: null, error: formatError(err) }
+  } catch (error) {
+    return { profile: null, error: formatError(error) }
   }
 }
 
@@ -108,94 +93,20 @@ export async function createSupervisor(data: {
   sector?: string
 }): Promise<{ userId: string | null; error: string | null }> {
   try {
-    const { data: currentSession } = await supabase.auth.getSession()
-    const currentAccessToken = currentSession.session?.access_token ?? null
-    const currentRefreshToken = currentSession.session?.refresh_token ?? null
-
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email: data.email.trim(),
-      password: data.password,
-      options: {
-        data: {
-          full_name: data.full_name.trim(),
-          employee_id: data.employee_id?.trim() || null,
-        },
-      },
-    })
-
-    if (signUpError) {
-      if (currentAccessToken && currentRefreshToken) {
-        await supabase.auth.setSession({ access_token: currentAccessToken, refresh_token: currentRefreshToken })
-      }
-      return { userId: null, error: formatError(signUpError) }
-    }
-    if (!signUpData.user) {
-      if (currentAccessToken && currentRefreshToken) {
-        await supabase.auth.setSession({ access_token: currentAccessToken, refresh_token: currentRefreshToken })
-      }
-      return { userId: null, error: 'Falha ao criar conta. Tente novamente.' }
-    }
-
-    const newUserId = signUpData.user.id
-
-    const { error: activateError } = await supabase.rpc('activate_supervisor_profile', {
-      p_user_id: newUserId,
+    const { data: createdUserId, error } = await supabase.rpc('create_supervisor_account', {
+      p_email: data.email.trim(),
+      p_password: data.password,
       p_full_name: data.full_name.trim(),
       p_employee_id: data.employee_id?.trim() || null,
       p_sector: data.sector?.trim() || null,
     })
 
-    if (currentAccessToken && currentRefreshToken) {
-      await supabase.auth.setSession({ access_token: currentAccessToken, refresh_token: currentRefreshToken })
+    if (error) {
+      return { userId: null, error: formatError(error) }
     }
 
-    if (activateError) {
-      return { userId: null, error: formatError(activateError) }
-    }
-
-    return { userId: newUserId, error: null }
+    return { userId: createdUserId ?? null, error: null }
   } catch (error) {
     return { userId: null, error: formatError(error) }
   }
-}
-
-export async function processSession(supabaseSession: any): Promise<Session | null> {
-  if (!supabaseSession?.user) return null
-
-  const result = await fetchProfile(supabaseSession.user.id)
-
-  if (result.error) {
-    return {
-      user: supabaseSession.user,
-      profile: null,
-      fetchError: result.error,
-    }
-  }
-
-  return {
-    user: supabaseSession.user,
-    profile: result.profile,
-  }
-}
-
-export function onAuthStateChange(
-  callback: (session: Session | null, event: AuthChangeEvent) => void
-): Unsubscribe {
-  const {
-    data: { subscription },
-  } = supabase.auth.onAuthStateChange(async (event, supabaseSession) => {
-    try {
-      if (event === 'SIGNED_OUT' || !supabaseSession?.user) {
-        callback(null, event)
-        return
-      }
-
-      const session = await processSession(supabaseSession)
-      callback(session, event)
-    } catch {
-      callback(null, event)
-    }
-  })
-
-  return () => subscription.unsubscribe()
 }

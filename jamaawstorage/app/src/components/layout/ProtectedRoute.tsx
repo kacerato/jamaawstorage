@@ -19,7 +19,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     )
   }
 
-  if (error) {
+  if (error && !(user && profile)) {
     const isSessionError = error.toLowerCase().includes('sessão expirada')
 
     const handleAction = () => {
