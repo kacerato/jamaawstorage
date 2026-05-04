@@ -17,6 +17,13 @@ type PersonWithInventoryCount = Tables<'people'> & {
 type RoleFilter = 'all' | 'leader' | 'collaborator'
 type StatusFilter = 'active' | 'inactive'
 
+function getJobTitleLabel(jobTitle: string | null): string {
+  if (!jobTitle) return '—'
+  if (jobTitle === 'cabista') return 'Cabista'
+  if (jobTitle === 'ajudante de cabista') return 'Ajudante de cabista'
+  return jobTitle
+}
+
 const peoplePageCache: {
   people: PersonWithInventoryCount[]
   totalCount: number
@@ -64,7 +71,7 @@ export function PeoplePage() {
       // Query simplificada - sem join complexo com inventories
       let query = supabase
         .from('people')
-        .select('id, full_name, employee_id, role, sector, photo_url, is_active, created_at, updated_at', { count: 'exact' })
+        .select('id, full_name, employee_id, role, job_title, sector, photo_url, is_active, created_at, updated_at', { count: 'exact' })
         .order('full_name')
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
@@ -132,6 +139,7 @@ export function PeoplePage() {
           full_name: row.full_name,
           employee_id: row.employee_id,
           role: row.role,
+          job_title: row.job_title,
           sector: row.sector,
           photo_url: row.photo_url,
           is_active: row.is_active,
@@ -257,6 +265,13 @@ export function PeoplePage() {
           </Badge>
         )
       },
+    },
+    {
+      key: 'job_title',
+      header: 'Função',
+      sortable: true,
+      render: (_value: unknown, row: PersonWithInventoryCount) =>
+        row.role === 'leader' ? '—' : getJobTitleLabel(row.job_title),
     },
     {
       key: 'sector',
@@ -504,6 +519,7 @@ interface RawPersonRow {
   full_name: string
   employee_id: string | null
   role: AppRole
+  job_title: string | null
   sector: string | null
   photo_url: string | null
   is_active: boolean

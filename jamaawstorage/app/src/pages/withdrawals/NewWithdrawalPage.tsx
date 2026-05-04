@@ -34,11 +34,13 @@ interface WithdrawalItemEntry extends WithdrawalFormItem {
   stock_item: StockItemRow
 }
 
+const DEFAULT_WORKSITE_NAME = 'obra jamaaw'
+
 const STEPS = [
   { key: 'destination', label: 'Solicitante e Destino', icon: UserIcon },
   { key: 'items', label: 'Itens da Retirada', icon: PackageIcon },
-  { key: 'signatures', label: 'Documentação e Assinaturas', icon: SignatureIcon },
-  { key: 'review', label: 'Revisão e Confirmação', icon: ClipboardIcon },
+  { key: 'signatures', label: 'Documentacao e Assinaturas', icon: SignatureIcon },
+  { key: 'review', label: 'Revisao e Confirmacao', icon: ClipboardIcon },
 ] as const
 
 export function NewWithdrawalPage() {
@@ -58,7 +60,7 @@ export function NewWithdrawalPage() {
   const [requestedBy, setRequestedBy] = useState<string>('')
   const [destinationType, setDestinationType] = useState<WithdrawalDestinationType>('collaborator')
   const [collaboratorId, setCollaboratorId] = useState<string>('')
-  const [workSiteId, setWorkSiteId] = useState<string>('')
+  const [defaultWorkSiteId, setDefaultWorkSiteId] = useState<string>('')
 
   const [items, setItems] = useState<WithdrawalItemEntry[]>([])
   const [showItemSelector, setShowItemSelector] = useState(false)
@@ -82,7 +84,18 @@ export function NewWithdrawalPage() {
       if (cancelled) return
       if (leadersRes.data) setLeaders(leadersRes.data as PeopleRow[])
       if (collaboratorsRes.data) setCollaborators(collaboratorsRes.data as PeopleRow[])
-      if (workSitesRes.data) setWorkSites(workSitesRes.data as WorkSiteRow[])
+      if (workSitesRes.data) {
+        const nextWorkSites = workSitesRes.data as WorkSiteRow[]
+        setWorkSites(nextWorkSites)
+
+        const defaultWorkSite =
+          nextWorkSites.find((workSite) => workSite.name.trim().toLowerCase() === DEFAULT_WORKSITE_NAME.toLowerCase())
+          ?? nextWorkSites[0]
+
+        if (defaultWorkSite) {
+          setDefaultWorkSiteId(defaultWorkSite.id)
+        }
+      }
       setLoadingOptions(false)
     })
     return () => { cancelled = true }
@@ -146,7 +159,7 @@ export function NewWithdrawalPage() {
       setPhotoPreview(result)
       setPhotoUrl(result)
     } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : 'Não foi possível enviar a foto.')
+      setPhotoError(error instanceof Error ? error.message : 'Nao foi possivel enviar a foto.')
     }
   }
 
@@ -189,18 +202,18 @@ export function NewWithdrawalPage() {
     const errors: Record<string, string> = {}
 
     if (step === 0) {
-      if (!requestedBy) errors.requestedBy = 'Selecione o líder solicitante'
+      if (!requestedBy) errors.requestedBy = 'Selecione o lider solicitante'
       if (destinationType === 'collaborator' && !collaboratorId)
         errors.collaboratorId = 'Selecione o colaborador'
-      if (destinationType === 'work_site' && !workSiteId)
-        errors.workSiteId = 'Selecione a obra'
+      if (destinationType === 'work_site' && !defaultWorkSiteId)
+        errors.workSiteId = 'Nenhuma obra padrao esta disponivel.'
     }
 
     if (step === 1) {
       if (itemsSource.length === 0) errors.items = 'Adicione ao menos um item'
       const overStock = itemsSource.find((i) => i.quantity > i.stock_item.current_quantity)
       if (overStock) {
-        errors.items = `Quantidade de "${overStock.stock_item.name}" excede o estoque disponível (${overStock.stock_item.current_quantity} ${overStock.stock_item.unit})`
+        errors.items = `Quantidade de "${overStock.stock_item.name}" excede o estoque disponivel (${overStock.stock_item.current_quantity} ${overStock.stock_item.unit})`
       }
       const zeroQty = itemsSource.find((i) => i.quantity <= 0)
       if (zeroQty && !errors.items) {
@@ -209,8 +222,8 @@ export function NewWithdrawalPage() {
     }
 
     if (step === 2) {
-      if (!supervisorSignature) errors.supervisorSignature = 'Assinatura do supervisor é obrigatória'
-      if (!requesterSignature) errors.requesterSignature = 'Assinatura do solicitante é obrigatória'
+      if (!supervisorSignature) errors.supervisorSignature = 'Assinatura do supervisor e obrigatoria'
+      if (!requesterSignature) errors.requesterSignature = 'Assinatura do solicitante e obrigatoria'
     }
 
     setStepErrors(errors)
@@ -224,7 +237,7 @@ export function NewWithdrawalPage() {
         nextItems = await refreshSelectedItemsQuantities()
       } catch (error) {
         setStepErrors({
-          items: error instanceof Error ? error.message : 'Não foi possível atualizar o estoque antes de continuar.',
+          items: error instanceof Error ? error.message : 'Nao foi possivel atualizar o estoque antes de continuar.',
         })
         return
       }
@@ -249,14 +262,14 @@ export function NewWithdrawalPage() {
       const overStock = refreshedItems.find((item) => item.quantity > item.stock_item.current_quantity)
       if (overStock) {
         setSubmitError(
-          `O estoque de "${overStock.stock_item.name}" mudou durante a retirada. Disponível agora: ${overStock.stock_item.current_quantity} ${overStock.stock_item.unit}.`
+          `O estoque de "${overStock.stock_item.name}" mudou durante a retirada. Disponivel agora: ${overStock.stock_item.current_quantity} ${overStock.stock_item.unit}.`
         )
         setCurrentStep(1)
         setSubmitting(false)
         return
       }
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'Não foi possível validar o estoque atualizado.')
+      setSubmitError(error instanceof Error ? error.message : 'Nao foi possivel validar o estoque atualizado.')
       setSubmitting(false)
       return
     }
@@ -265,7 +278,7 @@ export function NewWithdrawalPage() {
       p_requested_by: requestedBy,
       p_destination_type: destinationType as WithdrawalDestinationType,
       p_collaborator_id: destinationType === 'collaborator' ? collaboratorId : null,
-      p_work_site_id: destinationType === 'work_site' ? workSiteId : null,
+      p_work_site_id: destinationType === 'work_site' ? defaultWorkSiteId : null,
       p_authorized_by: profile.id,
       p_notes: notes || null,
       p_photo_url: photoUrl,
@@ -300,14 +313,9 @@ export function NewWithdrawalPage() {
     label: `${c.full_name}${c.employee_id ? ` (${c.employee_id})` : ''}`,
   }))
 
-  const workSiteOptions = workSites.map((w) => ({
-    value: w.id,
-    label: w.name,
-  }))
-
   const selectedLeader = leaders.find((l) => l.id === requestedBy)
   const selectedCollaborator = collaborators.find((c) => c.id === collaboratorId)
-  const selectedWorkSite = workSites.find((w) => w.id === workSiteId)
+  const selectedWorkSite = workSites.find((w) => w.id === defaultWorkSiteId)
 
   const renderStepIndicator = () => (
     <div className="mb-8 flex items-center justify-between">
@@ -371,8 +379,8 @@ export function NewWithdrawalPage() {
         ) : (
           <div className="flex flex-col gap-5">
             <Select
-              label="Líder Solicitante"
-              placeholder="Selecione o líder"
+              label="Lider Solicitante"
+              placeholder="Selecione o lider"
               options={leaderOptions}
               value={requestedBy}
               onChange={(e) => {
@@ -415,7 +423,7 @@ export function NewWithdrawalPage() {
                   )}
                 >
                   <ClipboardIcon size={18} className="mb-1 inline-block mr-2" />
-                  Para Obra (Uso Coletivo)
+                  Para obra jamaaw
                 </button>
               </div>
             </div>
@@ -439,21 +447,12 @@ export function NewWithdrawalPage() {
             )}
 
             {destinationType === 'work_site' && (
-              <Select
-                label="Obra"
-                placeholder="Selecione a obra"
-                options={workSiteOptions}
-                value={workSiteId}
-                onChange={(e) => {
-                  setWorkSiteId(e.target.value)
-                  setStepErrors((prev) => {
-                    const next = { ...prev }
-                    delete next.workSiteId
-                    return next
-                  })
-                }}
-                error={stepErrors.workSiteId}
-              />
+              <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-4">
+                <p className="text-sm font-medium text-orange-300">obra jamaaw</p>
+                {stepErrors.workSiteId && (
+                  <p className="mt-2 text-sm text-red-400">{stepErrors.workSiteId}</p>
+                )}
+              </div>
             )}
           </div>
         )}
@@ -496,7 +495,7 @@ export function NewWithdrawalPage() {
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <PackageIcon size={40} className="mb-2 text-gray-600" />
             <p className="text-sm text-gray-400">
-              Nenhum item adicionado. Use os botões acima para adicionar itens ou kits.
+              Nenhum item adicionado. Use os botoes acima para adicionar itens ou kits.
             </p>
           </div>
         ) : (
@@ -509,7 +508,7 @@ export function NewWithdrawalPage() {
                   <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Estoque</th>
                   <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Qtd</th>
                   <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Unidade</th>
-                  <th className="px-3 py-2 text-right text-sm font-medium text-gray-300">Ação</th>
+                  <th className="px-3 py-2 text-right text-sm font-medium text-gray-300">Acao</th>
                 </tr>
               </thead>
               <tbody>
@@ -604,15 +603,15 @@ export function NewWithdrawalPage() {
     <div className="flex flex-col gap-6">
       <Card variant="bordered" padding="lg">
         <h3 className="mb-4 text-lg font-semibold text-white">
-          Documentação e Assinaturas
+          Documentacao e Assinaturas
         </h3>
 
         <div className="mb-6 flex flex-col gap-2">
-          <label className="text-sm font-medium text-gray-300">Observações</label>
+          <label className="text-sm font-medium text-gray-300">Observacoes</label>
           <textarea
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Observações adicionais (opcional)"
+            placeholder="Observacoes adicionais (opcional)"
             rows={3}
             className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
           />
@@ -621,13 +620,13 @@ export function NewWithdrawalPage() {
         <div className="mb-6 flex flex-col gap-2">
           <label className="text-sm font-medium text-gray-300">
             <CameraIcon size={16} className="mr-1 inline-block" />
-            Registro Fotográfico
+            Registro Fotografico
           </label>
           {photoPreview ? (
             <div className="relative inline-block">
               <img
                 src={photoPreview}
-                alt="Registro fotográfico"
+                alt="Registro fotografico"
                 className="max-h-48 rounded-lg border border-gray-700"
               />
               <button
@@ -653,7 +652,7 @@ export function NewWithdrawalPage() {
                 onChange={handlePhotoChange}
                 className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
               />
-              <p className="text-xs text-gray-500">JPG ou PNG, até {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB</p>
+              <p className="text-xs text-gray-500">JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB</p>
             </>
           )}
           {photoError && <p className="text-xs text-red-400">{photoError}</p>}
@@ -661,7 +660,7 @@ export function NewWithdrawalPage() {
       </Card>
 
       <Card variant="bordered" padding="lg">
-        <h3 className="mb-4 text-lg font-semibold text-white">Assinaturas Eletrônicas</h3>
+        <h3 className="mb-4 text-lg font-semibold text-white">Assinaturas Eletronicas</h3>
 
         <div className="flex flex-col gap-6">
           <div>
@@ -686,7 +685,7 @@ export function NewWithdrawalPage() {
 
           <div>
             <SignaturePad
-              label="Assinatura do Solicitante (líder que solicitou)"
+              label="Assinatura do Solicitante (lider que solicitou)"
               value={requesterSignature}
               onChange={(val) => {
                 setRequesterSignature(val)
@@ -697,7 +696,7 @@ export function NewWithdrawalPage() {
                 })
               }}
               required
-              placeholder="Líder solicitante assina aqui"
+              placeholder="Lider solicitante assina aqui"
             />
             {stepErrors.requesterSignature && (
               <p className="mt-1 text-sm text-red-400">{stepErrors.requesterSignature}</p>
@@ -724,17 +723,17 @@ export function NewWithdrawalPage() {
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
-            <p className="text-xs font-medium text-gray-400">Código Previsto</p>
+            <p className="text-xs font-medium text-gray-400">Codigo Previsto</p>
             <p className="text-sm text-white">{generateWithdrawalCodePreview()}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Líder Solicitante</p>
+            <p className="text-xs font-medium text-gray-400">Lider Solicitante</p>
             <p className="text-sm text-white">{selectedLeader?.full_name ?? '-'}</p>
           </div>
           <div>
             <p className="text-xs font-medium text-gray-400">Tipo de Destino</p>
             <p className="text-sm text-white">
-              {destinationType === 'collaborator' ? 'Colaborador (EPI/Inventário)' : 'Obra (Uso Coletivo)'}
+              {destinationType === 'collaborator' ? 'Colaborador (EPI/Inventario)' : 'obra jamaaw'}
             </p>
           </div>
           <div>
@@ -742,7 +741,7 @@ export function NewWithdrawalPage() {
             <p className="text-sm text-white">
               {destinationType === 'collaborator'
                 ? selectedCollaborator?.full_name ?? '-'
-                : selectedWorkSite?.name ?? '-'}
+                : selectedWorkSite?.name ?? DEFAULT_WORKSITE_NAME}
             </p>
           </div>
         </div>
@@ -782,17 +781,17 @@ export function NewWithdrawalPage() {
 
       {notes && (
         <Card variant="bordered" padding="lg">
-          <h3 className="mb-2 text-lg font-semibold text-white">Observações</h3>
+          <h3 className="mb-2 text-lg font-semibold text-white">Observacoes</h3>
           <p className="text-sm text-gray-300">{notes}</p>
         </Card>
       )}
 
       {photoPreview && (
         <Card variant="bordered" padding="lg">
-          <h3 className="mb-2 text-lg font-semibold text-white">Registro Fotográfico</h3>
+          <h3 className="mb-2 text-lg font-semibold text-white">Registro Fotografico</h3>
           <img
             src={photoPreview}
-            alt="Registro fotográfico"
+            alt="Registro fotografico"
             className="max-h-48 rounded-lg border border-gray-700"
           />
         </Card>
@@ -894,7 +893,7 @@ export function NewWithdrawalPage() {
             Voltar
           </Button>
           <Button variant="primary" onClick={handleNext}>
-            Próximo
+            Proximo
           </Button>
         </div>
       )}

@@ -1,7 +1,7 @@
 import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { Tables, TablesInsert, TablesUpdate } from '../../types/database'
 import { DEFAULT_IMAGE_UPLOAD_OPTIONS, imageFileToDataUrl } from '../../lib/utils'
-import { Alert, Button, Input, Select } from '../../components/ui'
+import { Alert, Button, Input, Modal, Select } from '../../components/ui'
 import { ItemVisual, itemLabelForKey, normalizeItemIconKey } from '../../components/items/ItemVisual'
 
 type StockItemRow = Tables<'stock_items'>
@@ -67,6 +67,9 @@ const ICON_OPTIONS = [
   { value: 'martelo', label: 'Martelo' },
 ]
 
+const ICON_SAMPLE_COUNT = 6
+const ICON_SAMPLE_OPTIONS = ICON_OPTIONS.slice(0, ICON_SAMPLE_COUNT)
+
 function initFormData(item: StockItemRow | null): StockItemFormData {
   if (!item) {
     return {
@@ -109,6 +112,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
     item?.svg_icon_key?.startsWith('data:image/') ? item.svg_icon_key : null
   )
   const [adjustmentMode, setAdjustmentMode] = useState<'add' | 'remove'>('add')
+  const [showIconLibrary, setShowIconLibrary] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [errors, setErrors] = useState<FormErrors>({})
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -154,6 +158,13 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
     }
+  }
+
+  const handleSelectIcon = (iconKey: string) => {
+    setPhotoPreview(null)
+    setUploadError(null)
+    setSvgIconKey(iconKey)
+    setShowIconLibrary(false)
   }
 
   const handleSubmit = async (event: FormEvent) => {
@@ -241,17 +252,13 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
             </p>
 
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-              {ICON_OPTIONS.map((option) => {
+              {ICON_SAMPLE_OPTIONS.map((option) => {
                 const active = !photoPreview && svgIconKey === option.value
                 return (
                   <button
                     key={option.value}
                     type="button"
-                    onClick={() => {
-                      setPhotoPreview(null)
-                      setUploadError(null)
-                      setSvgIconKey(option.value)
-                    }}
+                    onClick={() => handleSelectIcon(option.value)}
                     className={`group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition-all ${
                       active
                         ? 'border-orange-400/40 bg-orange-500/16 shadow-[0_0_0_1px_rgba(249,115,22,0.08)]'
@@ -270,6 +277,18 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                   </button>
                 )
               })}
+              <button
+                type="button"
+                onClick={() => setShowIconLibrary(true)}
+                className="group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/12 bg-white/4 px-3 py-3 text-center transition-all hover:border-orange-400/25 hover:bg-white/8"
+              >
+                <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-xl text-orange-200">
+                  +
+                </span>
+                <span className="text-[11px] font-medium leading-4 text-gray-300 group-hover:text-white">
+                  + icones
+                </span>
+              </button>
             </div>
           </div>
 
@@ -378,9 +397,9 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                   <button
                     type="button"
                     onClick={() => setAdjustmentMode('add')}
-                    className={`min-w-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    className={`flex min-h-[34px] items-center justify-center rounded-lg px-3 py-1.5 text-center text-xs font-medium transition-colors ${
                       adjustmentMode === 'add'
-                        ? 'bg-emerald-500/18 text-emerald-300'
+                        ? 'bg-emerald-500/18 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.16)]'
                         : 'text-gray-400 hover:text-white'
                     }`}
                   >
@@ -389,9 +408,9 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                   <button
                     type="button"
                     onClick={() => setAdjustmentMode('remove')}
-                    className={`min-w-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    className={`flex min-h-[34px] items-center justify-center rounded-lg px-3 py-1.5 text-center text-xs font-medium transition-colors ${
                       adjustmentMode === 'remove'
-                        ? 'bg-red-500/18 text-red-300'
+                        ? 'bg-red-500/18 text-red-300 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.16)]'
                         : 'text-gray-400 hover:text-white'
                     }`}
                   >
@@ -433,6 +452,42 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
           {isEditing ? 'Salvar' : 'Criar item'}
         </Button>
       </div>
+
+      <Modal
+        isOpen={showIconLibrary}
+        onClose={() => setShowIconLibrary(false)}
+        title="Biblioteca de icones"
+        size="lg"
+      >
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+          {ICON_OPTIONS.map((option) => {
+            const active = !photoPreview && svgIconKey === option.value
+
+            return (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => handleSelectIcon(option.value)}
+                className={`group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition-all ${
+                  active
+                    ? 'border-orange-400/40 bg-orange-500/16 shadow-[0_0_0_1px_rgba(249,115,22,0.08)]'
+                    : 'border-white/8 bg-white/4 hover:border-white/14 hover:bg-white/8'
+                }`}
+                title={option.label}
+              >
+                <ItemVisual iconKey={option.value} size={42} />
+                <span
+                  className={`line-clamp-2 min-h-[30px] max-w-full text-[11px] font-medium leading-4 ${
+                    active ? 'text-orange-100' : 'text-gray-400 group-hover:text-gray-200'
+                  }`}
+                >
+                  {option.label}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      </Modal>
     </form>
   )
 }

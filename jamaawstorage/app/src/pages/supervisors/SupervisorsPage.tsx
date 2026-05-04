@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Tables } from '../../types/database'
 import { supabase } from '../../lib/supabase'
-import { Alert, Badge, Button, Card, Input, Modal, Spinner } from '../../components/ui'
+import { Badge, Button, Card, Input, Modal, Spinner } from '../../components/ui'
 import { UsersIcon } from '../../components/icons'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
@@ -66,12 +66,17 @@ export function SupervisorsPage() {
   )
 
   const handleToggleActive = async (supervisor: Supervisor) => {
+    if (supervisor.is_active) {
+      setConfirmToggle(null)
+      return
+    }
+
     setTogglingId(supervisor.id)
 
     const { error: updateError } = await supabase
       .from('profiles')
       .update({
-        is_active: !supervisor.is_active,
+        is_active: true,
         updated_at: new Date().toISOString(),
       })
       .eq('id', supervisor.id)
@@ -85,7 +90,7 @@ export function SupervisorsPage() {
     setSupervisors((prev) =>
       prev.map((current) =>
         current.id === supervisor.id
-          ? { ...current, is_active: !current.is_active }
+          ? { ...current, is_active: true }
           : current
       )
     )
@@ -103,24 +108,6 @@ export function SupervisorsPage() {
           </p>
         </div>
       </div>
-
-      <Alert variant="info" title="Criacao por SQL">
-        Novas contas de supervisor estao desativadas no app por enquanto. Para criar supervisor, use o SQL do projeto diretamente no Supabase.
-      </Alert>
-
-      <Card variant="bordered" className="border-dashed border-white/10 bg-white/[0.03]">
-        <div className="flex items-start gap-3">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-orange-400/20 bg-orange-500/10 text-orange-300">
-            <UsersIcon size={20} />
-          </div>
-          <div className="space-y-1">
-            <p className="text-sm font-medium text-white">Fluxo temporario</p>
-            <p className="text-sm text-gray-400">
-              A listagem e a ativacao continuam funcionando aqui. A criacao ficou fora do app ate o endpoint ser refeito com seguranca.
-            </p>
-          </div>
-        </div>
-      </Card>
 
       <div className="max-w-md">
         <Input
@@ -144,9 +131,9 @@ export function SupervisorsPage() {
       )}
 
       {error && (
-        <Alert variant="danger" dismissible onDismiss={() => setError(null)}>
+        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
           {error}
-        </Alert>
+        </div>
       )}
 
       {loading ? (
@@ -193,16 +180,18 @@ export function SupervisorsPage() {
                   </p>
                 )}
 
-                <div className="flex justify-end border-t border-gray-800 pt-3">
-                  <Button
-                    variant={supervisor.is_active ? 'secondary' : 'primary'}
-                    size="sm"
-                    isLoading={togglingId === supervisor.id}
-                    onClick={() => setConfirmToggle(supervisor)}
-                  >
-                    {supervisor.is_active ? 'Desativar' : 'Reativar'}
-                  </Button>
-                </div>
+                {!supervisor.is_active && (
+                  <div className="flex justify-end border-t border-gray-800 pt-3">
+                    <Button
+                      variant="primary"
+                      size="sm"
+                      isLoading={togglingId === supervisor.id}
+                      onClick={() => setConfirmToggle(supervisor)}
+                    >
+                      Reativar
+                    </Button>
+                  </div>
+                )}
               </div>
             </Card>
           ))}
@@ -213,12 +202,12 @@ export function SupervisorsPage() {
         <Modal
           isOpen={true}
           onClose={() => setConfirmToggle(null)}
-          title={confirmToggle.is_active ? 'Desativar Supervisor' : 'Reativar Supervisor'}
+          title="Reativar Supervisor"
           size="sm"
         >
           <div className="flex flex-col gap-4">
             <p className="text-sm text-gray-300">
-              Tem certeza que deseja {confirmToggle.is_active ? 'desativar' : 'reativar'}{' '}
+              Tem certeza que deseja reativar{' '}
               <span className="font-medium text-white">{confirmToggle.full_name}</span>?
             </p>
             <div className="flex justify-end gap-3">
@@ -227,10 +216,10 @@ export function SupervisorsPage() {
               </Button>
               <Button
                 type="button"
-                variant={confirmToggle.is_active ? 'danger' : 'primary'}
+                variant="primary"
                 onClick={() => void handleToggleActive(confirmToggle)}
               >
-                {confirmToggle.is_active ? 'Desativar' : 'Reativar'}
+                Reativar
               </Button>
             </div>
           </div>
