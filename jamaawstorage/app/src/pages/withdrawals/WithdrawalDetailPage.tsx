@@ -28,7 +28,7 @@ const statusBadgeVariant: Record<WithdrawalStatus, 'success' | 'warning' | 'dang
 }
 
 const statusLabels: Record<WithdrawalStatus, string> = {
-  completed: 'Concluída',
+  completed: 'Concluida',
   approved: 'Aprovada',
   pending: 'Pendente',
   rejected: 'Rejeitada',
@@ -61,7 +61,7 @@ export function WithdrawalDetailPage() {
         if (cancelled) return
         setError(null)
         if (fetchError || !data) {
-          setError(fetchError?.message ?? 'Retirada não encontrada')
+          setError(fetchError?.message ?? 'Retirada nao encontrada')
         } else {
           setWithdrawal(data)
         }
@@ -106,12 +106,12 @@ export function WithdrawalDetailPage() {
     return (
       <div className="flex flex-col gap-4">
         <Button variant="ghost" onClick={() => navigate('/withdrawals')}>
-          ← Voltar para Retiradas
+          Voltar para Retiradas
         </Button>
         <EmptyState
           icon={<ClipboardIcon size={48} />}
-          title="Retirada não encontrada"
-          description={error ?? 'A retirada solicitada não foi encontrada.'}
+          title="Retirada nao encontrada"
+          description={error ?? 'A retirada solicitada nao foi encontrada.'}
         />
       </div>
     )
@@ -125,18 +125,16 @@ export function WithdrawalDetailPage() {
   const destinationLabel =
     withdrawal.destination_type === 'collaborator'
       ? withdrawal.collaborator
-        ? `${withdrawal.collaborator.full_name} — Inventário pessoal`
-        : 'Colaborador não informado'
-      : withdrawal.work_site
-        ? `${withdrawal.work_site.name} — Obra`
-        : 'Obra não informada'
+        ? `${withdrawal.collaborator.full_name} - Inventario pessoal`
+        : 'Colaborador nao informado'
+      : 'obra jamaaw'
 
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Button variant="ghost" onClick={() => navigate('/withdrawals')}>
-            ← Voltar
+            Voltar
           </Button>
           <div>
             <div className="flex items-center gap-3">
@@ -166,13 +164,13 @@ export function WithdrawalDetailPage() {
           <div>
             <p className="text-xs font-medium text-gray-400">Autorizado por</p>
             <p className="text-sm text-white">
-              {withdrawal.approved_by_profile?.full_name ?? 'Não informado'}
+              {withdrawal.approved_by_profile?.full_name ?? 'Nao informado'}
             </p>
           </div>
           <div>
             <p className="text-xs font-medium text-gray-400">Solicitado por</p>
             <p className="text-sm text-white">
-              {withdrawal.requested_by_person?.full_name ?? 'Não informado'}
+              {withdrawal.requested_by_person?.full_name ?? 'Nao informado'}
               {withdrawal.requested_by_person?.employee_id
                 ? ` (${withdrawal.requested_by_person.employee_id})`
                 : ''}
@@ -183,7 +181,7 @@ export function WithdrawalDetailPage() {
             <p className="text-sm text-white">{destinationLabel}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Observações</p>
+            <p className="text-xs font-medium text-gray-400">Observacoes</p>
             <p className="text-sm text-white">{withdrawal.notes ?? 'Nenhuma'}</p>
           </div>
         </div>
@@ -237,16 +235,16 @@ export function WithdrawalDetailPage() {
       <Card variant="bordered" padding="lg">
         <h3 className="mb-4 text-lg font-semibold text-white">
           <CameraIcon size={18} className="mr-2 inline-block" />
-          Registro Fotográfico
+          Registro Fotografico
         </h3>
         {withdrawal.photo_url ? (
           <img
             src={withdrawal.photo_url}
-            alt="Registro fotográfico"
+            alt="Registro fotografico"
             className="max-h-64 rounded-lg border border-gray-700"
           />
         ) : (
-          <p className="text-sm text-gray-400">Sem registro fotográfico</p>
+          <p className="text-sm text-gray-400">Sem registro fotografico</p>
         )}
       </Card>
 
@@ -256,7 +254,7 @@ export function WithdrawalDetailPage() {
           Assinaturas
           {bothSignaturesPresent && (
             <Badge variant="success" size="sm" className="ml-2">
-              ✓ Completas
+              OK Completas
             </Badge>
           )}
         </h3>
@@ -270,7 +268,7 @@ export function WithdrawalDetailPage() {
                 className="h-20 rounded border border-gray-700 bg-white p-1"
               />
             ) : (
-              <span className="text-xs text-gray-500">Não assinado</span>
+              <span className="text-xs text-gray-500">Nao assinado</span>
             )}
           </div>
           <div className="flex flex-col items-center gap-2">
@@ -282,7 +280,7 @@ export function WithdrawalDetailPage() {
                 className="h-20 rounded border border-gray-700 bg-white p-1"
               />
             ) : (
-              <span className="text-xs text-gray-500">Não assinado</span>
+              <span className="text-xs text-gray-500">Nao assinado</span>
             )}
           </div>
           <div className="flex flex-col items-center gap-2">
@@ -308,7 +306,7 @@ export function WithdrawalDetailPage() {
       >
         <div className="flex flex-col gap-4">
           <p className="text-sm text-gray-300">
-            Tem certeza que deseja cancelar esta retirada? O estoque será restaurado automaticamente.
+            Tem certeza que deseja cancelar esta retirada? O estoque sera restaurado automaticamente.
           </p>
           {cancelError && (
             <Alert variant="danger">{cancelError}</Alert>
@@ -319,7 +317,7 @@ export function WithdrawalDetailPage() {
               onClick={() => setShowCancelModal(false)}
               disabled={cancelling}
             >
-              Não
+              Nao
             </Button>
             <Button
               variant="danger"

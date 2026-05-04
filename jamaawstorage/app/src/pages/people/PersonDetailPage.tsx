@@ -45,6 +45,13 @@ interface CustomDateRange {
   to: string
 }
 
+function getJobTitleLabel(jobTitle: string | null): string {
+  if (!jobTitle) return '-'
+  if (jobTitle === 'cabista') return 'Cabista'
+  if (jobTitle === 'ajudante de cabista') return 'Ajudante de cabista'
+  return jobTitle
+}
+
 export function PersonDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
@@ -87,7 +94,7 @@ export function PersonDetailPage() {
     }
 
     if (!data) {
-      setError('Pessoa não encontrada')
+      setError('Pessoa nao encontrada')
       setLoading(false)
       return
     }
@@ -98,20 +105,21 @@ export function PersonDetailPage() {
       full_name: raw.full_name,
       employee_id: raw.employee_id,
       role: raw.role,
+      job_title: raw.job_title,
       sector: raw.sector,
       photo_url: raw.photo_url,
       is_active: raw.is_active,
       created_at: raw.created_at,
       updated_at: raw.updated_at,
-  inventory: (raw.person_inventories ?? []).map((inv) => ({
-    id: inv.id,
-    person_id: inv.person_id,
-    stock_item_id: inv.stock_item_id,
-    quantity: inv.quantity,
-    last_withdrawal_id: inv.last_withdrawal_id,
-    updated_at: inv.updated_at,
-    stock_items: inv.stock_items as Tables<'stock_items'>,
-  })),
+      inventory: (raw.person_inventories ?? []).map((inv) => ({
+        id: inv.id,
+        person_id: inv.person_id,
+        stock_item_id: inv.stock_item_id,
+        quantity: inv.quantity,
+        last_withdrawal_id: inv.last_withdrawal_id,
+        updated_at: inv.updated_at,
+        stock_items: inv.stock_items as Tables<'stock_items'>,
+      })),
     }
 
     setPerson(enriched)
@@ -270,10 +278,10 @@ export function PersonDetailPage() {
     if (w.destination_type === 'collaborator' && w.collaborator) {
       return w.collaborator.full_name
     }
-    if (w.destination_type === 'work_site' && w.work_site) {
-      return w.work_site.name
+    if (w.destination_type === 'work_site') {
+      return 'obra jamaaw'
     }
-    return '—'
+    return '-'
   }
 
   const getItemsSummary = (w: WithdrawalRow): string => {
@@ -294,7 +302,7 @@ export function PersonDetailPage() {
   const statusLabelMap: Record<string, string> = {
     pending: 'Pendente',
     approved: 'Aprovada',
-    completed: 'Concluída',
+    completed: 'Concluida',
     rejected: 'Rejeitada',
   }
 
@@ -320,7 +328,7 @@ export function PersonDetailPage() {
   if (!person) {
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-gray-400">Pessoa não encontrada.</p>
+        <p className="text-gray-400">Pessoa nao encontrada.</p>
         <Button variant="secondary" onClick={() => navigate('/people')}>
           Voltar para Colaboradores
         </Button>
@@ -337,7 +345,7 @@ export function PersonDetailPage() {
         { key: 'profile', label: 'Dados Cadastrais', icon: <UserIcon size={16} /> },
       ]
     : [
-        { key: 'inventory', label: 'Inventário Individual', icon: <PackageIcon size={16} /> },
+        { key: 'inventory', label: 'Inventario Individual', icon: <PackageIcon size={16} /> },
         { key: 'profile', label: 'Dados Cadastrais', icon: <UserIcon size={16} /> },
       ]
 
@@ -352,7 +360,7 @@ export function PersonDetailPage() {
     },
     {
       key: 'stock_items.code',
-      header: 'Código',
+      header: 'Codigo',
       render: (_value: unknown, row: PersonWithDetails['inventory'][0]) => (
         <span className="text-gray-400">{row.stock_items.name.substring(0, 3).toUpperCase()}-{row.stock_item_id.substring(0, 4)}</span>
       ),
@@ -361,7 +369,7 @@ export function PersonDetailPage() {
       key: 'stock_items.category',
       header: 'Categoria',
       render: (_value: unknown, row: PersonWithDetails['inventory'][0]) =>
-        row.stock_items.category ?? '—',
+        row.stock_items.category ?? '-',
     },
     {
       key: 'quantity',
@@ -374,7 +382,7 @@ export function PersonDetailPage() {
     },
     {
       key: 'updated_at',
-      header: 'Última Atualização',
+      header: 'Ultima Atualizacao',
       sortable: true,
       render: (value: unknown) => formatDate(value as string),
     },
@@ -383,7 +391,7 @@ export function PersonDetailPage() {
   const withdrawalColumns = [
     {
       key: 'code',
-      header: 'Código',
+      header: 'Codigo',
       sortable: true,
       render: (value: unknown) => (
         <span className="font-mono text-sm text-orange-400">{value as string}</span>
@@ -476,13 +484,13 @@ export function PersonDetailPage() {
               <h3 className="text-xl font-bold text-white">{person.full_name}</h3>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 {person.employee_id && (
-                  <span className="text-sm text-gray-400">Matrícula: {person.employee_id}</span>
+                  <span className="text-sm text-gray-400">Matricula: {person.employee_id}</span>
                 )}
                 <Badge variant={person.role === 'leader' ? 'primary' : 'info'} dot>
                   {person.role === 'leader' ? (
                     <>
                       <HelmetIcon size={12} className="mr-1 inline-block" />
-                      Líder
+                      Lider
                     </>
                   ) : (
                     <>
@@ -494,8 +502,15 @@ export function PersonDetailPage() {
                 <Badge variant={person.is_active ? 'success' : 'danger'} dot>
                   {person.is_active ? 'Ativo' : 'Inativo'}
                 </Badge>
+                {person.role !== 'leader' && person.job_title && (
+                  <span className="rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-sm text-gray-300">
+                    Funcao: {getJobTitleLabel(person.job_title)}
+                  </span>
+                )}
                 {person.sector && (
-                  <span className="text-sm text-gray-500">Setor: {person.sector}</span>
+                  <span className="rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-sm text-gray-300">
+                    Setor: {person.sector}
+                  </span>
                 )}
               </div>
             </div>
@@ -544,9 +559,9 @@ export function PersonDetailPage() {
           <h3 className="mb-4 text-lg font-semibold text-white">Dados Cadastrais</h3>
           <div className="grid gap-4 sm:grid-cols-2">
             <DetailField label="Nome Completo" value={person.full_name} />
-            <DetailField label="Matrícula" value={person.employee_id ?? '—'} />
-            <DetailField label="Cargo" value={person.role === 'leader' ? 'Líder' : 'Colaborador'} />
-            <DetailField label="Setor" value={person.sector ?? '—'} />
+            <DetailField label="Matricula" value={person.employee_id ?? '-'} />
+            <DetailField label="Cargo" value={person.role === 'leader' ? 'Lider' : 'Colaborador'} />
+            <DetailField label="Setor" value={person.sector ?? '-'} />
             <DetailField label="Status" value={person.is_active ? 'Ativo' : 'Inativo'} />
             <DetailField label="Criado em" value={formatDateTime(person.created_at)} />
             <DetailField label="Atualizado em" value={formatDateTime(person.updated_at)} />
@@ -557,7 +572,7 @@ export function PersonDetailPage() {
       {activeTab === 'inventory' && !isLeader && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Inventário Individual</h3>
+            <h3 className="text-lg font-semibold text-white">Inventario Individual</h3>
             <Button
               size="sm"
               leftIcon={<PackageIcon size={14} />}
@@ -572,7 +587,7 @@ export function PersonDetailPage() {
             data={person.inventory}
             keyExtractor={(row) => row.id}
             isLoading={false}
-            emptyMessage="Nenhum item no inventário desta pessoa"
+            emptyMessage="Nenhum item no inventario desta pessoa"
           />
         </div>
       )}
@@ -586,12 +601,12 @@ export function PersonDetailPage() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[120px]">
               <Select
-                label="Período"
+                label="Periodo"
                 value={datePeriod}
                 onChange={(e) => setDatePeriod(e.target.value as DatePeriod)}
                 options={[
-                  { value: 'week', label: 'Última semana' },
-                  { value: 'month', label: 'Último mês' },
+                  { value: 'week', label: 'Ultima semana' },
+                  { value: 'month', label: 'Ultimo mes' },
                   { value: 'custom', label: 'Personalizado' },
                 ]}
               />
@@ -599,7 +614,7 @@ export function PersonDetailPage() {
             {datePeriod === 'custom' && (
               <>
                 <Input
-                  label="Data início"
+                  label="Data inicio"
                   type="date"
                   value={customDateRange.from}
                   onChange={(e) =>
@@ -623,7 +638,7 @@ export function PersonDetailPage() {
             data={getFilteredWithdrawals}
             keyExtractor={(row) => row.id}
             isLoading={withdrawalsLoading}
-            emptyMessage="Nenhuma retirada encontrada no período selecionado"
+            emptyMessage="Nenhuma retirada encontrada no periodo selecionado"
             onRowClick={(row) => navigate(`/withdrawals/${row.id}`)}
           />
         </div>
@@ -638,12 +653,12 @@ export function PersonDetailPage() {
           <div className="flex flex-wrap items-end gap-3">
             <div className="min-w-[120px]">
               <Select
-                label="Período"
+                label="Periodo"
                 value={datePeriod}
                 onChange={(e) => setDatePeriod(e.target.value as DatePeriod)}
                 options={[
-                  { value: 'week', label: 'Última semana' },
-                  { value: 'month', label: 'Último mês' },
+                  { value: 'week', label: 'Ultima semana' },
+                  { value: 'month', label: 'Ultimo mes' },
                   { value: 'custom', label: 'Personalizado' },
                 ]}
               />
@@ -651,7 +666,7 @@ export function PersonDetailPage() {
             {datePeriod === 'custom' && (
               <>
                 <Input
-                  label="Data início"
+                  label="Data inicio"
                   type="date"
                   value={customDateRange.from}
                   onChange={(e) =>
@@ -675,7 +690,7 @@ export function PersonDetailPage() {
               <div className="flex flex-col items-center justify-center py-8 text-center">
                 <ChartIcon size={48} className="mb-3 text-gray-600" />
                 <p className="text-sm text-gray-400">
-                  Nenhum dado de consumo para o período selecionado.
+                  Nenhum dado de consumo para o periodo selecionado.
                 </p>
               </div>
             </Card>
@@ -755,7 +770,7 @@ export function PersonDetailPage() {
       <Modal
         isOpen={showInventoryModal}
         onClose={() => setShowInventoryModal(false)}
-        title="Adicionar Item ao Inventário"
+        title="Adicionar Item ao Inventario"
         size="md"
       >
         <PersonInventoryModal
@@ -783,6 +798,7 @@ interface RawPersonDetailRow {
   full_name: string
   employee_id: string | null
   role: AppRole
+  job_title: string | null
   sector: string | null
   photo_url: string | null
   is_active: boolean

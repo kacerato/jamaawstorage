@@ -144,6 +144,7 @@ export interface Database {
           full_name: string
           employee_id: string | null
           role: AppRole
+          job_title: string | null
           sector: string | null
           photo_url: string | null
           is_active: boolean
@@ -155,6 +156,7 @@ export interface Database {
           full_name: string
           employee_id?: string | null
           role?: AppRole
+          job_title?: string | null
           sector?: string | null
           photo_url?: string | null
           is_active?: boolean
@@ -167,6 +169,7 @@ export interface Database {
           full_name?: string
           employee_id?: string | null
           role?: AppRole
+          job_title?: string | null
           sector?: string | null
           photo_url?: string | null
           is_active?: boolean

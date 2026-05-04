@@ -10,7 +10,6 @@ export function AppLayout() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const {
     notifications,
-    lowStockItems,
     unreadCount,
     markAllAsRead,
   } = useNotifications()
@@ -45,7 +44,6 @@ export function AppLayout() {
         <Header
           onToggleSidebar={toggleSidebar}
           unreadCount={unreadCount}
-          lowStockCount={lowStockItems.length}
           notifications={notifications}
           onNotificationsOpen={markAllAsRead}
         />

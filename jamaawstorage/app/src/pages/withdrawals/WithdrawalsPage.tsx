@@ -21,7 +21,7 @@ const withdrawalsPageCache: {
 
 const statusOptions = [
   { value: '', label: 'Todas' },
-  { value: 'completed', label: 'Concluídas' },
+  { value: 'completed', label: 'Concluidas' },
   { value: 'approved', label: 'Aprovadas' },
   { value: 'pending', label: 'Pendentes' },
   { value: 'rejected', label: 'Rejeitadas/Canceladas' },
@@ -35,7 +35,7 @@ const statusBadgeVariant: Record<WithdrawalStatus, 'success' | 'warning' | 'dang
 }
 
 const statusLabels: Record<WithdrawalStatus, string> = {
-  completed: 'Concluída',
+  completed: 'Concluida',
   approved: 'Aprovada',
   pending: 'Pendente',
   rejected: 'Rejeitada',
@@ -155,7 +155,7 @@ export function WithdrawalsPage() {
 
   const leaderOptions = useMemo(
     () => [
-      { value: '', label: 'Todos os líderes' },
+      { value: '', label: 'Todos os lideres' },
       ...leaders.map((leader) => ({
         value: leader.id,
         label: leader.full_name,
@@ -172,7 +172,7 @@ export function WithdrawalsPage() {
   const columns = [
     {
       key: 'code' as const,
-      header: 'Código',
+      header: 'Codigo',
       sortable: true,
       render: (_value: unknown, row: WithdrawalRowForTable) => (
         <span className="font-mono font-medium text-orange-400">
@@ -182,7 +182,7 @@ export function WithdrawalsPage() {
     },
     {
       key: 'requested_by' as const,
-      header: 'Líder Solicitante',
+      header: 'Lider Solicitante',
       render: (_value: unknown, row: WithdrawalRowForTable) => {
         const withdrawal = row as unknown as WithdrawalListItem
         return withdrawal.requested_by_person?.full_name ?? '-'
@@ -196,7 +196,7 @@ export function WithdrawalsPage() {
         if (withdrawal.destination_type === 'collaborator') {
           return withdrawal.collaborator?.full_name ?? 'Colaborador'
         }
-        return withdrawal.work_site?.name ?? 'Obra'
+        return 'obra jamaaw'
       },
     },
     {
@@ -236,9 +236,9 @@ export function WithdrawalsPage() {
         const withdrawal = row as unknown as WithdrawalListItem
         const both = !!withdrawal.supervisor_signature && !!withdrawal.requester_signature
         return both ? (
-          <span className="text-emerald-400">✓</span>
+          <span className="text-emerald-400">OK</span>
         ) : (
-          <span className="text-gray-500">—</span>
+          <span className="text-gray-500">-</span>
         )
       },
       className: 'text-center',
@@ -266,7 +266,7 @@ export function WithdrawalsPage() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-48">
             <Input
-              placeholder="Buscar por código..."
+              placeholder="Buscar por codigo..."
               value={searchCode}
               onChange={(e) => {
                 const nextValue = e.target.value
@@ -296,7 +296,7 @@ export function WithdrawalsPage() {
               options={leaderOptions}
               value={leaderFilter}
               onChange={(e) => setLeaderFilter(e.target.value)}
-              placeholder="Líder"
+              placeholder="Lider"
             />
           </div>
           <div className="w-40">
@@ -310,7 +310,7 @@ export function WithdrawalsPage() {
           <div className="w-40">
             <Input
               type="date"
-              placeholder="Até"
+              placeholder="Ate"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />

@@ -14,6 +14,7 @@ interface PersonFormProps {
 interface FormState {
   full_name: string
   role: AppRole
+  job_title: string
   sector: string
   photo_url: string
 }
@@ -21,8 +22,14 @@ interface FormState {
 interface FormErrors {
   full_name?: string
   role?: string
+  job_title?: string
   form?: string
 }
+
+const JOB_TITLE_OPTIONS = [
+  { value: 'cabista', label: 'Cabista' },
+  { value: 'ajudante de cabista', label: 'Ajudante de cabista' },
+]
 
 function getAutoEmployeeIdLabel(role: AppRole): string {
   return role === 'leader' ? 'JMW-001' : 'JMW-001'
@@ -36,6 +43,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
   const [form, setForm] = useState<FormState>({
     full_name: '',
     role: 'collaborator',
+    job_title: '',
     sector: '',
     photo_url: '',
   })
@@ -48,6 +56,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
     setForm({
       full_name: person.full_name,
       role: person.role,
+      job_title: person.job_title ?? '',
       sector: person.sector ?? '',
       photo_url: person.photo_url ?? '',
     })
@@ -56,6 +65,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
 
   const validate = (): boolean => {
     const next: FormErrors = {}
+    if (form.role === 'collaborator' && !form.job_title) next.job_title = 'Funcao obrigatoria'
     if (!form.full_name.trim()) next.full_name = 'Nome completo é obrigatório'
     if (!form.role) next.role = 'Cargo é obrigatório'
     setErrors(next)
@@ -103,6 +113,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
         const updateData: TablesUpdate<'people'> = {
           full_name: form.full_name.trim(),
           role: form.role,
+          job_title: form.role === 'collaborator' ? form.job_title : null,
           sector: form.sector.trim() || null,
           photo_url: form.photo_url.trim() || null,
           updated_at: new Date().toISOString(),
@@ -121,6 +132,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
         const insertData: TablesInsert<'people'> = {
           full_name: form.full_name.trim(),
           role: form.role,
+          job_title: form.role === 'collaborator' ? form.job_title : null,
           sector: form.sector.trim() || null,
           photo_url: form.photo_url.trim() || null,
           is_active: true,
@@ -223,11 +235,29 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
       <Select
         label="Cargo"
         value={form.role}
-        onChange={(event) => setForm((prev) => ({ ...prev, role: event.target.value as AppRole }))}
+        onChange={(event) =>
+          setForm((prev) => ({
+            ...prev,
+            role: event.target.value as AppRole,
+            job_title: event.target.value === 'leader' ? '' : prev.job_title,
+          }))
+        }
         options={roleOptions}
         error={errors.role}
         required
       />
+
+      {form.role === 'collaborator' && (
+        <Select
+          label="Funcao"
+          value={form.job_title}
+          onChange={(event) => setForm((prev) => ({ ...prev, job_title: event.target.value }))}
+          options={JOB_TITLE_OPTIONS}
+          error={errors.job_title}
+          placeholder="Selecione a funcao"
+          required
+        />
+      )}
 
       <Input
         label="Setor / Obra padrão"

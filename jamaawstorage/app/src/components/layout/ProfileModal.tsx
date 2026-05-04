@@ -80,7 +80,7 @@ export function ProfileModal({ profile, onClose }: ProfileModalProps) {
         aria-modal="true"
         aria-label="Perfil do supervisor"
       >
-        {/* Card / Crachá */}
+        {/* Card / Cracha */}
         <div className="profile-modal-card" style={styles.card}>
           {/* Close button */}
           <button
@@ -130,7 +130,7 @@ export function ProfileModal({ profile, onClose }: ProfileModalProps) {
                   <circle cx="7" cy="9" r="1" fill="currentColor" />
                   <circle cx="7" cy="12" r="1" fill="currentColor" />
                 </svg>
-                <span style={styles.detailText}>Matrícula: {profile.employee_id}</span>
+                <span style={styles.detailText}>Matricula: {profile.employee_id}</span>
               </div>
             )}
             <div style={styles.detailRow}>
@@ -183,7 +183,7 @@ export function ProfileModal({ profile, onClose }: ProfileModalProps) {
   )
 }
 
-// ─── Styles ────────────────────────────────────────────────────────────────────
+// Styles
 
 const styles = {
   overlay: {
@@ -213,14 +213,14 @@ const styles = {
   },
   closeBtn: {
     position: 'absolute' as const,
-    top: 10,
-    right: 10,
-    background: 'transparent',
-    border: 'none',
+    top: 14,
+    right: 14,
+    background: 'rgba(15, 15, 15, 0.72)',
+    border: '1px solid rgba(255,255,255,0.08)',
     color: 'rgba(255,255,255,0.35)',
     cursor: 'pointer',
-    width: 32,
-    height: 32,
+    width: 34,
+    height: 34,
     padding: 0,
     display: 'flex',
     alignItems: 'center',

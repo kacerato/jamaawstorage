@@ -38,17 +38,17 @@ type TabKey =
   | 'leader'
 
 const TABS: { key: TabKey; label: string }[] = [
-  { key: 'movements', label: 'Movimentações por Período' },
-  { key: 'inventory', label: 'Inventário de Colaboradores' },
-  { key: 'abc', label: 'Curva ABC de Saída' },
-  { key: 'lowstock', label: 'Itens Abaixo do Mínimo' },
-  { key: 'leader', label: 'Consumo por Líder' },
+  { key: 'movements', label: 'Movimentacoes por Periodo' },
+  { key: 'inventory', label: 'Inventario de Colaboradores' },
+  { key: 'abc', label: 'Curva ABC de Saida' },
+  { key: 'lowstock', label: 'Itens Abaixo do Minimo' },
+  { key: 'leader', label: 'Consumo por Lider' },
 ]
 
 const PERIOD_PRESETS: { value: ReportPeriod; label: string }[] = [
-  { value: 'week', label: 'Última Semana' },
-  { value: 'month', label: 'Último Mês' },
-  { value: 'quarter', label: 'Últimos 3 Meses' },
+  { value: 'week', label: 'Ultima Semana' },
+  { value: 'month', label: 'Ultimo Mes' },
+  { value: 'quarter', label: 'Ultimos 3 Meses' },
   { value: 'custom', label: 'Customizado' },
 ]
 
@@ -106,11 +106,16 @@ interface LeaderConsumptionItem {
   quantity: number
 }
 
+const JOB_TITLE_FILTER_OPTIONS = [
+  { value: '', label: 'Todas as funcoes' },
+  { value: 'cabista', label: 'Cabista' },
+  { value: 'ajudante de cabista', label: 'Ajudante de cabista' },
+]
+
 const reportsCache = {
   movements: {
     withdrawals: [] as WithdrawalWithItems[],
     leaders: [] as PersonRow[],
-    collaborators: [] as PersonRow[],
     worksites: [] as WorkSiteRow[],
     stockItems: [] as StockItemRow[],
   },
@@ -168,9 +173,9 @@ export function ReportsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-2xl font-bold text-white">Relatórios</h2>
+        <h2 className="text-2xl font-bold text-white">Relatorios</h2>
         <p className="mt-1 text-sm text-gray-400">
-          Relatórios de retiradas, consumo e estoque
+          Relatorios de retiradas, consumo e estoque
         </p>
       </div>
 
@@ -204,7 +209,6 @@ export function ReportsPage() {
 function MovementsTab() {
   const [withdrawals, setWithdrawals] = useState<WithdrawalWithItems[]>(reportsCache.movements.withdrawals)
   const [leaders, setLeaders] = useState<PersonRow[]>(reportsCache.movements.leaders)
-  const [collaborators, setCollaborators] = useState<PersonRow[]>(reportsCache.movements.collaborators)
   const [worksites, setWorksites] = useState<WorkSiteRow[]>(reportsCache.movements.worksites)
   const [stockItems, setStockItems] = useState<StockItemRow[]>(reportsCache.movements.stockItems)
   const [loading, setLoading] = useState(reportsCache.movements.withdrawals.length === 0)
@@ -213,15 +217,14 @@ function MovementsTab() {
   const [dateFrom, setDateFrom] = useState<string>('')
   const [dateTo, setDateTo] = useState<string>('')
   const [leaderFilter, setLeaderFilter] = useState<string>('')
-  const [collabFilter, setCollabFilter] = useState<string>('')
+  const [jobTitleFilter, setJobTitleFilter] = useState<string>('')
   const [worksiteFilter, setWorksiteFilter] = useState<string>('')
   const [itemFilter, setItemFilter] = useState<string>('')
 
   useEffect(() => {
     async function fetchFilters() {
-      const [leadersRes, collabsRes, worksitesRes, itemsRes] = await Promise.all([
+      const [leadersRes, worksitesRes, itemsRes] = await Promise.all([
         supabase.from('people').select('*').eq('is_active', true).eq('role', 'leader').order('full_name'),
-        supabase.from('people').select('*').eq('is_active', true).eq('role', 'collaborator').order('full_name'),
         supabase.from('work_sites').select('*').eq('is_active', true).order('name'),
         supabase.from('stock_items').select('*').order('name'),
       ])
@@ -229,10 +232,6 @@ function MovementsTab() {
       if (leadersRes.data) {
         reportsCache.movements.leaders = leadersRes.data as PersonRow[]
         setLeaders(reportsCache.movements.leaders)
-      }
-      if (collabsRes.data) {
-        reportsCache.movements.collaborators = collabsRes.data as PersonRow[]
-        setCollaborators(reportsCache.movements.collaborators)
       }
       if (worksitesRes.data) {
         reportsCache.movements.worksites = worksitesRes.data as WorkSiteRow[]
@@ -269,9 +268,6 @@ function MovementsTab() {
     if (leaderFilter) {
       query = query.eq('requested_by', leaderFilter)
     }
-    if (collabFilter) {
-      query = query.eq('collaborator_id', collabFilter)
-    }
     if (worksiteFilter) {
       query = query.eq('work_site_id', worksiteFilter)
     }
@@ -290,11 +286,15 @@ function MovementsTab() {
         )
       }
 
+      if (jobTitleFilter) {
+        results = results.filter((w) => w.collaborator?.job_title === jobTitleFilter)
+      }
+
       reportsCache.movements.withdrawals = results
       setWithdrawals(results)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, leaderFilter, collabFilter, worksiteFilter, itemFilter])
+  }, [dateFrom, dateTo, leaderFilter, jobTitleFilter, worksiteFilter, itemFilter])
 
   useEffect(() => {
     const timeout = setTimeout(() => {
@@ -305,24 +305,16 @@ function MovementsTab() {
 
   const leaderOptions = useMemo(
     () => [
-      { value: '', label: 'Todos os líderes' },
+      { value: '', label: 'Todos os lideres' },
       ...leaders.map((l) => ({ value: l.id, label: l.full_name })),
     ],
     [leaders],
   )
 
-  const collabOptions = useMemo(
-    () => [
-      { value: '', label: 'Todos os colaboradores' },
-      ...collaborators.map((c) => ({ value: c.id, label: c.full_name })),
-    ],
-    [collaborators],
-  )
-
   const worksiteOptions = useMemo(
     () => [
-      { value: '', label: 'Todas as obras' },
-      ...worksites.map((w) => ({ value: w.id, label: w.name })),
+      { value: '', label: 'obra jamaaw' },
+      ...worksites.map((w) => ({ value: w.id, label: 'obra jamaaw' })),
     ],
     [worksites],
   )
@@ -353,7 +345,7 @@ function MovementsTab() {
       },
       {
         key: 'code' as const,
-        header: 'Código',
+        header: 'Codigo',
         sortable: true,
         render: (_v: unknown, row: WithdrawalRowForTable) => (
           <span className="font-mono font-medium text-orange-400">
@@ -363,7 +355,7 @@ function MovementsTab() {
       },
       {
         key: 'requested_by' as const,
-        header: 'Líder',
+        header: 'Lider',
         render: (_v: unknown, row: WithdrawalRowForTable) =>
           (row as unknown as WithdrawalWithItems).requested_by_person?.full_name ?? '-',
       },
@@ -375,7 +367,7 @@ function MovementsTab() {
           if (w.destination_type === 'collaborator') {
             return w.collaborator?.full_name ?? 'Colaborador'
           }
-          return w.work_site?.name ?? 'Obra'
+          return 'obra jamaaw'
         },
       },
       {
@@ -411,12 +403,12 @@ function MovementsTab() {
   const handleExportCSV = () => {
     const rows = withdrawals.map((w) => ({
       Data: formatDateTime(w.created_at),
-      Código: w.code,
-      Líder: w.requested_by_person?.full_name ?? '',
+      Codigo: w.code,
+      Lider: w.requested_by_person?.full_name ?? '',
       Destino:
         w.destination_type === 'collaborator'
           ? w.collaborator?.full_name ?? 'Colaborador'
-          : w.work_site?.name ?? 'Obra',
+          : 'obra jamaaw',
       Itens: w.withdrawal_items
         .map((wi) => `${wi.stock_items?.name ?? '-'} (${wi.quantity} ${wi.unit})`)
         .join(', '),
@@ -440,14 +432,14 @@ function MovementsTab() {
           <div className="w-40">
             <Input
               type="date"
-              label="Até"
+              label="Ate"
               value={dateTo}
               onChange={(e) => setDateTo(e.target.value)}
             />
           </div>
           <div className="w-52">
             <Select
-              label="Líder"
+              label="Lider"
               options={leaderOptions}
               value={leaderFilter}
               onChange={(e) => setLeaderFilter(e.target.value)}
@@ -455,10 +447,10 @@ function MovementsTab() {
           </div>
           <div className="w-52">
             <Select
-              label="Colaborador"
-              options={collabOptions}
-              value={collabFilter}
-              onChange={(e) => setCollabFilter(e.target.value)}
+              label="Funcao"
+              options={JOB_TITLE_FILTER_OPTIONS}
+              value={jobTitleFilter}
+              onChange={(e) => setJobTitleFilter(e.target.value)}
             />
           </div>
           <div className="w-48">
@@ -485,7 +477,7 @@ function MovementsTab() {
                 setDateFrom('')
                 setDateTo('')
                 setLeaderFilter('')
-                setCollabFilter('')
+                setJobTitleFilter('')
                 setWorksiteFilter('')
                 setItemFilter('')
               }}
@@ -515,7 +507,7 @@ function MovementsTab() {
         data={tableData}
         keyExtractor={(row) => (row as unknown as WithdrawalWithItems).id}
         isLoading={loading}
-        emptyMessage="Nenhuma movimentação encontrada para os filtros aplicados"
+        emptyMessage="Nenhuma movimentacao encontrada para os filtros aplicados"
       />
     </div>
   )
@@ -601,7 +593,7 @@ function InventoryTab() {
       },
       {
         key: 'employee_id' as const,
-        header: 'Matrícula',
+        header: 'Matricula',
         sortable: true,
         render: (value: unknown) => (value as string | null) ?? '-',
       },
@@ -613,7 +605,7 @@ function InventoryTab() {
       },
       {
         key: 'person_inventories' as const,
-        header: 'Itens no Inventário',
+        header: 'Itens no Inventario',
         render: (_v: unknown, row: CollabRowForTable) => {
           const c = row as unknown as CollaboratorWithInventory
           const inventories = c.person_inventories ?? []
@@ -646,7 +638,7 @@ function InventoryTab() {
       if (invs.length === 0) {
         rows.push({
           Colaborador: c.full_name,
-          Matrícula: c.employee_id ?? '',
+          Matricula: c.employee_id ?? '',
           Setor: c.sector ?? '',
           Item: '-',
           Quantidade: 0,
@@ -655,7 +647,7 @@ function InventoryTab() {
         for (const inv of invs) {
           rows.push({
             Colaborador: c.full_name,
-            Matrícula: c.employee_id ?? '',
+            Matricula: c.employee_id ?? '',
             Setor: c.sector ?? '',
             Item: inv.stock_items?.name ?? '-',
             Quantidade: inv.quantity,
@@ -670,7 +662,7 @@ function InventoryTab() {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <Spinner size="lg" />
-        <p className="mt-4 text-sm text-gray-400">Carregando inventário...</p>
+          <p className="mt-4 text-sm text-gray-400">Carregando inventario...</p>
       </div>
     )
   }
@@ -684,7 +676,7 @@ function InventoryTab() {
       <EmptyState
         icon={<UsersIcon size={48} />}
         title="Nenhum colaborador ativo"
-        description="Não há colaboradores ativos cadastrados no sistema"
+          description="Nao ha colaboradores ativos cadastrados no sistema"
       />
     )
   }
@@ -897,7 +889,7 @@ function AbcCurveTab() {
         key: 'totalQuantity' as const,
         header: 'Qtd Total',
         sortable: true,
-        className: 'text-right',
+        className: 'text-right font-mono tabular-nums',
         render: (value: unknown) => (
           <span className="font-medium text-white">{value as number}</span>
         ),
@@ -906,14 +898,14 @@ function AbcCurveTab() {
         key: 'percentage' as const,
         header: '%',
         sortable: true,
-        className: 'text-right',
+        className: 'text-right font-mono tabular-nums',
         render: (value: unknown) => `${(value as number).toFixed(2)}%`,
       },
       {
         key: 'cumulativePercentage' as const,
         header: '% Acum.',
         sortable: true,
-        className: 'text-right',
+        className: 'text-right font-mono tabular-nums',
         render: (value: unknown) => `${(value as number).toFixed(2)}%`,
       },
       {
@@ -939,7 +931,7 @@ function AbcCurveTab() {
       'Qtd Total': item.totalQuantity,
       Porcentagem: `${item.percentage.toFixed(2)}%`,
       'Porcentagem Acumulada': `${item.cumulativePercentage.toFixed(2)}%`,
-      Classificação: item.classification,
+      Classificacao: item.classification,
     }))
     exportToCSV(rows, 'curva-abc-saida.csv')
   }
@@ -950,7 +942,7 @@ function AbcCurveTab() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-44">
             <Select
-              label="Período"
+              label="Periodo"
               options={PERIOD_PRESETS}
               value={period}
               onChange={(e) => setPeriod(e.target.value as ReportPeriod)}
@@ -969,7 +961,7 @@ function AbcCurveTab() {
               <div className="w-40">
                 <Input
                   type="date"
-                  label="Até"
+                  label="Ate"
                   value={customTo}
                   onChange={(e) => setCustomTo(e.target.value)}
                 />
@@ -1007,7 +999,7 @@ function AbcCurveTab() {
         <EmptyState
           icon={<ChartIcon size={48} />}
           title="Sem dados"
-          description="Nenhuma retirada encontrada no período selecionado"
+          description="Nenhuma retirada encontrada no periodo selecionado"
         />
       ) : (
         <>
@@ -1137,7 +1129,7 @@ function LowStockTab() {
           return (
             <span
               className={cn(
-                'font-medium',
+                'inline-block w-[88px] text-right font-medium tabular-nums',
                 item.severity === 'critical' ? 'text-red-400' : 'text-orange-400',
               )}
             >
@@ -1148,22 +1140,22 @@ function LowStockTab() {
       },
       {
         key: 'minimum_quantity' as const,
-        header: 'Qtd Mínima',
+        header: 'Qtd Minima',
         className: 'text-right',
         render: (value: unknown) => (
-          <span className="text-gray-300">{value as number}</span>
+          <span className="inline-block w-[88px] text-right text-gray-300 tabular-nums">{value as number}</span>
         ),
       },
       {
         key: 'deficit' as const,
-        header: 'Déficit',
+        header: 'Deficit',
         className: 'text-right',
         render: (_v: unknown, row: LowStockRowForTable) => {
           const item = row as unknown as LowStockItem
           return (
             <span
               className={cn(
-                'font-medium',
+                'inline-block w-[88px] text-right font-medium tabular-nums',
                 item.severity === 'critical' ? 'text-red-400' : 'text-orange-400',
               )}
             >
@@ -1179,7 +1171,7 @@ function LowStockTab() {
           const item = row as unknown as LowStockItem
           return (
             <Badge variant={item.severity === 'critical' ? 'danger' : 'warning'} dot size="sm">
-              {item.severity === 'critical' ? 'Crítico' : 'Atenção'}
+              {item.severity === 'critical' ? 'Critico' : 'Atencao'}
             </Badge>
           )
         },
@@ -1193,9 +1185,9 @@ function LowStockTab() {
       Item: item.name,
       Categoria: item.category ?? '',
       'Qtd Atual': item.current_quantity,
-      'Qtd Mínima': item.minimum_quantity,
-      Déficit: item.deficit,
-      Severidade: item.severity === 'critical' ? 'Crítico' : 'Atenção',
+      'Qtd Minima': item.minimum_quantity,
+      Deficit: item.deficit,
+      Severidade: item.severity === 'critical' ? 'Critico' : 'Atencao',
     }))
     exportToCSV(rows, 'itens-abaixo-minimo.csv')
   }
@@ -1217,8 +1209,8 @@ function LowStockTab() {
     return (
       <EmptyState
         icon={<PackageIcon size={48} />}
-        title="Nenhum item abaixo do mínimo"
-        description="Todos os itens estão com estoque adequado"
+        title="Nenhum item abaixo do minimo"
+        description="Todos os itens estao com estoque adequado"
       />
     )
   }
@@ -1226,8 +1218,8 @@ function LowStockTab() {
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
-        <Alert variant="warning" title="Itens com estoque abaixo do mínimo" className="flex-1">
-          {lowStockItems.length} item(ns) encontrados abaixo da quantidade mínima
+        <Alert variant="warning" title="Itens com estoque abaixo do minimo" className="flex-1">
+          {lowStockItems.length} item(ns) encontrados abaixo da quantidade minima
         </Alert>
         <div className="ml-4">
           <Button variant="outline" size="sm" onClick={handleExportCSV}>
@@ -1236,16 +1228,11 @@ function LowStockTab() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <StatCard
-          title="Total Abaixo do Mínimo"
+          title="Total Abaixo do Minimo"
           value={lowStockItems.length}
           icon={<AlertIcon size={20} />}
-          variant="danger"
-        />
-        <StatCard
-          title="Críticos (Qtd = 0)"
-          value={lowStockItems.filter((i) => i.severity === 'critical').length}
           variant="danger"
         />
       </div>
@@ -1255,7 +1242,7 @@ function LowStockTab() {
         data={tableData}
         keyExtractor={(row) => (row as unknown as LowStockItem).id}
         isLoading={false}
-        emptyMessage="Nenhum item abaixo do mínimo"
+        emptyMessage="Nenhum item abaixo do minimo"
       />
     </div>
   )
@@ -1292,7 +1279,7 @@ function LeaderConsumptionTab() {
 
   const leaderOptions = useMemo(
     () => [
-      { value: '', label: 'Selecione um líder' },
+      { value: '', label: 'Selecione um lider' },
       ...leaders.map((l) => ({ value: l.id, label: l.full_name })),
     ],
     [leaders],
@@ -1404,7 +1391,7 @@ function LeaderConsumptionTab() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-64">
             <Select
-              label="Líder"
+              label="Lider"
               options={leaderOptions}
               value={selectedLeader}
               onChange={(e) => setSelectedLeader(e.target.value)}
@@ -1412,7 +1399,7 @@ function LeaderConsumptionTab() {
           </div>
           <div className="w-44">
             <Select
-              label="Período"
+              label="Periodo"
               options={PERIOD_PRESETS}
               value={period}
               onChange={(e) => setPeriod(e.target.value as ReportPeriod)}
@@ -1431,7 +1418,7 @@ function LeaderConsumptionTab() {
               <div className="w-40">
                 <Input
                   type="date"
-                  label="Até"
+                  label="Ate"
                   value={customTo}
                   onChange={(e) => setCustomTo(e.target.value)}
                 />
@@ -1463,8 +1450,8 @@ function LeaderConsumptionTab() {
       {!selectedLeader ? (
         <EmptyState
           icon={<UserIcon size={48} />}
-          title="Selecione um líder"
-          description="Escolha um líder para visualizar o consumo"
+          title="Selecione um lider"
+          description="Escolha um lider para visualizar o consumo"
         />
       ) : loading ? (
         <div className="flex flex-col items-center justify-center py-12">
@@ -1475,7 +1462,7 @@ function LeaderConsumptionTab() {
         <EmptyState
           icon={<ChartIcon size={48} />}
           title="Sem dados"
-          description="Nenhuma retirada encontrada para este líder no período selecionado"
+          description="Nenhuma retirada encontrada para este lider no periodo selecionado"
         />
       ) : (
         <>
@@ -1494,7 +1481,7 @@ function LeaderConsumptionTab() {
 
           <Card variant="bordered" padding="md">
             <h3 className="mb-4 text-sm font-semibold text-gray-300">
-              Itens mais retirados pelo líder
+              Itens mais retirados pelo lider
             </h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">

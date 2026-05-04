@@ -21,25 +21,23 @@ interface SearchAction {
 
 const routeTitles: RouteTitle[] = [
   { path: '/', title: 'Painel de Controle' },
-  { path: '/stock', title: 'Gestão de Estoque' },
-  { path: '/people', title: 'Gestão de Colaboradores' },
+  { path: '/stock', title: 'Gestao de Estoque' },
+  { path: '/people', title: 'Gestao de Colaboradores' },
   { path: '/withdrawals', title: 'Retiradas' },
-  { path: '/worksites', title: 'Obras' },
-  { path: '/reports', title: 'Relatórios' },
+  { path: '/reports', title: 'Relatorios' },
   { path: '/audit', title: 'Auditoria' },
   { path: '/supervisors', title: 'Supervisores' },
   { path: '/profile', title: 'Perfil' },
 ]
 
 const searchActions: SearchAction[] = [
-  { label: 'Painel de Controle', description: 'Visão geral do sistema', path: '/' },
+  { label: 'Painel de Controle', description: 'Visao geral do sistema', path: '/' },
   { label: 'Estoque', description: 'Itens do almoxarifado', path: '/stock' },
   { label: 'Kits', description: 'Kits dentro do estoque', path: '/stock?tab=kits' },
   { label: 'Nova Retirada', description: 'Criar uma retirada', path: '/withdrawals/new' },
   { label: 'Retiradas', description: 'Listagem de retiradas', path: '/withdrawals' },
-  { label: 'Colaboradores', description: 'Gestão de colaboradores', path: '/people' },
-  { label: 'Obras', description: 'Locais de destino', path: '/worksites' },
-  { label: 'Relatórios', description: 'Análises e indicadores', path: '/reports' },
+  { label: 'Colaboradores', description: 'Gestao de colaboradores', path: '/people' },
+  { label: 'Relatorios', description: 'Analises e indicadores', path: '/reports' },
   { label: 'Supervisores', description: 'Contas supervisoras', path: '/supervisors' },
   { label: 'Perfil', description: 'Dados do supervisor', path: '/profile' },
 ]
@@ -90,7 +88,7 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
   const labelForType = (type: NotificationItem['type']) => {
     switch (type) {
       case 'stock_critical':
-        return 'Crítico'
+        return 'Critico'
       case 'stock_low':
         return 'Alerta'
       case 'withdrawal_pending':
@@ -118,7 +116,7 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
       ref={ref}
       className="absolute right-0 top-[calc(100%+10px)] z-[100] w-[292px] overflow-hidden rounded-[20px] border border-white/10 bg-[#101113]/95 shadow-[0_28px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl"
       role="region"
-      aria-label="Notificações"
+      aria-label="Notificacoes"
     >
       <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.16),_transparent_45%)] px-4 py-3.5">
         <div className="flex items-center justify-between">
@@ -126,7 +124,7 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
             <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/75">
               Central
             </p>
-            <h3 className="mt-1 text-[15px] font-semibold text-white">Notificações</h3>
+            <h3 className="mt-1 text-[15px] font-semibold text-white">Notificacoes</h3>
           </div>
           <div className="rounded-full border border-orange-400/20 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-200">
             {unreadCount} novas
@@ -187,7 +185,6 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
 
 interface HeaderProps {
   onToggleSidebar: () => void
-  lowStockCount?: number
   unreadCount?: number
   notifications?: NotificationItem[]
   onNotificationsOpen?: () => void
@@ -195,7 +192,6 @@ interface HeaderProps {
 
 export function Header({
   onToggleSidebar,
-  lowStockCount = 0,
   unreadCount = 0,
   notifications = [],
   onNotificationsOpen,
@@ -322,7 +318,7 @@ export function Header({
           </svg>
           <input
             type="text"
-            placeholder="Buscar páginas e ações..."
+            placeholder="Buscar paginas e acoes..."
             value={searchQuery}
             onFocus={() => setShowSearch(true)}
             onChange={(event) => {
@@ -341,7 +337,7 @@ export function Header({
           {showSearch && (
             <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-[90] overflow-hidden rounded-2xl border border-white/10 bg-[#101113]/96 shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
               <div className="border-b border-white/8 px-4 py-3 text-xs uppercase tracking-[0.2em] text-orange-200/75">
-                Busca rápida
+                Busca rapida
               </div>
               <ul className="max-h-[280px] overflow-y-auto p-2">
                 {filteredSearchActions.length === 0 ? (
@@ -382,7 +378,7 @@ export function Header({
               ? 'bg-orange-500/15 text-orange-300'
               : 'text-gray-400 hover:bg-white/5 hover:text-white'
           )}
-          aria-label={`Notificações${unreadCount > 0 ? ` - ${unreadCount} novas` : ''}`}
+          aria-label={`Notificacoes${unreadCount > 0 ? ` - ${unreadCount} novas` : ''}`}
           aria-expanded={showNotifications}
         >
           <svg width={20} height={20} viewBox="0 0 24 24" fill="none">
@@ -393,9 +389,6 @@ export function Header({
             <Badge variant="danger" size="sm" className="absolute -right-1 -top-1 min-w-[18px] justify-center px-1">
               {unreadCount > 99 ? '99+' : unreadCount}
             </Badge>
-          )}
-          {unreadCount === 0 && lowStockCount > 0 && (
-            <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-orange-400 shadow-[0_0_0_4px_rgba(249,115,22,0.12)]" />
           )}
         </button>
 
