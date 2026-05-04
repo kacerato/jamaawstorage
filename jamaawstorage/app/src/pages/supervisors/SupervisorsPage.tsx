@@ -1,26 +1,11 @@
 import { useCallback, useEffect, useState } from 'react'
 import type { Tables } from '../../types/database'
 import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../hooks/useAuth'
 import { Alert, Badge, Button, Card, Input, Modal, Spinner } from '../../components/ui'
 import { UsersIcon } from '../../components/icons'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 type Supervisor = Tables<'profiles'>
-
-interface FormData {
-  email: string
-  password: string
-  full_name: string
-  sector: string
-}
-
-const initialFormData: FormData = {
-  email: '',
-  password: '',
-  full_name: '',
-  sector: '',
-}
 
 const supervisorsPageCache: {
   supervisors: Supervisor[]
@@ -29,22 +14,14 @@ const supervisorsPageCache: {
 }
 
 export function SupervisorsPage() {
-  const { createSupervisor } = useAuth()
   const [supervisors, setSupervisors] = useState<Supervisor[]>(supervisorsPageCache.supervisors)
   const [loading, setLoading] = useState(supervisorsPageCache.supervisors.length === 0)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, 200)
-
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [formData, setFormData] = useState<FormData>(initialFormData)
-  const [formErrors, setFormErrors] = useState<Partial<Record<keyof FormData, string>>>({})
-  const [creating, setCreating] = useState(false)
-  const [successMessage, setSuccessMessage] = useState<string | null>(null)
   const [confirmToggle, setConfirmToggle] = useState<Supervisor | null>(null)
   const [togglingId, setTogglingId] = useState<string | null>(null)
-  const [showPassword, setShowPassword] = useState(false)
 
   const fetchSupervisors = useCallback(async () => {
     const shouldShowFullLoading = supervisors.length === 0
@@ -88,57 +65,6 @@ export function SupervisorsPage() {
     (supervisor.employee_id ?? '').toLowerCase().includes(debouncedSearch.toLowerCase())
   )
 
-  const validateForm = () => {
-    const nextErrors: Partial<Record<keyof FormData, string>> = {}
-
-    if (!formData.email.trim()) {
-      nextErrors.email = 'E-mail é obrigatório'
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email.trim())) {
-      nextErrors.email = 'E-mail inválido'
-    }
-
-    if (!formData.password) {
-      nextErrors.password = 'Senha é obrigatória'
-    } else if (formData.password.length < 6) {
-      nextErrors.password = 'Mínimo de 6 caracteres'
-    }
-
-    if (!formData.full_name.trim()) {
-      nextErrors.full_name = 'Nome completo é obrigatório'
-    }
-
-    setFormErrors(nextErrors)
-    return Object.keys(nextErrors).length === 0
-  }
-
-  const handleCreate = async () => {
-    if (!validateForm()) return
-
-    setCreating(true)
-    setError(null)
-
-    const { error: createError } = await createSupervisor({
-      email: formData.email.trim(),
-      password: formData.password,
-      full_name: formData.full_name.trim(),
-      sector: formData.sector.trim() || undefined,
-    })
-
-    if (createError) {
-      setError(createError)
-      setCreating(false)
-      return
-    }
-
-    setSuccessMessage(`Supervisor "${formData.full_name.trim()}" criado com sucesso.`)
-    setShowCreateModal(false)
-    setFormData(initialFormData)
-    setFormErrors({})
-    setCreating(false)
-    void fetchSupervisors()
-    window.setTimeout(() => setSuccessMessage(null), 5000)
-  }
-
   const handleToggleActive = async (supervisor: Supervisor) => {
     setTogglingId(supervisor.id)
 
@@ -167,13 +93,6 @@ export function SupervisorsPage() {
     setTogglingId(null)
   }
 
-  const updateField = (field: keyof FormData, value: string) => {
-    setFormData((prev) => ({ ...prev, [field]: value }))
-    if (formErrors[field]) {
-      setFormErrors((prev) => ({ ...prev, [field]: undefined }))
-    }
-  }
-
   return (
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
@@ -183,22 +102,29 @@ export function SupervisorsPage() {
             Gerenciamento das contas supervisoras do sistema
           </p>
         </div>
-        <Button
-          onClick={() => {
-            setFormData(initialFormData)
-            setFormErrors({})
-            setShowPassword(false)
-            setShowCreateModal(true)
-          }}
-          leftIcon={<UsersIcon size={16} />}
-        >
-          Novo supervisor
-        </Button>
       </div>
+
+      <Alert variant="info" title="Criacao por SQL">
+        Novas contas de supervisor estao desativadas no app por enquanto. Para criar supervisor, use o SQL do projeto diretamente no Supabase.
+      </Alert>
+
+      <Card variant="bordered" className="border-dashed border-white/10 bg-white/[0.03]">
+        <div className="flex items-start gap-3">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border border-orange-400/20 bg-orange-500/10 text-orange-300">
+            <UsersIcon size={20} />
+          </div>
+          <div className="space-y-1">
+            <p className="text-sm font-medium text-white">Fluxo temporario</p>
+            <p className="text-sm text-gray-400">
+              A listagem e a ativacao continuam funcionando aqui. A criacao ficou fora do app ate o endpoint ser refeito com seguranca.
+            </p>
+          </div>
+        </div>
+      </Card>
 
       <div className="max-w-md">
         <Input
-          placeholder="Buscar por nome ou matrícula..."
+          placeholder="Buscar por nome ou matricula..."
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           leftIcon={
@@ -220,12 +146,6 @@ export function SupervisorsPage() {
       {error && (
         <Alert variant="danger" dismissible onDismiss={() => setError(null)}>
           {error}
-        </Alert>
-      )}
-
-      {successMessage && (
-        <Alert variant="success" dismissible onDismiss={() => setSuccessMessage(null)}>
-          {successMessage}
         </Alert>
       )}
 
@@ -261,7 +181,7 @@ export function SupervisorsPage() {
                     </div>
                     <div>
                       <p className="font-medium text-white">{supervisor.full_name}</p>
-                      <p className="text-xs text-gray-400">Matrícula: {supervisor.employee_id ?? 'MAT-...'}</p>
+                      <p className="text-xs text-gray-400">Matricula: {supervisor.employee_id ?? 'MAT-...'}</p>
                     </div>
                   </div>
                   {supervisor.is_active ? <Badge variant="success" dot>Ativo</Badge> : <Badge variant="danger" dot>Inativo</Badge>}
@@ -316,76 +236,6 @@ export function SupervisorsPage() {
           </div>
         </Modal>
       )}
-
-      <Modal isOpen={showCreateModal} onClose={() => setShowCreateModal(false)} title="Novo Supervisor" size="md">
-        <div className="flex flex-col gap-4">
-          <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-3">
-            <p className="text-sm font-medium text-gray-200">Matrícula</p>
-            <p className="mt-1 text-sm text-orange-300">Gerada automaticamente ao salvar</p>
-            <p className="mt-1 text-xs text-gray-500">Sequência padrão do sistema, ex.: MAT-001</p>
-          </div>
-
-          <Input
-            label="E-mail"
-            type="email"
-            placeholder="supervisor@empresa.com"
-            value={formData.email}
-            onChange={(event) => updateField('email', event.target.value)}
-            error={formErrors.email}
-            required
-          />
-
-          <div className="flex flex-col gap-1.5">
-            <label htmlFor="supervisor-password" className="text-sm font-medium text-gray-300">
-              Senha <span className="text-red-400">*</span>
-            </label>
-            <div className="relative">
-              <input
-                id="supervisor-password"
-                type={showPassword ? 'text' : 'password'}
-                placeholder="Mínimo 6 caracteres"
-                value={formData.password}
-                onChange={(event) => updateField('password', event.target.value)}
-                className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 pr-10 text-sm text-white placeholder-gray-500 transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-              />
-              <button
-                type="button"
-                onClick={() => setShowPassword((prev) => !prev)}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-gray-400 transition-colors hover:text-white"
-                aria-label={showPassword ? 'Ocultar senha' : 'Mostrar senha'}
-              >
-                {showPassword ? 'Ocultar' : 'Ver'}
-              </button>
-            </div>
-            {formErrors.password && <p className="text-sm text-red-400">{formErrors.password}</p>}
-          </div>
-
-          <Input
-            label="Nome completo"
-            placeholder="Nome do supervisor"
-            value={formData.full_name}
-            onChange={(event) => updateField('full_name', event.target.value)}
-            error={formErrors.full_name}
-            required
-          />
-
-          <Input
-            label="Setor"
-            placeholder="Opcional"
-            value={formData.sector}
-            onChange={(event) => updateField('sector', event.target.value)}
-          />
-
-          <div className="flex justify-end gap-3 border-t border-gray-700 pt-4">
-            <Button type="button" variant="secondary" onClick={() => setShowCreateModal(false)}>
-              Cancelar
-            </Button>
-            <Button type="button" isLoading={creating} onClick={() => void handleCreate()}>
-              Criar supervisor
-            </Button>
-          </div>
-        </div>
-      </Modal>
     </div>
   )
 }

@@ -35,6 +35,7 @@ interface StockItemFormProps {
 
 const UNIT_OPTIONS = [
   { value: 'un', label: 'un - Unidade' },
+  { value: 'kit', label: 'kit - Kit' },
   { value: 'pc', label: 'pc - Peca' },
   { value: 'cx', label: 'cx - Caixa' },
   { value: 'm', label: 'm - Metro' },
@@ -53,6 +54,10 @@ const CATEGORY_OPTIONS = [
 const ICON_OPTIONS = [
   { value: 'capacete', label: 'Capacete' },
   { value: 'alicate', label: 'Alicate' },
+  { value: 'oculos', label: 'Oculos' },
+  { value: 'luvas', label: 'Luvas' },
+  { value: 'chavecatraca', label: 'Chave catraca' },
+  { value: 'balaclava', label: 'Balaclava' },
   { value: 'material', label: 'Material' },
   { value: 'fardamento', label: 'Fardamento' },
   { value: 'bolsa', label: 'Bolsa' },
@@ -60,7 +65,6 @@ const ICON_OPTIONS = [
   { value: 'cinto', label: 'Cinto' },
   { value: 'talabarte', label: 'Talabarte' },
   { value: 'martelo', label: 'Martelo' },
-  { value: 'generico', label: 'Generico' },
 ]
 
 function initFormData(item: StockItemRow | null): StockItemFormData {
@@ -99,7 +103,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
   const isEditing = item !== null
   const [formData, setFormData] = useState<StockItemFormData>(initFormData(item))
   const [svgIconKey, setSvgIconKey] = useState<string>(
-    normalizeItemIconKey(item?.svg_icon_key) ?? 'generico'
+    normalizeItemIconKey(item?.svg_icon_key) ?? 'capacete'
   )
   const [photoPreview, setPhotoPreview] = useState<string | null>(
     item?.svg_icon_key?.startsWith('data:image/') ? item.svg_icon_key : null
@@ -145,7 +149,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
 
   const clearPhoto = () => {
     setPhotoPreview(null)
-    setSvgIconKey('generico')
+    setSvgIconKey('capacete')
     setUploadError(null)
     if (fileInputRef.current) {
       fileInputRef.current.value = ''
@@ -231,36 +235,42 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-5">
-            {ICON_OPTIONS.map((option) => {
-              const active = !photoPreview && svgIconKey === option.value
-              return (
-                <button
-                  key={option.value}
-                  type="button"
-                  onClick={() => {
-                    setPhotoPreview(null)
-                    setUploadError(null)
-                    setSvgIconKey(option.value)
-                  }}
-                  className={`group flex min-h-[88px] w-full flex-col items-center justify-center gap-2 rounded-2xl border px-2 py-3 text-center transition-all ${
-                    active
-                      ? 'border-orange-400/40 bg-orange-500/16 shadow-[0_0_0_1px_rgba(249,115,22,0.08)]'
-                      : 'border-white/8 bg-white/4 hover:border-white/14 hover:bg-white/8'
-                  }`}
-                  title={option.label}
-                >
-                  <ItemVisual iconKey={option.value} size={34} />
-                  <span
-                    className={`line-clamp-2 min-h-[28px] text-[11px] font-medium leading-3 ${
-                      active ? 'text-orange-100' : 'text-gray-400 group-hover:text-gray-200'
+          <div className="rounded-2xl border border-white/8 bg-[#0e0f12] p-3">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+              Biblioteca de icones
+            </p>
+
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+              {ICON_OPTIONS.map((option) => {
+                const active = !photoPreview && svgIconKey === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => {
+                      setPhotoPreview(null)
+                      setUploadError(null)
+                      setSvgIconKey(option.value)
+                    }}
+                    className={`group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition-all ${
+                      active
+                        ? 'border-orange-400/40 bg-orange-500/16 shadow-[0_0_0_1px_rgba(249,115,22,0.08)]'
+                        : 'border-white/8 bg-white/4 hover:border-white/14 hover:bg-white/8'
                     }`}
+                    title={option.label}
                   >
-                    {option.label}
-                  </span>
-                </button>
-              )
-            })}
+                    <ItemVisual iconKey={option.value} size={42} />
+                    <span
+                      className={`line-clamp-2 min-h-[30px] max-w-full text-[11px] font-medium leading-4 ${
+                        active ? 'text-orange-100' : 'text-gray-400 group-hover:text-gray-200'
+                      }`}
+                    >
+                      {option.label}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
           </div>
 
           <p className="text-xs text-gray-500">
@@ -362,13 +372,13 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
           )}
           {isEditing && (
             <div className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 px-4 py-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
                 <p className="text-sm font-medium text-gray-200">Ajuste de estoque</p>
-                <div className="inline-flex rounded-xl border border-white/8 bg-[#0f1013] p-1">
+                <div className="grid w-full max-w-[220px] grid-cols-2 rounded-xl border border-white/8 bg-[#0f1013] p-1 sm:justify-self-end">
                   <button
                     type="button"
                     onClick={() => setAdjustmentMode('add')}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    className={`min-w-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                       adjustmentMode === 'add'
                         ? 'bg-emerald-500/18 text-emerald-300'
                         : 'text-gray-400 hover:text-white'
@@ -379,7 +389,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                   <button
                     type="button"
                     onClick={() => setAdjustmentMode('remove')}
-                    className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
+                    className={`min-w-0 rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
                       adjustmentMode === 'remove'
                         ? 'bg-red-500/18 text-red-300'
                         : 'text-gray-400 hover:text-white'

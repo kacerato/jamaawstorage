@@ -40,7 +40,7 @@ type ModalMode = 'detail' | 'create' | 'edit' | 'delete'
 type StockRowRecord = StockItemWithLowStock & Record<string, unknown>
 
 const CATEGORY_FILTER_OPTIONS = [
-  { value: '', label: 'Todas as categorias' },
+  { value: '', label: 'Todas' },
   { value: 'EPI', label: 'EPI' },
   { value: 'Ferramenta', label: 'Ferramenta' },
   { value: 'Material', label: 'Material' },

@@ -85,13 +85,14 @@ export function useNotifications() {
         ...lowStockData.map((item) => ({
           id: `${item.current_quantity === 0 ? 'stock-critical' : 'stock-low'}-${item.id}`,
           type: (item.current_quantity === 0 ? 'stock_critical' : 'stock_low') as NotificationType,
-          title: item.name,
+          title: item.current_quantity === 0 ? 'Estoque zerado' : 'Alerta de Estoque Baixo',
           description:
             item.current_quantity === 0
-              ? `Estoque zerado! 0 / mín. ${item.minimum_quantity} ${item.unit}`
-              : `Estoque baixo: ${item.current_quantity} / mín. ${item.minimum_quantity} ${item.unit}`,
+              ? `${item.name}: 0 / min. ${item.minimum_quantity} ${item.unit}`
+              : `${item.name}: ${item.current_quantity} / min. ${item.minimum_quantity} ${item.unit}`,
           createdAt: item.updated_at,
           linkPath: '/stock',
+          itemIconKey: item.svg_icon_key,
         })),
         ...pendingWithdrawals.map((withdrawal) => ({
           id: `withdrawal-pending-${withdrawal.id}`,
