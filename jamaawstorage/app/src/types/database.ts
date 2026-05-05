@@ -541,6 +541,13 @@ export interface Database {
     }
     Returns: number
   }
+  assign_inventory_items_to_person: {
+    Args: {
+      p_person_id: string
+      p_items: Record<string, unknown>[]
+    }
+    Returns: number
+  }
   create_completed_withdrawal: {
     Args: {
       p_requested_by: string
@@ -564,6 +571,10 @@ export interface Database {
       p_employee_id?: string | null
       p_sector?: string | null
     }
+    Returns: string
+  }
+  restore_own_profile_if_missing: {
+    Args: Record<string, never>
     Returns: string
   }
 }

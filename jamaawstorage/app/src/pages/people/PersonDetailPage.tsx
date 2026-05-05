@@ -111,15 +111,17 @@ export function PersonDetailPage() {
       is_active: raw.is_active,
       created_at: raw.created_at,
       updated_at: raw.updated_at,
-      inventory: (raw.person_inventories ?? []).map((inv) => ({
-        id: inv.id,
-        person_id: inv.person_id,
-        stock_item_id: inv.stock_item_id,
-        quantity: inv.quantity,
-        last_withdrawal_id: inv.last_withdrawal_id,
-        updated_at: inv.updated_at,
-        stock_items: inv.stock_items as Tables<'stock_items'>,
-      })),
+      inventory: (raw.person_inventories ?? [])
+        .filter((inv) => inv.stock_items?.is_active)
+        .map((inv) => ({
+          id: inv.id,
+          person_id: inv.person_id,
+          stock_item_id: inv.stock_item_id,
+          quantity: inv.quantity,
+          last_withdrawal_id: inv.last_withdrawal_id,
+          updated_at: inv.updated_at,
+          stock_items: inv.stock_items as Tables<'stock_items'>,
+        })),
     }
 
     setPerson(enriched)
@@ -578,7 +580,7 @@ export function PersonDetailPage() {
               leftIcon={<PackageIcon size={14} />}
               onClick={() => setShowInventoryModal(true)}
             >
-              Adicionar Item
+              Adicionar Itens e Kits
             </Button>
           </div>
 
@@ -770,7 +772,7 @@ export function PersonDetailPage() {
       <Modal
         isOpen={showInventoryModal}
         onClose={() => setShowInventoryModal(false)}
-        title="Adicionar Item ao Inventario"
+        title="Adicionar Itens e Kits ao Inventario"
         size="md"
       >
         <PersonInventoryModal

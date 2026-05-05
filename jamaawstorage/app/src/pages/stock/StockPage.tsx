@@ -18,6 +18,7 @@ import {
 import { PackageIcon } from '../../components/icons'
 import { ItemVisual } from '../../components/items/ItemVisual'
 import { StockItemForm } from './StockItemForm'
+import { StockImportModal } from './StockImportModal'
 import { KitsPage } from '../kits/KitsPage'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
@@ -36,12 +37,13 @@ interface WithdrawalWithDetails {
   quantity: number
 }
 
-type ModalMode = 'detail' | 'create' | 'edit' | 'delete'
+type ModalMode = 'detail' | 'create' | 'edit' | 'delete' | 'import'
 type StockRowRecord = StockItemWithLowStock & Record<string, unknown>
 
 const CATEGORY_FILTER_OPTIONS = [
   { value: '', label: 'Todas' },
   { value: 'EPI', label: 'EPI' },
+  { value: 'Vestuario', label: 'Vestuario' },
   { value: 'Ferramenta', label: 'Ferramenta' },
   { value: 'Material', label: 'Material' },
   { value: 'Outro', label: 'Outro' },
@@ -63,6 +65,46 @@ const stockPageCache: {
 
 function ItemIcon({ iconKey, size = 28 }: { iconKey: string | null; size?: number }) {
   return <ItemVisual iconKey={iconKey} size={size} />
+}
+
+function stockItemDisplayName(item: Pick<StockItemRow, 'name'>): string {
+  return item.name
+}
+
+interface UpdateStockItemRpcArgs {
+  p_stock_item_id: string
+  p_name: string
+  p_description: string | null
+  p_category: string | null
+  p_unit: string
+  p_ca_nr: string | null
+  p_minimum_quantity: number
+  p_svg_icon_key: string | null
+  p_stock_adjustment: number
+}
+
+function isRpcOverloadAmbiguity(message: string | undefined): boolean {
+  if (!message) return false
+  return message.includes('Could not choose the best candidate function between')
+    && message.includes('update_stock_item_details_and_quantity')
+}
+
+async function updateStockItemWithFallback(args: UpdateStockItemRpcArgs) {
+  const primaryResult = await supabase.rpc('update_stock_item_details_and_quantity', args)
+  if (!isRpcOverloadAmbiguity(primaryResult.error?.message)) {
+    return primaryResult
+  }
+
+  return (supabase as unknown as {
+    rpc: (
+      fn: string,
+      params: Record<string, unknown>,
+    ) => Promise<{ data: unknown; error: { message: string } | null }>
+  }).rpc('update_stock_item_details_and_quantity', {
+    ...args,
+    p_variant_group: null,
+    p_variant_label: null,
+  })
 }
 
 export function StockPage() {
@@ -94,7 +136,7 @@ export function StockPage() {
   const [detailLoading, setDetailLoading] = useState(false)
 
   const fetchItems = useCallback(async (page = 0) => {
-    const shouldShowFullLoading = items.length === 0
+    const shouldShowFullLoading = stockPageCache.items.length === 0
     if (shouldShowFullLoading) {
       setLoading(true)
     } else {
@@ -149,7 +191,7 @@ export function StockPage() {
       setLoading(false)
       setRefreshing(false)
     }
-  }, [categoryFilter, debouncedSearchQuery, items.length, statusFilter])
+  }, [categoryFilter, debouncedSearchQuery, statusFilter])
 
   useEffect(() => {
     setCurrentPage(0)
@@ -251,7 +293,15 @@ export function StockPage() {
       const { error: insertError } = await supabase
         .from('stock_items')
         .insert({
-          ...data,
+          code: data.code,
+          name: data.name,
+          description: data.description ?? null,
+          category: data.category ?? null,
+          unit: data.unit,
+          ca_nr: data.ca_nr ?? null,
+          svg_icon_key: data.svg_icon_key ?? null,
+          current_quantity: data.current_quantity ?? 0,
+          minimum_quantity: data.minimum_quantity ?? 0,
           created_by: profile.id,
         })
 
@@ -275,7 +325,7 @@ export function StockPage() {
     setIsSubmitting(true)
     setSubmitError(null)
     try {
-      const { error: updateError } = await supabase.rpc('update_stock_item_details_and_quantity', {
+      const { error: updateError } = await updateStockItemWithFallback({
         p_stock_item_id: selectedItem.id,
         p_name: data.name ?? selectedItem.name,
         p_description: data.description ?? null,
@@ -339,6 +389,8 @@ export function StockPage() {
     switch (category) {
       case 'EPI':
         return 'primary'
+      case 'Vestuario':
+        return 'info'
       case 'Ferramenta':
         return 'info'
       case 'Material':
@@ -377,7 +429,9 @@ export function StockPage() {
               <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-orange-500" />
             </span>
           )}
-          <span className="font-medium text-white">{row.name}</span>
+          <span className="font-medium text-white">
+            {stockItemDisplayName(row as unknown as StockItemRow)}
+          </span>
         </div>
       ),
     },
@@ -467,13 +521,25 @@ export function StockPage() {
             Gerencie os itens do almoxarifado e seus níveis de estoque
           </p>
         </div>
-        <Button onClick={() => {
-          setSelectedItem(null)
-          setSubmitError(null)
-          setModalMode('create')
-        }} leftIcon={<PackageIcon size={16} />}>
-          Novo item
-        </Button>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setSelectedItem(null)
+              setSubmitError(null)
+              setModalMode('import')
+            }}
+          >
+            Importar documento
+          </Button>
+          <Button onClick={() => {
+            setSelectedItem(null)
+            setSubmitError(null)
+            setModalMode('create')
+          }} leftIcon={<PackageIcon size={16} />}>
+            Novo item
+          </Button>
+        </div>
       </div>
 
       {lowStockCount > 0 && (
@@ -629,6 +695,16 @@ export function StockPage() {
         />
       </Modal>
 
+      <Modal isOpen={modalMode === 'import'} onClose={handleCloseModal} title="Importar documento PDF" size="xl">
+        <StockImportModal
+          onClose={handleCloseModal}
+          onImported={() => {
+            handleCloseModal()
+            void fetchItems(currentPage)
+          }}
+        />
+      </Modal>
+
       <Modal isOpen={modalMode === 'edit'} onClose={handleCloseModal} title="Editar Item" size="md">
         {submitError && (
           <Alert variant="danger" title="Erro ao editar item" className="mb-4">
@@ -673,7 +749,7 @@ export function StockPage() {
                   <ItemIcon iconKey={selectedItem.svg_icon_key} size={58} />
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-white">{selectedItem.name}</p>
+                  <p className="text-lg font-semibold text-white">{stockItemDisplayName(selectedItem)}</p>
                   <p className="text-sm font-mono text-orange-400">{selectedItem.code}</p>
                 </div>
               </div>

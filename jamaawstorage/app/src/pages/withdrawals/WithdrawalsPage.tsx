@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import type { WithdrawalListItem, WithdrawalStatus } from '../../types'
 import type { Tables } from '../../types/database'
-import { Button, Input, Select, Badge, DataTable, EmptyState } from '../../components/ui'
+import { Button, Input, Select, Badge, DataTable, EmptyState, Alert } from '../../components/ui'
 import { ClipboardIcon } from '../../components/icons'
 import { formatDateTime } from '../../lib/utils'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
@@ -45,6 +45,7 @@ export function WithdrawalsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') ?? ''
+  const createdCount = Number(searchParams.get('created') ?? '0')
   const [withdrawals, setWithdrawals] = useState<WithdrawalListItem[]>(withdrawalsPageCache.withdrawals)
   const [leaders, setLeaders] = useState<PeopleRow[]>(withdrawalsPageCache.leaders)
   const [loading, setLoading] = useState(withdrawalsPageCache.withdrawals.length === 0)
@@ -261,6 +262,14 @@ export function WithdrawalsPage() {
           Nova Retirada
         </Button>
       </div>
+
+      {createdCount > 0 && (
+        <Alert variant="success">
+          {createdCount === 1
+            ? 'Retirada criada com sucesso.'
+            : `${createdCount} retiradas foram criadas com sucesso.`}
+        </Alert>
+      )}
 
       <div className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 p-4">
         <div className="flex flex-wrap items-end gap-3">

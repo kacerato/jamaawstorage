@@ -32,6 +32,9 @@ function formatError(error: unknown): string {
     if (message.includes('confirm')) {
       return 'Verifique seu e-mail para confirmar o cadastro.'
     }
+    if (message.includes('restore_own_profile_if_missing')) {
+      return 'Seu perfil precisa ser reparado no banco de dados. Atualize as migracoes e tente novamente.'
+    }
     if (message.includes('access denied') || message.includes('acesso negado')) {
       return 'Acesso negado. Somente supervisores ativos podem criar contas.'
     }
@@ -82,6 +85,20 @@ export async function fetchProfile(userId: string): Promise<{ profile: Profile |
     return { profile: data as Profile | null, error: null }
   } catch (error) {
     return { profile: null, error: formatError(error) }
+  }
+}
+
+export async function restoreOwnProfileIfMissing(): Promise<{ restored: boolean; error: string | null }> {
+  try {
+    const { data, error } = await supabase.rpc('restore_own_profile_if_missing')
+
+    if (error) {
+      return { restored: false, error: formatError(error) }
+    }
+
+    return { restored: Boolean(data), error: null }
+  } catch (error) {
+    return { restored: false, error: formatError(error) }
   }
 }
 

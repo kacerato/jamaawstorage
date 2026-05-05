@@ -25,7 +25,7 @@ function EyeIcon({ open }: { open: boolean }) {
 // ─── LoginPage ────────────────────────────────────────────────────────────────
 
 export function LoginPage() {
-  const { signIn, user, loading: authLoading } = useAuth()
+  const { signIn, user, profile, loading: authLoading, error: authError } = useAuth()
   const [searchParams] = useSearchParams()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -35,14 +35,19 @@ export function LoginPage() {
 
   const redirectReason = searchParams.get('reason')
 
-  const displayError = error || (redirectReason === 'no_profile'
+  const displayError = error || authError || (redirectReason === 'no_profile'
     ? 'Perfil do usuário não encontrado. Contate o administrador.'
+    : redirectReason === 'inactive_profile'
+    ? 'Sua conta foi encontrada, mas ainda nÃ£o estÃ¡ ativa. Contate o administrador.'
+    : redirectReason === 'forbidden_role'
+    ? 'Sua conta nÃ£o tem permissÃ£o para acessar este painel.'
     : redirectReason === 'session_expired'
     ? 'Sessão expirada. Faça login novamente.'
     : null)
 
-  // Redirect if already logged in
-  if (user) {
+  // Redirect only when session and profile are both ready.
+  // This avoids a login <-> protected-route redirect loop when the user exists but the profile is missing.
+  if (user && profile?.is_active && profile.role === 'supervisor') {
     return <Navigate to="/" replace />
   }
 

@@ -44,8 +44,8 @@ export interface WithdrawalFormData {
   work_site_id?: string | null
   notes?: string
   photo_url?: string | null
-  supervisor_signature: string
-  requester_signature: string
+  supervisor_signature?: string | null
+  requester_signature?: string | null
   witness_signature?: string | null
   items: WithdrawalFormItem[]
 }
