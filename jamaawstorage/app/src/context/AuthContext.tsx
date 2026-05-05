@@ -7,6 +7,7 @@ import {
   signOut as authSignOut,
   createSupervisor as authCreateSupervisor,
   fetchProfile,
+  restoreOwnProfileIfMissing,
 } from '../services/authService'
 import { supabase } from '../lib/supabase'
 
@@ -32,6 +33,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | null>(null)
 
+function getAccessError(profile: ProfileRow | null): string | null {
+  if (!profile) {
+    return 'Perfil do usuário não encontrado. Contate o administrador.'
+  }
+
+  if (profile.role !== 'supervisor') {
+    return 'Sua conta nao tem permissao de supervisor para acessar este painel.'
+  }
+
+  if (!profile.is_active) {
+    return 'Sua conta foi encontrada, mas ainda nao esta ativa. Contate o administrador.'
+  }
+
+  return null
+}
+
 function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [profile, setProfile] = useState<ProfileRow | null>(null)
@@ -54,11 +71,25 @@ function AuthProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const { profile: nextProfile, error: profileError } = await fetchProfile(session.user.id)
+    let { profile: nextProfile, error: profileError } = await fetchProfile(session.user.id)
+
+    if (!profileError && !nextProfile) {
+      const { restored, error: restoreError } = await restoreOwnProfileIfMissing()
+
+      if (restoreError) {
+        profileError = restoreError
+      } else if (restored) {
+        const restoredResult = await fetchProfile(session.user.id)
+        nextProfile = restoredResult.profile
+        profileError = restoredResult.error
+      }
+    }
+
+    const accessError = profileError ?? getAccessError(nextProfile)
 
     setUser(session.user)
     setProfile((currentProfile) => nextProfile ?? (profileError ? currentProfile : null))
-    setError(profileError)
+    setError(accessError)
   }, [])
 
   useEffect(() => {
@@ -179,7 +210,7 @@ function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     loading,
     error,
-    isAuthenticated: !!user && !!profile,
+    isAuthenticated: !!user && !!profile && profile.role === 'supervisor' && profile.is_active,
     signIn,
     signOut,
     createSupervisor,

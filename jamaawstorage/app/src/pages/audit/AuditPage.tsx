@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { formatDateTime } from '../../lib/utils'
-import { Button, Select, Badge, DataTable, Alert } from '../../components/ui'
+import { Alert, Badge, Button, Card, EmptyState, Select, Spinner } from '../../components/ui'
+import { ClipboardIcon } from '../../components/icons'
 
 type AuditAction = 'INSERT' | 'UPDATE' | 'DELETE'
 
@@ -23,52 +24,93 @@ interface AuditLogDisplay {
   user_name: string
   action: AuditAction
   table_name: string
-  record_id: string | null
   old_data: Record<string, unknown> | null
   new_data: Record<string, unknown> | null
-  [key: string]: unknown
 }
 
-const TABLE_OPTIONS = [
-  { value: '', label: 'Todas as tabelas' },
-  { value: 'people', label: 'Colaboradores' },
-  { value: 'stock_items', label: 'Itens de Estoque' },
-  { value: 'withdrawals', label: 'Retiradas' },
-  { value: 'kits', label: 'Kits' },
-  { value: 'work_sites', label: 'Obras' },
-  { value: 'person_inventories', label: 'Inventários' },
-]
-
 const ACTION_OPTIONS = [
-  { value: '', label: 'Todas as ações' },
-  { value: 'INSERT', label: 'Inserção' },
-  { value: 'UPDATE', label: 'Atualização' },
-  { value: 'DELETE', label: 'Exclusão' },
+  { value: '', label: 'Todas as acoes' },
+  { value: 'INSERT', label: 'Insercao' },
+  { value: 'UPDATE', label: 'Atualizacao' },
+  { value: 'DELETE', label: 'Exclusao' },
 ]
 
-const PAGE_SIZE = 50
+const PAGE_SIZE = 20
+const HIDDEN_KEYS = new Set([
+  'id',
+  'created_at',
+  'updated_at',
+  'photo_url',
+  'supervisor_signature',
+  'requester_signature',
+  'witness_signature',
+  'record_id',
+  'user_id',
+  'created_by',
+  'authorized_by',
+  'last_withdrawal_id',
+])
 
-function JsonBlock({ data }: { data: Record<string, unknown> | null }) {
-  const [expanded, setExpanded] = useState(false)
+function diffKeys(oldData: Record<string, unknown> | null, newData: Record<string, unknown> | null): string[] {
+  const keys = new Set([
+    ...Object.keys(oldData ?? {}),
+    ...Object.keys(newData ?? {}),
+  ])
 
-  if (!data) return <span className="text-gray-600">—</span>
+  return Array.from(keys).filter((key) => {
+    if (HIDDEN_KEYS.has(key)) return false
+    return JSON.stringify(oldData?.[key]) !== JSON.stringify(newData?.[key])
+  })
+}
 
-  return (
-    <div className="max-w-xs">
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className="rounded-full border border-white/10 bg-white/4 px-2.5 py-1 text-[11px] text-orange-300 transition-colors hover:bg-white/8 hover:text-orange-200"
-      >
-        {expanded ? 'Ocultar JSON' : 'Ver JSON'}
-      </button>
-      {expanded && (
-        <pre className="mt-2 max-h-48 overflow-auto rounded-2xl border border-white/8 bg-[#0b0b0d] p-3 text-xs text-emerald-300">
-          {JSON.stringify(data, null, 2)}
-        </pre>
-      )}
-    </div>
-  )
+function importantSummary(row: AuditLogDisplay): string[] {
+  const changed = diffKeys(row.old_data, row.new_data)
+  return changed
+    .slice(0, 5)
+    .map((key) => {
+      const before = formatValue(row.old_data?.[key])
+      const after = formatValue(row.new_data?.[key])
+
+      if (row.action === 'UPDATE') {
+        return `${labelForKey(key)}: ${before} -> ${after}`
+      }
+
+      return `${labelForKey(key)}: ${after !== '-' ? after : before}`
+    })
+}
+
+function formatValue(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-'
+  if (typeof value === 'boolean') return value ? 'Sim' : 'Nao'
+  if (typeof value === 'object') return 'Atualizado'
+  return String(value)
+}
+
+function labelForKey(key: string): string {
+  const map: Record<string, string> = {
+    full_name: 'Nome',
+    employee_id: 'Matricula',
+    role: 'Perfil',
+    sector: 'Setor',
+    is_active: 'Status',
+    name: 'Nome',
+    code: 'Codigo',
+    category: 'Categoria',
+    current_quantity: 'Qtd atual',
+    minimum_quantity: 'Qtd minima',
+    quantity: 'Quantidade',
+    unit: 'Unidade',
+    notes: 'Observacoes',
+    destination_type: 'Destino',
+    collaborator_id: 'Colaborador',
+    work_site_id: 'Obra',
+    status: 'Status',
+    job_title: 'Funcao',
+    description: 'Descricao',
+    ca_nr: 'CA/NR',
+  }
+
+  return map[key] ?? key
 }
 
 function ActionBadge({ action }: { action: AuditAction }) {
@@ -77,10 +119,11 @@ function ActionBadge({ action }: { action: AuditAction }) {
     UPDATE: 'warning',
     DELETE: 'danger',
   }
+
   const labelMap: Record<AuditAction, string> = {
-    INSERT: 'Inserção',
-    UPDATE: 'Atualização',
-    DELETE: 'Exclusão',
+    INSERT: 'Criado',
+    UPDATE: 'Alterado',
+    DELETE: 'Removido',
   }
 
   return (
@@ -90,17 +133,30 @@ function ActionBadge({ action }: { action: AuditAction }) {
   )
 }
 
-const TABLE_LABEL_MAP: Record<string, string> = {
-  people: 'Colaboradores',
-  stock_items: 'Itens de Estoque',
-  withdrawals: 'Retiradas',
-  kits: 'Kits',
-  work_sites: 'Obras',
-  person_inventories: 'Inventários',
-  profiles: 'Perfis',
-  stock_item_lots: 'Lotes',
-  withdrawal_items: 'Itens de Retirada',
-  kit_items: 'Itens de Kit',
+function entityTitle(row: AuditLogDisplay): string {
+  const source = row.new_data ?? row.old_data ?? {}
+
+  if (typeof source.full_name === 'string' && source.full_name.trim()) {
+    return source.full_name
+  }
+
+  if (typeof source.name === 'string' && source.name.trim()) {
+    return source.name
+  }
+
+  if (typeof source.code === 'string' && source.code.trim()) {
+    return source.code
+  }
+
+  const tableLabels: Record<string, string> = {
+    people: 'Cadastro de colaborador',
+    stock_items: 'Item de estoque',
+    withdrawals: 'Retirada',
+    person_inventories: 'Inventario individual',
+    kits: 'Kit',
+  }
+
+  return tableLabels[row.table_name] ?? 'Registro'
 }
 
 export function AuditPage() {
@@ -110,10 +166,8 @@ export function AuditPage() {
 
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
-  const [tableFilter, setTableFilter] = useState('')
   const [actionFilter, setActionFilter] = useState('')
   const [userFilter, setUserFilter] = useState('')
-
   const [supervisors, setSupervisors] = useState<{ value: string; label: string }[]>([])
 
   const [page, setPage] = useState(0)
@@ -129,27 +183,33 @@ export function AuditPage() {
 
     if (data) {
       setSupervisors([
-        { value: '', label: 'Todos os usuários' },
-        ...(data as { id: string; full_name: string }[]).map((p) => ({ value: p.id, label: p.full_name })),
+        { value: '', label: 'Todos os usuarios' },
+        ...(data as { id: string; full_name: string }[]).map((profile) => ({
+          value: profile.id,
+          label: profile.full_name,
+        })),
       ])
     }
   }, [])
 
-  const buildQuery = useCallback(() => {
+  const fetchLogs = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+
     let query = supabase
       .from('audit_logs')
-      .select('id, user_id, action, table_name, record_id, old_data, new_data, created_at, profiles!audit_logs_user_id_fkey(full_name)', { count: 'exact' })
+      .select(
+        'id, user_id, action, table_name, record_id, old_data, new_data, created_at, profiles!audit_logs_user_id_fkey(full_name)',
+        { count: 'exact' },
+      )
       .order('created_at', { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
     if (dateFrom) {
-      query = query.gte('created_at', new Date(dateFrom + 'T00:00:00').toISOString())
+      query = query.gte('created_at', new Date(`${dateFrom}T00:00:00`).toISOString())
     }
     if (dateTo) {
-      query = query.lte('created_at', new Date(dateTo + 'T23:59:59').toISOString())
-    }
-    if (tableFilter) {
-      query = query.eq('table_name', tableFilter)
+      query = query.lte('created_at', new Date(`${dateTo}T23:59:59`).toISOString())
     }
     if (actionFilter) {
       query = query.eq('action', actionFilter)
@@ -158,14 +218,6 @@ export function AuditPage() {
       query = query.eq('user_id', userFilter)
     }
 
-    return query
-  }, [page, dateFrom, dateTo, tableFilter, actionFilter, userFilter])
-
-  const fetchLogs = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-
-    const query = buildQuery()
     const { data, error: fetchError, count } = await query
 
     if (fetchError) {
@@ -176,169 +228,88 @@ export function AuditPage() {
     }
 
     setTotalCount(count ?? 0)
-
-    if (!data) {
-      setLogs([])
-      setLoading(false)
-      return
-    }
-
-    const mapped: AuditLogDisplay[] = (data as unknown as AuditLogRow[]).map((row) => ({
-      id: row.id,
-      created_at: row.created_at,
-      user_name: row.profiles?.full_name ?? 'Sistema',
-      action: row.action,
-      table_name: row.table_name,
-      record_id: row.record_id,
-      old_data: row.old_data,
-      new_data: row.new_data,
-    }))
-
-    setLogs(mapped)
+    setLogs(
+      ((data as unknown as AuditLogRow[]) ?? []).map((row) => ({
+        id: row.id,
+        created_at: row.created_at,
+        user_name: row.profiles?.full_name ?? 'Sistema',
+        action: row.action,
+        table_name: row.table_name,
+        old_data: row.old_data,
+        new_data: row.new_data,
+      })),
+    )
     setLoading(false)
-  }, [buildQuery])
+  }, [actionFilter, dateFrom, dateTo, page, userFilter])
 
   useEffect(() => {
-    setTimeout(() => void fetchSupervisors(), 0)
+    void fetchSupervisors()
   }, [fetchSupervisors])
 
   useEffect(() => {
-    setTimeout(() => void fetchLogs(), 0)
+    void fetchLogs()
   }, [fetchLogs])
 
-  const handleApplyFilters = () => {
-    setPage(0)
-    void fetchLogs()
-  }
-
-  const handleClearFilters = () => {
-    setDateFrom('')
-    setDateTo('')
-    setTableFilter('')
-    setActionFilter('')
-    setUserFilter('')
-    setPage(0)
-  }
-
-  const totalPages = Math.ceil(totalCount / PAGE_SIZE)
-
-  const columns = [
-    {
-      key: 'created_at',
-      header: 'Data/Hora',
-      sortable: true,
-      className: 'w-40',
-      render: (value: unknown) => (
-        <span className="whitespace-nowrap">{formatDateTime(value as string)}</span>
-      ),
-    },
-    {
-      key: 'user_name',
-      header: 'Usuário',
-      sortable: true,
-      className: 'w-36',
-      render: (value: unknown) => (
-        <span className="font-medium text-white">{value as string}</span>
-      ),
-    },
-    {
-      key: 'action',
-      header: 'Ação',
-      className: 'w-32',
-      render: (value: unknown) => <ActionBadge action={value as AuditAction} />,
-    },
-    {
-      key: 'table_name',
-      header: 'Tabela',
-      sortable: true,
-      className: 'w-36',
-      render: (value: unknown) => (
-        <span className="whitespace-nowrap">
-          {TABLE_LABEL_MAP[value as string] ?? (value as string)}
-        </span>
-      ),
-    },
-    {
-      key: 'record_id',
-      header: 'ID Registro',
-      className: 'w-28',
-      render: (value: unknown) => {
-        const id = value as string | null
-        if (!id) return <span className="text-gray-600">—</span>
-        return (
-          <span className="font-mono text-xs text-gray-400" title={id}>
-            {id.slice(0, 8)}...
-          </span>
-        )
-      },
-    },
-    {
-      key: 'old_data',
-      header: 'Dados Anteriores',
-      render: (value: unknown) => <JsonBlock data={value as Record<string, unknown> | null} />,
-    },
-    {
-      key: 'new_data',
-      header: 'Dados Novos',
-      render: (value: unknown) => <JsonBlock data={value as Record<string, unknown> | null} />,
-    },
-  ]
+  const totalPages = Math.max(1, Math.ceil(totalCount / PAGE_SIZE))
+  const changedFieldCount = useMemo(
+    () => logs.reduce((sum, row) => sum + diffKeys(row.old_data, row.new_data).length, 0),
+    [logs],
+  )
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-bold text-white">Log de Auditoria</h2>
-        <p className="mt-1 text-sm text-gray-400">
-          Registro de todas as alterações no sistema
-        </p>
+        <p className="mt-1 text-sm text-gray-400">Somente eventos e campos importantes.</p>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
+        <Card variant="bordered" padding="md">
+          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Eventos nesta pagina</p>
+          <p className="mt-2 text-2xl font-semibold text-white">{logs.length}</p>
+        </Card>
+        <Card variant="bordered" padding="md">
+          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Campos alterados</p>
+          <p className="mt-2 text-2xl font-semibold text-orange-300">{changedFieldCount}</p>
+        </Card>
+        <Card variant="bordered" padding="md">
+          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Total filtrado</p>
+          <p className="mt-2 text-2xl font-semibold text-white">{totalCount}</p>
+        </Card>
       </div>
 
       <div className="rounded-xl border border-gray-700 bg-gray-900 p-4">
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-300">Data Início</label>
+            <label className="text-sm font-medium text-gray-300">Data inicio</label>
             <input
               type="date"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(event) => setDateFrom(event.target.value)}
               className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-300">Data Fim</label>
+            <label className="text-sm font-medium text-gray-300">Data fim</label>
             <input
               type="date"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(event) => setDateTo(event.target.value)}
               className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
             />
           </div>
-          <Select
-            label="Tabela"
-            value={tableFilter}
-            onChange={(e) => setTableFilter(e.target.value)}
-            options={TABLE_OPTIONS}
-          />
-          <Select
-            label="Ação"
-            value={actionFilter}
-            onChange={(e) => setActionFilter(e.target.value)}
-            options={ACTION_OPTIONS}
-          />
-          <Select
-            label="Usuário"
-            value={userFilter}
-            onChange={(e) => setUserFilter(e.target.value)}
-            options={supervisors}
-          />
+          <Select label="Acao" value={actionFilter} onChange={(event) => setActionFilter(event.target.value)} options={ACTION_OPTIONS} />
+          <Select label="Usuario" value={userFilter} onChange={(event) => setUserFilter(event.target.value)} options={supervisors} />
         </div>
         <div className="mt-4 flex items-center gap-3">
-          <Button size="sm" onClick={handleApplyFilters}>
-            Aplicar Filtros
-          </Button>
-          <Button size="sm" variant="secondary" onClick={handleClearFilters}>
-            Limpar
-          </Button>
+          <Button size="sm" onClick={() => { setPage(0); void fetchLogs() }}>Aplicar filtros</Button>
+          <Button size="sm" variant="secondary" onClick={() => {
+            setDateFrom('')
+            setDateTo('')
+            setActionFilter('')
+            setUserFilter('')
+            setPage(0)
+          }}>Limpar</Button>
         </div>
       </div>
 
@@ -348,43 +319,76 @@ export function AuditPage() {
         </Alert>
       )}
 
-      <DataTable<AuditLogDisplay>
-        columns={columns}
-        data={logs}
-        keyExtractor={(row) => row.id}
-        isLoading={loading}
-        emptyMessage="Nenhum registro de auditoria encontrado"
-      />
+      {loading ? (
+        <div className="flex flex-col items-center justify-center py-14">
+          <Spinner size="lg" />
+          <p className="mt-4 text-sm text-gray-400">Carregando auditoria...</p>
+        </div>
+      ) : logs.length === 0 ? (
+        <EmptyState
+          icon={<ClipboardIcon size={48} />}
+          title="Nenhum evento encontrado"
+          description="Tente ajustar periodo ou filtros."
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          {logs.map((log) => {
+            const highlights = importantSummary(log)
+            const changed = diffKeys(log.old_data, log.new_data)
+
+            return (
+              <Card key={log.id} variant="bordered" padding="md">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <ActionBadge action={log.action} />
+                      <span className="text-sm font-semibold text-orange-200">{entityTitle(log)}</span>
+                      <span className="text-sm font-medium text-white">{log.user_name}</span>
+                      <span className="text-xs text-gray-500">{formatDateTime(log.created_at)}</span>
+                    </div>
+
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      {changed.slice(0, 6).map((field) => (
+                        <span key={field} className="rounded-full border border-orange-500/15 bg-orange-500/10 px-2.5 py-1 text-[11px] text-orange-200">
+                          {labelForKey(field)}
+                        </span>
+                      ))}
+                      {changed.length > 6 && (
+                        <span className="rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[11px] text-gray-400">
+                          +{changed.length - 6}
+                        </span>
+                      )}
+                    </div>
+
+                    {highlights.length > 0 && (
+                      <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
+                        {highlights.map((item) => (
+                          <div key={item} className="rounded-2xl border border-white/8 bg-white/4 px-3 py-2 text-sm text-gray-300">
+                            {item}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       {totalCount > 0 && (
         <div className="flex items-center justify-between">
           <p className="text-sm text-gray-400">
-            {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, totalCount)} de{' '}
-            {totalCount} registros
+            {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, totalCount)} de {totalCount} eventos
           </p>
           <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={page === 0}
-              onClick={() => {
-                setPage((p) => p - 1)
-              }}
-            >
+            <Button size="sm" variant="secondary" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>
               Anterior
             </Button>
-            <span className="text-sm text-gray-400">
-              Página {page + 1} de {totalPages}
-            </span>
-            <Button
-              size="sm"
-              variant="secondary"
-              disabled={page >= totalPages - 1}
-              onClick={() => {
-                setPage((p) => p + 1)
-              }}
-            >
-              Próxima
+            <span className="text-sm text-gray-400">Pagina {page + 1} de {totalPages}</span>
+            <Button size="sm" variant="secondary" disabled={page >= totalPages - 1} onClick={() => setPage((value) => value + 1)}>
+              Proxima
             </Button>
           </div>
         </div>

@@ -10,6 +10,13 @@ interface ProtectedRouteProps {
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, profile, loading, error, retry } = useAuth()
   const navigate = useNavigate()
+  const accessReason = !profile
+    ? 'no_profile'
+    : !profile.is_active
+    ? 'inactive_profile'
+    : profile.role !== 'supervisor'
+    ? 'forbidden_role'
+    : null
 
   if (loading) {
     return (
@@ -19,7 +26,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     )
   }
 
-  if (error && !(user && profile)) {
+  if (error && !accessReason) {
     const isSessionError = error.toLowerCase().includes('sessão expirada')
 
     const handleAction = () => {
@@ -67,8 +74,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <Navigate to="/login" replace />
   }
 
-  if (!profile) {
-    return <Navigate to="/login?reason=no_profile" replace />
+  if (accessReason) {
+    return <Navigate to={`/login?reason=${accessReason}`} replace />
   }
 
   return <>{children}</>

@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import type { Tables } from '../../types/database'
 import type { DateRange, ReportPeriod } from '../../types'
 import { supabase } from '../../lib/supabase'
-import { cn, formatDateTime } from '../../lib/utils'
+import { cn, formatDateTime, openPrintSectionedTableDocument, openPrintTableDocument } from '../../lib/utils'
 import {
   Button,
   Input,
@@ -15,7 +15,7 @@ import {
   StatCard,
   Spinner,
 } from '../../components/ui'
-import { ChartIcon, ClipboardIcon, PackageIcon, UsersIcon, AlertIcon, UserIcon } from '../../components/icons'
+import { ChartIcon, ClipboardIcon, PackageIcon, UsersIcon, AlertIcon } from '../../components/icons'
 import {
   BarChart,
   Bar,
@@ -33,6 +33,7 @@ type WorkSiteRow = Tables<'work_sites'>
 type TabKey =
   | 'movements'
   | 'inventory'
+  | 'stock'
   | 'abc'
   | 'lowstock'
   | 'leader'
@@ -40,6 +41,7 @@ type TabKey =
 const TABS: { key: TabKey; label: string }[] = [
   { key: 'movements', label: 'Movimentacoes por Periodo' },
   { key: 'inventory', label: 'Inventario de Colaboradores' },
+  { key: 'stock', label: 'Estoque Geral' },
   { key: 'abc', label: 'Curva ABC de Saida' },
   { key: 'lowstock', label: 'Itens Abaixo do Minimo' },
   { key: 'leader', label: 'Consumo por Lider' },
@@ -106,6 +108,14 @@ interface LeaderConsumptionItem {
   quantity: number
 }
 
+interface LeaderConsumptionSection {
+  leaderId: string
+  leaderName: string
+  items: LeaderConsumptionItem[]
+  totalItems: number
+  totalWithdrawals: number
+}
+
 const JOB_TITLE_FILTER_OPTIONS = [
   { value: '', label: 'Todas as funcoes' },
   { value: 'cabista', label: 'Cabista' },
@@ -122,6 +132,9 @@ const reportsCache = {
   inventory: {
     collaborators: [] as CollaboratorWithInventory[],
   },
+  stock: {
+    items: [] as StockItemRow[],
+  },
   abc: {
     items: [] as AbcItem[],
   },
@@ -131,6 +144,7 @@ const reportsCache = {
   leader: {
     leaders: [] as PersonRow[],
     consumptionData: [] as LeaderConsumptionItem[],
+    sections: [] as LeaderConsumptionSection[],
     totalItems: 0,
     totalWithdrawals: 0,
   },
@@ -167,6 +181,21 @@ function exportToCSV(data: Record<string, unknown>[], filename: string) {
   URL.revokeObjectURL(url)
 }
 
+function exportToPDF(data: Record<string, unknown>[], title: string, subtitle: string, filename: string) {
+  if (data.length === 0) return
+
+  openPrintTableDocument({
+    title,
+    subtitle,
+    filename,
+    columns: Object.keys(data[0]).map((key) => ({
+      key,
+      label: key,
+    })),
+    rows: data,
+  })
+}
+
 export function ReportsPage() {
   const [activeTab, setActiveTab] = useState<TabKey>('movements')
 
@@ -199,6 +228,7 @@ export function ReportsPage() {
 
       {activeTab === 'movements' && <MovementsTab />}
       {activeTab === 'inventory' && <InventoryTab />}
+      {activeTab === 'stock' && <StockOverviewTab />}
       {activeTab === 'abc' && <AbcCurveTab />}
       {activeTab === 'lowstock' && <LowStockTab />}
       {activeTab === 'leader' && <LeaderConsumptionTab />}
@@ -417,6 +447,24 @@ function MovementsTab() {
     exportToCSV(rows, 'movimentacoes-periodo.csv')
   }
 
+  const handleExportPDF = () => {
+    const rows = withdrawals.map((w) => ({
+      Data: formatDateTime(w.created_at),
+      Codigo: w.code,
+      Lider: w.requested_by_person?.full_name ?? '',
+      Destino:
+        w.destination_type === 'collaborator'
+          ? w.collaborator?.full_name ?? 'Colaborador'
+          : 'obra jamaaw',
+      Itens: w.withdrawal_items
+        .map((wi) => `${wi.stock_items?.name ?? '-'} (${wi.quantity} ${wi.unit})`)
+        .join(', '),
+      'Qtd Total': w.withdrawal_items.reduce((s, wi) => s + wi.quantity, 0),
+    }))
+
+    exportToPDF(rows, 'Movimentacoes por Periodo', 'Relatorio consolidado de retiradas filtradas.', 'movimentacoes-periodo.pdf')
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <Card variant="bordered" padding="md">
@@ -492,6 +540,14 @@ function MovementsTab() {
             >
               Exportar CSV
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={withdrawals.length === 0}
+            >
+              Exportar PDF
+            </Button>
           </div>
         </div>
       </Card>
@@ -513,11 +569,187 @@ function MovementsTab() {
   )
 }
 
+function StockOverviewTab() {
+  const [stockItems, setStockItems] = useState<StockItemRow[]>(reportsCache.stock.items)
+  const [loading, setLoading] = useState(reportsCache.stock.items.length === 0)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function fetchStockItems() {
+      if (reportsCache.stock.items.length === 0) {
+        setLoading(true)
+      }
+      setError(null)
+
+      const { data, error: fetchError } = await supabase
+        .from('stock_items')
+        .select('*')
+        .eq('is_active', true)
+        .order('name')
+
+      if (fetchError) {
+        setError(fetchError.message)
+        setStockItems([])
+      } else {
+        reportsCache.stock.items = (data as StockItemRow[] | null) ?? []
+        setStockItems(reportsCache.stock.items)
+      }
+
+      setLoading(false)
+    }
+
+    void fetchStockItems()
+  }, [])
+
+  const stockRows = useMemo(
+    () => stockItems.map((item) => ({
+      Codigo: item.code,
+      Item: item.name,
+      Categoria: item.category ?? '',
+      Unidade: item.unit,
+      'Qtd Atual': item.current_quantity,
+      'Qtd Minima': item.minimum_quantity,
+      Status: item.current_quantity <= item.minimum_quantity ? 'Abaixo do minimo' : 'OK',
+    })),
+    [stockItems],
+  )
+
+  const tableData = useMemo(
+    () => stockItems as (StockItemRow & Record<string, unknown>)[],
+    [stockItems],
+  )
+
+  const columns = useMemo(
+    () => [
+      {
+        key: 'code' as const,
+        header: 'Codigo',
+        sortable: true,
+        render: (value: unknown) => (
+          <span className="font-mono text-orange-400">{value as string}</span>
+        ),
+      },
+      {
+        key: 'name' as const,
+        header: 'Item',
+        sortable: true,
+        render: (value: unknown) => <span className="font-medium text-white">{value as string}</span>,
+      },
+      {
+        key: 'category' as const,
+        header: 'Categoria',
+        sortable: true,
+        render: (value: unknown) => (value as string | null) ?? '-',
+      },
+      {
+        key: 'unit' as const,
+        header: 'Unidade',
+        render: (value: unknown) => value as string,
+      },
+      {
+        key: 'current_quantity' as const,
+        header: 'Qtd Atual',
+        className: 'text-right',
+        render: (_value: unknown, row: StockItemRow & Record<string, unknown>) => {
+          const item = row as StockItemRow
+          return (
+            <span className={cn(
+              'inline-block w-[88px] text-right font-medium tabular-nums',
+              item.current_quantity <= item.minimum_quantity ? 'text-orange-400' : 'text-white',
+            )}
+            >
+              {item.current_quantity}
+            </span>
+          )
+        },
+      },
+      {
+        key: 'minimum_quantity' as const,
+        header: 'Qtd Minima',
+        className: 'text-right',
+        render: (value: unknown) => (
+          <span className="inline-block w-[88px] text-right text-gray-300 tabular-nums">{value as number}</span>
+        ),
+      },
+    ],
+    [],
+  )
+
+  const handleExportPDF = () => {
+    exportToPDF(
+      stockRows,
+      'Estoque Geral',
+      'Panorama completo dos itens ativos do estoque.',
+      'estoque-geral.pdf',
+    )
+  }
+
+  if (loading) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12">
+        <Spinner size="lg" />
+        <p className="mt-4 text-sm text-gray-400">Carregando estoque...</p>
+      </div>
+    )
+  }
+
+  if (error) {
+    return <Alert variant="danger" title="Erro ao carregar">{error}</Alert>
+  }
+
+  if (stockItems.length === 0) {
+    return (
+      <EmptyState
+        icon={<PackageIcon size={48} />}
+        title="Sem itens ativos"
+        description="Nao ha itens ativos para relatar no estoque."
+      />
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => exportToCSV(stockRows, 'estoque-geral.csv')}>
+          Exportar CSV
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleExportPDF}>
+          Exportar PDF
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <StatCard title="Itens Ativos" value={stockItems.length} icon={<PackageIcon size={20} />} />
+        <StatCard
+          title="Qtd Total"
+          value={stockItems.reduce((total, item) => total + item.current_quantity, 0)}
+          icon={<ClipboardIcon size={20} />}
+        />
+        <StatCard
+          title="Abaixo do Minimo"
+          value={stockItems.filter((item) => item.current_quantity <= item.minimum_quantity).length}
+          icon={<AlertIcon size={20} />}
+          variant="warning"
+        />
+      </div>
+
+      <DataTable<StockItemRow & Record<string, unknown>>
+        columns={columns}
+        data={tableData}
+        keyExtractor={(row) => (row as StockItemRow).id}
+        isLoading={false}
+        emptyMessage="Nenhum item encontrado"
+      />
+    </div>
+  )
+}
+
 function InventoryTab() {
   const [collaborators, setCollaborators] = useState<CollaboratorWithInventory[]>(reportsCache.inventory.collaborators)
   const [loading, setLoading] = useState(reportsCache.inventory.collaborators.length === 0)
   const [error, setError] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [selectedCollaboratorId, setSelectedCollaboratorId] = useState<string>('')
 
   useEffect(() => {
     async function fetchInventory() {
@@ -536,7 +768,10 @@ function InventoryTab() {
       if (fetchError) {
         setError(fetchError.message)
       } else {
-        reportsCache.inventory.collaborators = (data as unknown as CollaboratorWithInventory[]) ?? []
+        reportsCache.inventory.collaborators = (((data as unknown as CollaboratorWithInventory[]) ?? []).map((collaborator) => ({
+          ...collaborator,
+          person_inventories: (collaborator.person_inventories ?? []).filter((inventory) => inventory.stock_items?.is_active),
+        })))
         setCollaborators(reportsCache.inventory.collaborators)
       }
       setLoading(false)
@@ -545,6 +780,19 @@ function InventoryTab() {
   }, [])
 
   type CollabRowForTable = CollaboratorWithInventory & Record<string, unknown>
+
+  const collaboratorOptions = useMemo(
+    () => [
+      { value: '', label: 'Selecione um colaborador' },
+      ...collaborators.map((collaborator) => ({
+        value: collaborator.id,
+        label: collaborator.full_name,
+      })),
+    ],
+    [collaborators],
+  )
+
+  const selectedCollaborator = collaborators.find((collaborator) => collaborator.id === selectedCollaboratorId)
 
   const tableData = useMemo<CollabRowForTable[]>(
     () => collaborators as CollabRowForTable[],
@@ -658,6 +906,74 @@ function InventoryTab() {
     exportToCSV(rows, 'inventario-colaboradores.csv')
   }
 
+  const handleExportPDF = () => {
+    const rows: Record<string, unknown>[] = []
+
+    for (const collaborator of collaborators) {
+      const inventories = collaborator.person_inventories ?? []
+
+      if (inventories.length === 0) {
+        rows.push({
+          Colaborador: collaborator.full_name,
+          Matricula: collaborator.employee_id ?? '',
+          Setor: collaborator.sector ?? '',
+          Item: '-',
+          Quantidade: 0,
+        })
+        continue
+      }
+
+      for (const inventory of inventories) {
+        rows.push({
+          Colaborador: collaborator.full_name,
+          Matricula: collaborator.employee_id ?? '',
+          Setor: collaborator.sector ?? '',
+          Item: inventory.stock_items?.name ?? '-',
+          Quantidade: inventory.quantity,
+        })
+      }
+    }
+
+    exportToPDF(rows, 'Inventario de Colaboradores', 'Itens ativos ainda vinculados aos colaboradores.', 'inventario-colaboradores.pdf')
+  }
+
+  const handleExportIndividualPDF = (collaborator: CollaboratorWithInventory | undefined) => {
+    if (!collaborator) return
+
+    openPrintSectionedTableDocument({
+      title: `Inventario Individual - ${collaborator.full_name}`,
+      subtitle: 'Relatorio individual de itens ativos vinculados ao colaborador.',
+      filename: `inventario-${collaborator.full_name.toLowerCase().replace(/\s+/g, '-')}.pdf`,
+      sections: [
+        {
+          title: collaborator.full_name,
+          subtitle: `Matricula: ${collaborator.employee_id ?? '-'} | Setor: ${collaborator.sector ?? '-'}`,
+          columns: [
+            { key: 'item', label: 'Item' },
+            { key: 'category', label: 'Categoria' },
+            { key: 'quantity', label: 'Quantidade' },
+            { key: 'unit', label: 'Unidade' },
+          ],
+          rows: (collaborator.person_inventories ?? []).length > 0
+            ? collaborator.person_inventories.map((inventory) => ({
+              item: inventory.stock_items?.name ?? '-',
+              category: inventory.stock_items?.category ?? '-',
+              quantity: inventory.quantity,
+              unit: inventory.stock_items?.unit ?? '-',
+            }))
+            : [
+              {
+                item: 'Nenhum item',
+                category: '-',
+                quantity: 0,
+                unit: '-',
+              },
+            ],
+        },
+      ],
+    })
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -683,7 +999,24 @@ function InventoryTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex justify-end">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div className="w-full max-w-sm">
+          <Select
+            label="PDF individual"
+            options={collaboratorOptions}
+            value={selectedCollaboratorId}
+            onChange={(e) => setSelectedCollaboratorId(e.target.value)}
+          />
+        </div>
+        <div className="flex gap-2">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleExportIndividualPDF(selectedCollaborator)}
+            disabled={!selectedCollaborator}
+          >
+            PDF Individual
+          </Button>
         <Button
           variant="outline"
           size="sm"
@@ -692,6 +1025,15 @@ function InventoryTab() {
         >
           Exportar CSV
         </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleExportPDF}
+          disabled={collaborators.length === 0}
+        >
+          Exportar PDF
+        </Button>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -713,9 +1055,18 @@ function InventoryTab() {
 
           return (
             <Card variant="bordered" padding="md">
-              <h4 className="mb-3 text-sm font-semibold text-white">
-                Itens de {collab.full_name}
-              </h4>
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <h4 className="text-sm font-semibold text-white">
+                  Itens de {collab.full_name}
+                </h4>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleExportIndividualPDF(collab)}
+                >
+                  PDF Individual
+                </Button>
+              </div>
               <div className="overflow-hidden rounded-lg border border-gray-700">
                 <table className="w-full">
                   <thead>
@@ -1192,6 +1543,18 @@ function LowStockTab() {
     exportToCSV(rows, 'itens-abaixo-minimo.csv')
   }
 
+  const handleExportPDF = () => {
+    const rows = lowStockItems.map((item) => ({
+      Item: item.name,
+      Categoria: item.category ?? '',
+      'Qtd Atual': item.current_quantity,
+      'Qtd Minima': item.minimum_quantity,
+      Deficit: item.deficit,
+      Severidade: item.severity === 'critical' ? 'Critico' : 'Atencao',
+    }))
+    exportToPDF(rows, 'Itens Abaixo do Minimo', 'Panorama de reposicao imediata do estoque.', 'itens-abaixo-minimo.pdf')
+  }
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center py-12">
@@ -1221,9 +1584,12 @@ function LowStockTab() {
         <Alert variant="warning" title="Itens com estoque abaixo do minimo" className="flex-1">
           {lowStockItems.length} item(ns) encontrados abaixo da quantidade minima
         </Alert>
-        <div className="ml-4">
+        <div className="ml-4 flex gap-2">
           <Button variant="outline" size="sm" onClick={handleExportCSV}>
             Exportar CSV
+          </Button>
+          <Button variant="outline" size="sm" onClick={handleExportPDF}>
+            Exportar PDF
           </Button>
         </div>
       </div>
@@ -1250,11 +1616,12 @@ function LowStockTab() {
 
 function LeaderConsumptionTab() {
   const [leaders, setLeaders] = useState<PersonRow[]>(reportsCache.leader.leaders)
-  const [selectedLeader, setSelectedLeader] = useState<string>('')
+  const [selectedLeader, setSelectedLeader] = useState<string>('all')
   const [period, setPeriod] = useState<ReportPeriod>('month')
   const [customFrom, setCustomFrom] = useState<string>('')
   const [customTo, setCustomTo] = useState<string>('')
   const [consumptionData, setConsumptionData] = useState<LeaderConsumptionItem[]>(reportsCache.leader.consumptionData)
+  const [sections, setSections] = useState<LeaderConsumptionSection[]>(reportsCache.leader.sections)
   const [totalItems, setTotalItems] = useState(reportsCache.leader.totalItems)
   const [totalWithdrawals, setTotalWithdrawals] = useState(reportsCache.leader.totalWithdrawals)
   const [loading, setLoading] = useState(false)
@@ -1279,20 +1646,13 @@ function LeaderConsumptionTab() {
 
   const leaderOptions = useMemo(
     () => [
-      { value: '', label: 'Selecione um lider' },
+      { value: 'all', label: 'Todos os lideres' },
       ...leaders.map((l) => ({ value: l.id, label: l.full_name })),
     ],
     [leaders],
   )
 
   const fetchConsumption = useCallback(async () => {
-    if (!selectedLeader) {
-      setConsumptionData([])
-      setTotalItems(0)
-      setTotalWithdrawals(0)
-      return
-    }
-
     setLoading(true)
     setError(null)
 
@@ -1311,13 +1671,18 @@ function LeaderConsumptionTab() {
       range = getDateRange(period)
     }
 
-    const { data, error: fetchError } = await supabase
+    let query = supabase
       .from('withdrawals')
-      .select('id, withdrawal_items(quantity, stock_items:stock_items(name))')
-      .eq('requested_by', selectedLeader)
+      .select('id, requested_by, withdrawal_items(quantity, stock_items:stock_items(name))')
       .in('status', ['approved', 'completed'])
       .gte('created_at', range.from.toISOString())
       .lte('created_at', range.to.toISOString())
+
+    if (selectedLeader !== 'all') {
+      query = query.eq('requested_by', selectedLeader)
+    }
+
+    const { data, error: fetchError } = await query
 
     if (fetchError) {
       setError(fetchError.message)
@@ -1330,22 +1695,38 @@ function LeaderConsumptionTab() {
 
     const rawWithdrawals = (data ?? []) as unknown as {
       id: string
+      requested_by: string
       withdrawal_items: {
         quantity: number
         stock_items: { name: string } | null
       }[]
     }[]
 
+    const leaderNames = new Map(leaders.map((leader) => [leader.id, leader.full_name]))
     const grouped = new Map<string, number>()
+    const groupedByLeader = new Map<string, Map<string, number>>()
+    const withdrawalIdsByLeader = new Map<string, Set<string>>()
     let itemsTotal = 0
     const withdrawalIds = new Set<string>()
 
     for (const w of rawWithdrawals) {
       withdrawalIds.add(w.id)
+      if (!groupedByLeader.has(w.requested_by)) {
+        groupedByLeader.set(w.requested_by, new Map<string, number>())
+      }
+      if (!withdrawalIdsByLeader.has(w.requested_by)) {
+        withdrawalIdsByLeader.set(w.requested_by, new Set<string>())
+      }
+      withdrawalIdsByLeader.get(w.requested_by)?.add(w.id)
+
       for (const wi of w.withdrawal_items) {
         const name = wi.stock_items?.name ?? 'Desconhecido'
         const current = grouped.get(name) ?? 0
         grouped.set(name, current + wi.quantity)
+        const leaderBucket = groupedByLeader.get(w.requested_by)
+        if (leaderBucket) {
+          leaderBucket.set(name, (leaderBucket.get(name) ?? 0) + wi.quantity)
+        }
         itemsTotal += wi.quantity
       }
     }
@@ -1354,14 +1735,31 @@ function LeaderConsumptionTab() {
       .sort((a, b) => b[1] - a[1])
       .map(([name, quantity]) => ({ name, quantity }))
 
+    const leaderSections = Array.from(groupedByLeader.entries())
+      .map(([leaderId, leaderGrouped]) => {
+        const items = Array.from(leaderGrouped.entries())
+          .sort((a, b) => b[1] - a[1])
+          .map(([name, quantity]) => ({ name, quantity }))
+        return {
+          leaderId,
+          leaderName: leaderNames.get(leaderId) ?? 'Lider',
+          items,
+          totalItems: items.reduce((sum, item) => sum + item.quantity, 0),
+          totalWithdrawals: withdrawalIdsByLeader.get(leaderId)?.size ?? 0,
+        }
+      })
+      .sort((a, b) => a.leaderName.localeCompare(b.leaderName))
+
     reportsCache.leader.consumptionData = sorted
+    reportsCache.leader.sections = leaderSections
     reportsCache.leader.totalItems = itemsTotal
     reportsCache.leader.totalWithdrawals = withdrawalIds.size
     setConsumptionData(sorted)
+    setSections(leaderSections)
     setTotalItems(itemsTotal)
     setTotalWithdrawals(withdrawalIds.size)
     setLoading(false)
-  }, [selectedLeader, period, customFrom, customTo])
+  }, [selectedLeader, period, customFrom, customTo, leaders])
 
   useEffect(() => {
     setTimeout(() => void fetchConsumption(), 0)
@@ -1382,7 +1780,36 @@ function LeaderConsumptionTab() {
       Item: item.name,
       Quantidade: item.quantity,
     }))
-    exportToCSV(rows, `consumo-lider-${selectedLeader}.csv`)
+    exportToCSV(rows, selectedLeader === 'all' ? 'consumo-todos-lideres.csv' : `consumo-lider-${selectedLeader}.csv`)
+  }
+
+  const handleExportPDF = () => {
+    if (selectedLeader === 'all') {
+      openPrintSectionedTableDocument({
+        title: 'Consumo por Lider',
+        subtitle: 'Relatorio separado por lider no periodo selecionado.',
+        filename: 'consumo-todos-lideres.pdf',
+        sections: sections.map((section) => ({
+          title: section.leaderName,
+          subtitle: `Retiradas: ${section.totalWithdrawals} | Itens retirados: ${section.totalItems}`,
+          columns: [
+            { key: 'item', label: 'Item' },
+            { key: 'quantity', label: 'Quantidade' },
+          ],
+          rows: section.items.map((item) => ({
+            item: item.name,
+            quantity: item.quantity,
+          })),
+        })),
+      })
+      return
+    }
+
+    const rows = consumptionData.map((item) => ({
+      Item: item.name,
+      Quantidade: item.quantity,
+    }))
+    exportToPDF(rows, 'Consumo por Lider', 'Resumo dos itens mais retirados pelo lider selecionado.', `consumo-lider-${selectedLeader}.pdf`)
   }
 
   return (
@@ -1437,6 +1864,14 @@ function LeaderConsumptionTab() {
             >
               Exportar CSV
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={consumptionData.length === 0}
+            >
+              Exportar PDF
+            </Button>
           </div>
         </div>
       </Card>
@@ -1447,13 +1882,7 @@ function LeaderConsumptionTab() {
         </Alert>
       )}
 
-      {!selectedLeader ? (
-        <EmptyState
-          icon={<UserIcon size={48} />}
-          title="Selecione um lider"
-          description="Escolha um lider para visualizar o consumo"
-        />
-      ) : loading ? (
+      {loading ? (
         <div className="flex flex-col items-center justify-center py-12">
           <Spinner size="lg" />
           <p className="mt-4 text-sm text-gray-400">Calculando consumo...</p>
@@ -1481,7 +1910,7 @@ function LeaderConsumptionTab() {
 
           <Card variant="bordered" padding="md">
             <h3 className="mb-4 text-sm font-semibold text-gray-300">
-              Itens mais retirados pelo lider
+              {selectedLeader === 'all' ? 'Itens mais retirados por todos os lideres' : 'Itens mais retirados pelo lider'}
             </h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">

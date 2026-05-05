@@ -46,6 +46,7 @@ const UNIT_OPTIONS = [
 
 const CATEGORY_OPTIONS = [
   { value: 'EPI', label: 'EPI' },
+  { value: 'Vestuario', label: 'Vestuario' },
   { value: 'Ferramenta', label: 'Ferramenta' },
   { value: 'Material', label: 'Material' },
   { value: 'Outro', label: 'Outro' },
@@ -178,28 +179,30 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
         : absoluteAdjustment
       : undefined
 
-    const payload = {
+    const basePayload = {
       code: isEditing ? sanitizeCode(formData.code) : '',
       name: formData.name.trim(),
       description: formData.description.trim() || null,
       category: formData.category || null,
       unit: formData.unit,
-      current_quantity: isEditing ? undefined : formData.current_quantity,
       minimum_quantity: formData.minimum_quantity,
       ca_nr: formData.ca_nr.trim() || null,
       svg_icon_key: svgIconKey,
-      stock_adjustment: signedAdjustment,
     }
 
     if (isEditing) {
       await onSubmit({
-        ...payload,
+        ...basePayload,
+        stock_adjustment: signedAdjustment,
         updated_at: new Date().toISOString(),
-      } as StockItemUpdate)
+      } as StockItemUpdate & { stock_adjustment?: number })
       return
     }
 
-    await onSubmit(payload as StockItemInsert)
+    await onSubmit({
+      ...basePayload,
+      current_quantity: formData.current_quantity,
+    } as StockItemInsert)
   }
 
   return (
