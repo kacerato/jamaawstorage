@@ -351,7 +351,7 @@ export function StockPage() {
     }
   }
 
-  const handleDelete = async () => {
+  const handleDeactivate = async () => {
     if (!selectedItem) return
 
     setIsSubmitting(true)
@@ -374,6 +374,36 @@ export function StockPage() {
       void fetchItems(currentPage)
     } catch (err) {
       setSubmitError(err instanceof Error ? err.message : 'Erro inesperado ao desativar item.')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const handlePermanentDelete = async () => {
+    if (!selectedItem) return
+
+    setIsSubmitting(true)
+    setSubmitError(null)
+    try {
+      const { error: deleteError } = await supabase
+        .from('stock_items')
+        .delete()
+        .eq('id', selectedItem.id)
+
+      if (deleteError) {
+        if (deleteError.message.toLowerCase().includes('violates foreign key constraint')) {
+          setSubmitError('Este item possui historico vinculado. Use "Desativar" para preservar retiradas e movimentacoes.')
+          return
+        }
+
+        setSubmitError(deleteError.message)
+        return
+      }
+
+      handleCloseModal()
+      void fetchItems(currentPage)
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Erro inesperado ao excluir item.')
     } finally {
       setIsSubmitting(false)
     }
@@ -721,21 +751,36 @@ export function StockPage() {
         )}
       </Modal>
 
-      <Modal isOpen={modalMode === 'delete'} onClose={handleCloseModal} title="Desativar Item" size="sm">
+      <Modal isOpen={modalMode === 'delete'} onClose={handleCloseModal} title="Desativar ou Excluir Item" size="sm">
         {submitError && (
-          <Alert variant="danger" title="Erro ao desativar item" className="mb-4">
+          <Alert variant="danger" title="Erro ao alterar item" className="mb-4">
             {submitError}
           </Alert>
         )}
         <p className="text-gray-300">
-          Tem certeza que deseja desativar o item <span className="font-semibold text-white">{selectedItem?.name}</span>?
+          Escolha o que fazer com <span className="font-semibold text-white">{selectedItem?.name}</span>.
         </p>
+        <div className="mt-4 rounded-xl border border-white/8 bg-white/4 p-4">
+          <p className="text-sm font-medium text-white">Desativar</p>
+          <p className="mt-1 text-sm text-gray-400">
+            Mantem o historico e retira o item do uso normal no estoque.
+          </p>
+          <Button className="mt-4" variant="secondary" onClick={handleDeactivate} isLoading={isSubmitting}>
+            Desativar item
+          </Button>
+        </div>
+        <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
+          <p className="text-sm font-medium text-white">Excluir</p>
+          <p className="mt-1 text-sm text-gray-400">
+            Remove o item de vez. Se houver retiradas ou historico vinculado, a exclusao sera bloqueada.
+          </p>
+          <Button className="mt-4" variant="danger" onClick={handlePermanentDelete} isLoading={isSubmitting}>
+            Excluir item
+          </Button>
+        </div>
         <div className="mt-6 flex items-center justify-end gap-3">
           <Button variant="secondary" onClick={handleCloseModal} disabled={isSubmitting}>
-            Cancelar
-          </Button>
-          <Button variant="danger" onClick={handleDelete} isLoading={isSubmitting}>
-            Desativar
+            Fechar
           </Button>
         </div>
       </Modal>
@@ -851,7 +896,7 @@ export function StockPage() {
                 Editar
               </Button>
               <Button variant="danger" onClick={() => setModalMode('delete')}>
-                Desativar
+                Desativar ou excluir
               </Button>
             </div>
           </div>

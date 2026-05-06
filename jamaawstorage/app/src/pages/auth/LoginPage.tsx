@@ -93,7 +93,7 @@ export function LoginPage() {
           </div>
 
           {/* ── Titles ───────────────────────────────────────────────────── */}
-          <h1 className="login-title">JamaaW Storage</h1>
+          <h1 className="login-title">Jamaaw Storage</h1>
           <p className="login-subtitle">Gestão inteligente de almoxarifado</p>
 
           {/* ── Decorative line ───────────────────────────────────────────── */}

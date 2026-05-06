@@ -2,6 +2,7 @@ import { useState, type FormEvent } from 'react'
 import type { Tables } from '../../types/database'
 import type { KitWithItems } from '../../types'
 import { Input, Button, Modal } from '../../components/ui'
+import { ItemVisual } from '../../components/items/ItemVisual'
 import { KitItemSelector } from './KitItemSelector'
 import { PackageIcon } from '../../components/icons'
 import { formatQuantity } from '../../lib/utils'
@@ -154,7 +155,7 @@ export function KitForm({ kit, onSubmit, onCancel, isSubmitting }: KitFormProps)
                 className="flex items-center gap-3 rounded-2xl border border-white/6 bg-[#111217] px-3 py-2.5"
               >
                 <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-orange-400/12 bg-orange-500/12">
-                  <PackageIcon size={14} className="text-orange-300" />
+                  <ItemVisual iconKey={item.stockItem.svg_icon_key} size={20} />
                 </div>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-white">

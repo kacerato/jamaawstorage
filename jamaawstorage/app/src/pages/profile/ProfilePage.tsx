@@ -1,8 +1,9 @@
-import { useCallback, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import { supabase } from '../../lib/supabase'
-import { DEFAULT_IMAGE_UPLOAD_OPTIONS, imageFileToDataUrl } from '../../lib/utils'
+import { DEFAULT_IMAGE_UPLOAD_OPTIONS } from '../../lib/utils'
+import { uploadImageToStorage } from '../../lib/storage'
 import { Alert, Button, Card, Input, Spinner } from '../../components/ui'
 
 function getInitials(fullName: string): string {
@@ -36,20 +37,35 @@ export function ProfilePage() {
   const [fullName, setFullName] = useState(profile?.full_name ?? '')
   const [photoUrl, setPhotoUrl] = useState(profile?.photo_url ?? '')
   const [isLoading, setIsLoading] = useState(false)
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
   const [successMessage, setSuccessMessage] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
 
   const initials = useMemo(() => getInitials(profile?.full_name ?? 'U'), [profile?.full_name])
 
+  useEffect(() => {
+    setFullName(profile?.full_name ?? '')
+    setPhotoUrl(profile?.photo_url ?? '')
+  }, [profile?.full_name, profile?.photo_url])
+
   const updatePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file || !profile) return
 
     try {
-      const dataUrl = await imageFileToDataUrl(file, DEFAULT_IMAGE_UPLOAD_OPTIONS)
-      setPhotoUrl(dataUrl)
+      setErrorMessage('')
+      setIsUploadingPhoto(true)
+      const uploadedUrl = await uploadImageToStorage({
+        file,
+        scope: 'profiles',
+        entityId: profile.id,
+        options: DEFAULT_IMAGE_UPLOAD_OPTIONS,
+      })
+      setPhotoUrl(uploadedUrl)
     } catch (error) {
-      console.error(error)
+      setErrorMessage(error instanceof Error ? error.message : 'Erro ao enviar foto.')
+    } finally {
+      setIsUploadingPhoto(false)
     }
   }
 
@@ -183,7 +199,7 @@ export function ProfilePage() {
             <div className="h-px w-full bg-gray-700/50" />
 
             <div className="flex gap-3">
-              <Button variant="primary" isLoading={isLoading} onClick={handleSave} className="flex-1">
+              <Button variant="primary" isLoading={isLoading} onClick={handleSave} className="flex-1" disabled={isUploadingPhoto}>
                 Salvar alterações
               </Button>
               <Button variant="secondary" onClick={() => navigate(-1)} className="flex-1">

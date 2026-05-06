@@ -4,6 +4,7 @@ import type { KitWithItems } from '../../types'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { cn, formatQuantity, formatDateTime } from '../../lib/utils'
+import { ItemVisual } from '../../components/items/ItemVisual'
 import {
   Button,
   Input,
@@ -14,7 +15,7 @@ import {
   EmptyState,
   Spinner,
 } from '../../components/ui'
-import { KitIcon, PackageIcon } from '../../components/icons'
+import { KitIcon } from '../../components/icons'
 import { KitForm, type KitFormItem } from './KitForm'
 
 
@@ -43,6 +44,7 @@ export function KitsPage({
   const [error, setError] = useState<string | null>(null)
 
   const [searchQuery, setSearchQuery] = useState(initialQuery)
+  const [statusFilter, setStatusFilter] = useState<'active' | 'inactive' | 'all'>('active')
 
   const [modalMode, setModalMode] = useState<ModalMode>(null)
   const [selectedKit, setSelectedKit] = useState<KitWithItems | null>(null)
@@ -85,8 +87,14 @@ export function KitsPage({
   }, [initialQuery])
 
   const filteredKits = kits.filter((kit) => {
-    if (searchQuery === '') return true
-    return kit.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const matchesSearch =
+      searchQuery === ''
+        || kit.name.toLowerCase().includes(searchQuery.toLowerCase())
+        || (kit.description ?? '').toLowerCase().includes(searchQuery.toLowerCase())
+
+    if (!matchesSearch) return false
+    if (statusFilter === 'all') return true
+    return statusFilter === 'active' ? kit.is_active : !kit.is_active
   })
 
   const handleOpenCreate = () => {
@@ -295,34 +303,47 @@ export function KitsPage({
       )}
 
       <Card>
-        <Input
-          placeholder="Buscar kit por nome..."
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          leftIcon={
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <circle
-                cx="6.5"
-                cy="6.5"
-                r="5.5"
-                stroke="currentColor"
-                strokeWidth="2"
-              />
-              <path
-                d="M11 11L15 15"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-            </svg>
-          }
-        />
+        <div className="flex flex-col gap-3 md:flex-row">
+          <div className="flex-1">
+            <Input
+              placeholder="Buscar kit por nome..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              leftIcon={
+                <svg
+                  width="16"
+                  height="16"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  xmlns="http://www.w3.org/2000/svg"
+                >
+                  <circle
+                    cx="6.5"
+                    cy="6.5"
+                    r="5.5"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                  />
+                  <path
+                    d="M11 11L15 15"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                  />
+                </svg>
+              }
+            />
+          </div>
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value as 'active' | 'inactive' | 'all')}
+            className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+          >
+            <option value="active">Ativos</option>
+            <option value="inactive">Inativos</option>
+            <option value="all">Todos</option>
+          </select>
+        </div>
         {refreshing && (
           <div className="mt-3 inline-flex items-center gap-2 text-xs text-orange-200/75">
             <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
@@ -353,6 +374,7 @@ export function KitsPage({
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {filteredKits.map((kit) => {
             const itemCount = kit.kit_items?.length ?? 0
+            const previewItems = kit.kit_items.slice(0, 4)
 
             return (
               <Card
@@ -396,16 +418,13 @@ export function KitsPage({
 
                   {itemCount > 0 && (
                     <div className="mt-3 flex flex-col gap-1.5">
-                      {kit.kit_items.map((ki) => (
+                      {previewItems.map((ki) => (
                         <div
                           key={ki.id}
                           className="flex items-center justify-between rounded-lg bg-gray-800/50 px-3 py-1.5"
                         >
                           <div className="flex items-center gap-2">
-                            <PackageIcon
-                              size={14}
-                              className="text-gray-500"
-                            />
+                            <ItemVisual iconKey={ki.stock_items?.svg_icon_key} size={18} />
                             <span className="text-sm text-gray-300">
                               {ki.stock_items?.name ?? 'Item'}
                             </span>
@@ -420,6 +439,11 @@ export function KitsPage({
                           </span>
                         </div>
                       ))}
+                      {itemCount > previewItems.length && (
+                        <div className="rounded-lg border border-dashed border-white/8 bg-white/3 px-3 py-2 text-xs text-gray-400">
+                          +{itemCount - previewItems.length} item(ns) no detalhe do kit
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -623,6 +647,9 @@ export function KitsPage({
                     <thead>
                       <tr className="bg-gray-800">
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
+                          Icone
+                        </th>
+                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
                           Item
                         </th>
                         <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
@@ -647,6 +674,9 @@ export function KitsPage({
                             key={ki.id}
                             className="border-t border-gray-800"
                           >
+                            <td className="px-3 py-2 text-sm text-white">
+                              <ItemVisual iconKey={ki.stock_items?.svg_icon_key} size={24} />
+                            </td>
                             <td className="px-3 py-2 text-sm text-white">
                               {ki.stock_items?.name ?? '—'}
                             </td>

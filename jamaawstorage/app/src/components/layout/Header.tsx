@@ -413,11 +413,15 @@ export function Header({
         >
           <div
             className={cn(
-              'flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold',
+              'flex h-9 w-9 items-center justify-center overflow-hidden rounded-full text-xs font-bold',
               showProfile ? 'bg-orange-500/30 text-orange-200' : 'bg-orange-500/18 text-orange-300'
             )}
           >
-            {initials}
+            {profile?.photo_url ? (
+              <img src={profile.photo_url} alt={profile.full_name ?? 'Supervisor'} className="h-full w-full object-cover" />
+            ) : (
+              initials
+            )}
           </div>
           <span className="hidden text-sm font-medium text-white lg:block">
             {profile?.full_name ?? 'Supervisor'}

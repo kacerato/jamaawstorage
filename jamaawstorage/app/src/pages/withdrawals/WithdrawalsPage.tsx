@@ -22,8 +22,6 @@ const withdrawalsPageCache: {
 const statusOptions = [
   { value: '', label: 'Todas' },
   { value: 'completed', label: 'Concluidas' },
-  { value: 'approved', label: 'Aprovadas' },
-  { value: 'pending', label: 'Pendentes' },
   { value: 'rejected', label: 'Rejeitadas/Canceladas' },
 ]
 
