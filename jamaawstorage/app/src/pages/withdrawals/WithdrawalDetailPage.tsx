@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import type { WithdrawalWithDetails, WithdrawalStatus } from '../../types'
+import { buildPublicStorageUrl } from '../../lib/storage'
 import {
   Button,
   Card,
@@ -121,6 +122,7 @@ export function WithdrawalDetailPage() {
   const hasSupervisorSignature = !!withdrawal.supervisor_signature
   const hasRequesterSignature = !!withdrawal.requester_signature
   const bothSignaturesPresent = hasSupervisorSignature && hasRequesterSignature
+  const sharedSignatureAttachment = resolveSharedSignatureAttachment(withdrawal)
 
   const destinationLabel =
     withdrawal.destination_type === 'collaborator'
@@ -296,6 +298,16 @@ export function WithdrawalDetailPage() {
             )}
           </div>
         </div>
+
+        {sharedSignatureAttachment.url && (
+          <div className="mt-6">
+            <AttachmentCard
+              label="Documento/Foto compartilhado das assinaturas"
+              url={sharedSignatureAttachment.url}
+              fileName={sharedSignatureAttachment.name}
+            />
+          </div>
+        )}
       </Card>
 
       <Modal
@@ -329,6 +341,63 @@ export function WithdrawalDetailPage() {
           </div>
         </div>
       </Modal>
+    </div>
+  )
+}
+
+function resolveSharedSignatureAttachment(withdrawal: WithdrawalRow): { url: string | null; name: string | null } {
+  return {
+    url: withdrawal.supervisor_signature_attachment_url ?? withdrawal.requester_signature_attachment_url ?? null,
+    name: withdrawal.supervisor_signature_attachment_name ?? withdrawal.requester_signature_attachment_name ?? null,
+  }
+}
+
+function isImageUrl(url: string | null | undefined): boolean {
+  if (!url) return false
+  return /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url)
+}
+
+function AttachmentCard({
+  label,
+  url,
+  fileName,
+}: {
+  label: string
+  url: string | null
+  fileName: string | null
+}) {
+  if (!url) {
+    return (
+      <div className="rounded-xl border border-gray-700 bg-gray-900/40 p-4">
+        <p className="text-sm font-medium text-white">{label}</p>
+        <p className="mt-2 text-sm text-gray-500">Nao enviado</p>
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-700 bg-gray-900/40 p-4">
+      <p className="text-sm font-medium text-white">{label}</p>
+      <p className="mt-2 text-xs text-gray-400">{fileName ?? 'Arquivo anexado'}</p>
+      {isImageUrl(url) ? (
+        <img
+          src={buildPublicStorageUrl(url)}
+          alt={label}
+          className="mt-3 max-h-56 rounded-lg border border-gray-700"
+        />
+      ) : (
+        <div className="mt-3 rounded-lg border border-dashed border-gray-700 px-4 py-8 text-sm text-gray-500">
+          Documento anexado
+        </div>
+      )}
+      <a
+        href={buildPublicStorageUrl(url)}
+        target="_blank"
+        rel="noreferrer"
+        className="mt-3 inline-block text-sm font-medium text-orange-300 hover:text-orange-200"
+      >
+        Abrir anexo
+      </a>
     </div>
   )
 }

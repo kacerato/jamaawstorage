@@ -3,53 +3,87 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 // @ts-expect-error Local serverless handler has no TS types.
 import kimiStockImportHandler from './api/kimi-stock-import.js'
+// @ts-expect-error Local serverless handler has no TS types.
+import telegramWithdrawalNotifyHandler from './api/telegram-withdrawal-notify.js'
 
-function localKimiApiPlugin() {
+type LocalApiRequest = NodeJS.ReadableStream & { method?: string; body?: string }
+type LocalApiResponse = NodeJS.WritableStream & {
+  setHeader: (name: string, value: string) => void
+  end: (chunk?: string) => void
+  statusCode?: number
+} & {
+  status?: (code: number) => LocalApiResponse
+  json?: (payload: unknown) => void
+}
+
+function attachLocalApiHandler(
+  server: {
+    middlewares: {
+      use: (
+        path: string,
+        handler: (
+          req: LocalApiRequest,
+          res: LocalApiResponse,
+          next: (error?: unknown) => void,
+        ) => void,
+      ) => void
+    }
+  },
+  path: string,
+  handler: (req: LocalApiRequest, res: LocalApiResponse) => Promise<void>,
+) {
+  server.middlewares.use(path, (req, res, next) => {
+    const response = res as LocalApiResponse
+
+    response.status = (code: number) => {
+      response.statusCode = code
+      return response
+    }
+    response.json = (payload: unknown) => {
+      response.setHeader('Content-Type', 'application/json')
+      response.end(JSON.stringify(payload))
+    }
+
+    let body = ''
+    req.on('data', (chunk) => {
+      body += chunk.toString()
+    })
+    req.on('end', async () => {
+      try {
+        await handler(
+          Object.assign(req, { body }) as LocalApiRequest,
+          response,
+        )
+      } catch (error) {
+        next(error)
+      }
+    })
+    req.on('error', next)
+  })
+}
+
+function localApiPlugin() {
   return {
-    name: 'local-kimi-api',
+    name: 'local-api-handlers',
     configureServer(server: {
       middlewares: {
-        use: (path: string, handler: (req: NodeJS.ReadableStream & { method?: string; body?: string }, res: NodeJS.WritableStream & {
-          setHeader: (name: string, value: string) => void
-          end: (chunk?: string) => void
-          statusCode?: number
-        }, next: (error?: unknown) => void) => void) => void
+        use: (
+          path: string,
+          handler: (req: LocalApiRequest, res: LocalApiResponse, next: (error?: unknown) => void) => void,
+        ) => void
       }
     }) {
-      server.middlewares.use('/api/kimi-stock-import', (req, res, next) => {
-        const response = res as NodeJS.WritableStream & {
-          setHeader: (name: string, value: string) => void
-          end: (chunk?: string) => void
-          statusCode?: number
-        } & {
-          status?: (code: number) => typeof response
-          json?: (payload: unknown) => void
-        }
-
-        response.status = (code: number) => {
-          response.statusCode = code
-          return response
-        }
-        response.json = (payload: unknown) => {
-          response.setHeader('Content-Type', 'application/json')
-          response.end(JSON.stringify(payload))
-        }
-
-        let body = ''
-        req.on('data', (chunk) => {
-          body += chunk.toString()
-        })
-        req.on('end', async () => {
-          try {
-            await kimiStockImportHandler(
-              Object.assign(req, { body }) as Parameters<typeof kimiStockImportHandler>[0],
-              response as Parameters<typeof kimiStockImportHandler>[1],
-            )
-          } catch (error) {
-            next(error)
-          }
-        })
-        req.on('error', next)
+      attachLocalApiHandler(server, '/api/kimi-stock-import', async (req, res) => {
+        await kimiStockImportHandler(
+          req as Parameters<typeof kimiStockImportHandler>[0],
+          res as Parameters<typeof kimiStockImportHandler>[1],
+        )
+      })
+      attachLocalApiHandler(server, '/api/telegram-withdrawal-notify', async (req, res) => {
+        await telegramWithdrawalNotifyHandler(
+          req as Parameters<typeof telegramWithdrawalNotifyHandler>[0],
+          res as Parameters<typeof telegramWithdrawalNotifyHandler>[1],
+        )
       })
     },
   }
@@ -57,15 +91,24 @@ function localKimiApiPlugin() {
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
-  if (env.KIMI_API) {
-    process.env.KIMI_API = env.KIMI_API
+  const forwardedEnvKeys = [
+    'KIMI_API',
+    'TELEGRAM_BOT_TOKEN',
+    'TELEGRAM_CHAT_ID',
+    'TELEGRAM_CHANNEL_URL',
+  ] as const
+
+  for (const key of forwardedEnvKeys) {
+    if (env[key]) {
+      process.env[key] = env[key]
+    }
   }
 
   return {
     plugins: [
       react(),
       tailwindcss(),
-      localKimiApiPlugin(),
+      localApiPlugin(),
     ],
   }
 })

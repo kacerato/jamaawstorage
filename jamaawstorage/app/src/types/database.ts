@@ -234,7 +234,11 @@ export interface Database {
       notes: string | null
       photo_url: string | null
       supervisor_signature: string | null
+      supervisor_signature_attachment_url: string | null
+      supervisor_signature_attachment_name: string | null
       requester_signature: string | null
+      requester_signature_attachment_url: string | null
+      requester_signature_attachment_name: string | null
       witness_signature: string | null
       withdrawn_at: string | null
       created_at: string
@@ -252,7 +256,11 @@ export interface Database {
       notes?: string | null
       photo_url?: string | null
       supervisor_signature?: string | null
+      supervisor_signature_attachment_url?: string | null
+      supervisor_signature_attachment_name?: string | null
       requester_signature?: string | null
+      requester_signature_attachment_url?: string | null
+      requester_signature_attachment_name?: string | null
       witness_signature?: string | null
       withdrawn_at?: string | null
       created_at?: string
@@ -270,7 +278,11 @@ export interface Database {
       notes?: string | null
       photo_url?: string | null
       supervisor_signature?: string | null
+      supervisor_signature_attachment_url?: string | null
+      supervisor_signature_attachment_name?: string | null
       requester_signature?: string | null
+      requester_signature_attachment_url?: string | null
+      requester_signature_attachment_name?: string | null
       witness_signature?: string | null
       withdrawn_at?: string | null
       created_at?: string
@@ -545,6 +557,15 @@ export interface Database {
     Args: {
       p_person_id: string
       p_items: Record<string, unknown>[]
+    }
+    Returns: number
+  }
+  remove_inventory_item_from_person: {
+    Args: {
+      p_person_id: string
+      p_stock_item_id: string
+      p_quantity: number
+      p_destination: string
     }
     Returns: number
   }

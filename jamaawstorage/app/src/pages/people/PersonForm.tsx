@@ -2,7 +2,8 @@ import { useEffect, useRef, useState, type ChangeEvent } from 'react'
 import type { AppRole, Tables, TablesInsert, TablesUpdate } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
-import { DEFAULT_IMAGE_UPLOAD_OPTIONS, imageFileToDataUrl } from '../../lib/utils'
+import { DEFAULT_IMAGE_UPLOAD_OPTIONS } from '../../lib/utils'
+import { uploadImageToStorage } from '../../lib/storage'
 import { Alert, Button, Input, Select } from '../../components/ui'
 
 interface PersonFormProps {
@@ -49,6 +50,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
   })
   const [errors, setErrors] = useState<FormErrors>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [isUploadingPhoto, setIsUploadingPhoto] = useState(false)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
   useEffect(() => {
@@ -74,14 +76,25 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
 
   const updatePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file || !profile) return
 
     try {
-      const dataUrl = await imageFileToDataUrl(file, DEFAULT_IMAGE_UPLOAD_OPTIONS)
-      setPhotoPreview(dataUrl)
-      setForm((prev) => ({ ...prev, photo_url: dataUrl }))
+      setIsUploadingPhoto(true)
+      const uploadedUrl = await uploadImageToStorage({
+        file,
+        scope: person ? 'people' : 'people-draft',
+        entityId: person?.id ?? profile.id,
+        options: DEFAULT_IMAGE_UPLOAD_OPTIONS,
+      })
+      setPhotoPreview(uploadedUrl)
+      setForm((prev) => ({ ...prev, photo_url: uploadedUrl }))
     } catch (error) {
-      console.error(error)
+      setErrors((prev) => ({
+        ...prev,
+        form: error instanceof Error ? error.message : 'Nao foi possivel enviar a foto.',
+      }))
+    } finally {
+      setIsUploadingPhoto(false)
     }
   }
 
@@ -272,7 +285,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancelar
         </Button>
-        <Button type="submit" isLoading={isSubmitting}>
+        <Button type="submit" isLoading={isSubmitting} disabled={isUploadingPhoto}>
           {isEditing ? 'Salvar alterações' : 'Cadastrar colaborador'}
         </Button>
       </div>

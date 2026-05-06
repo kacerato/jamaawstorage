@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../../lib/supabase'
 import type { KitWithItems } from '../../types'
 import { Spinner, Badge } from '../../components/ui'
+import { ItemVisual } from '../../components/items/ItemVisual'
 import { KitIcon } from '../../components/icons'
 
 interface KitSelectorProps {
@@ -113,11 +114,14 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
                   {kit.kit_items?.map((ki) => (
                     <div
                       key={ki.id}
-                      className="flex items-center justify-between text-sm"
+                      className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/3 px-3 py-2 text-sm"
                     >
-                      <span className="text-gray-300">
-                        {ki.stock_items?.name ?? 'Item'}
-                      </span>
+                      <div className="flex min-w-0 items-center gap-2">
+                        <ItemVisual iconKey={ki.stock_items?.svg_icon_key} size={18} />
+                        <span className="truncate text-gray-300">
+                          {ki.stock_items?.name ?? 'Item'}
+                        </span>
+                      </div>
                       <span className="text-gray-400">
                         {ki.quantity} {ki.stock_items?.unit ?? 'un'}
                       </span>

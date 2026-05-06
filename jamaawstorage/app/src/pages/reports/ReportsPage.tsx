@@ -3,6 +3,7 @@ import type { Tables } from '../../types/database'
 import type { DateRange, ReportPeriod } from '../../types'
 import { supabase } from '../../lib/supabase'
 import { cn, formatDateTime, openPrintSectionedTableDocument, openPrintTableDocument } from '../../lib/utils'
+import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 import {
   Button,
   Input,
@@ -250,6 +251,12 @@ function MovementsTab() {
   const [jobTitleFilter, setJobTitleFilter] = useState<string>('')
   const [worksiteFilter, setWorksiteFilter] = useState<string>('')
   const [itemFilter, setItemFilter] = useState<string>('')
+  const debouncedDateFrom = useDebouncedValue(dateFrom, 180)
+  const debouncedDateTo = useDebouncedValue(dateTo, 180)
+  const debouncedLeaderFilter = useDebouncedValue(leaderFilter, 180)
+  const debouncedJobTitleFilter = useDebouncedValue(jobTitleFilter, 180)
+  const debouncedWorksiteFilter = useDebouncedValue(worksiteFilter, 180)
+  const debouncedItemFilter = useDebouncedValue(itemFilter, 180)
 
   useEffect(() => {
     async function fetchFilters() {
@@ -289,17 +296,17 @@ function MovementsTab() {
       .in('status', ['approved', 'completed'])
       .order('created_at', { ascending: false })
 
-    if (dateFrom) {
-      query = query.gte('created_at', dateFrom)
+    if (debouncedDateFrom) {
+      query = query.gte('created_at', debouncedDateFrom)
     }
-    if (dateTo) {
-      query = query.lte('created_at', `${dateTo}T23:59:59`)
+    if (debouncedDateTo) {
+      query = query.lte('created_at', `${debouncedDateTo}T23:59:59`)
     }
-    if (leaderFilter) {
-      query = query.eq('requested_by', leaderFilter)
+    if (debouncedLeaderFilter) {
+      query = query.eq('requested_by', debouncedLeaderFilter)
     }
-    if (worksiteFilter) {
-      query = query.eq('work_site_id', worksiteFilter)
+    if (debouncedWorksiteFilter) {
+      query = query.eq('work_site_id', debouncedWorksiteFilter)
     }
 
     const { data, error: fetchError } = await query
@@ -310,27 +317,31 @@ function MovementsTab() {
     } else {
       let results = (data as unknown as WithdrawalWithItems[]) ?? []
 
-      if (itemFilter) {
+      if (debouncedItemFilter) {
         results = results.filter((w) =>
-          w.withdrawal_items.some((wi) => wi.stock_item_id === itemFilter),
+          w.withdrawal_items.some((wi) => wi.stock_item_id === debouncedItemFilter),
         )
       }
 
-      if (jobTitleFilter) {
-        results = results.filter((w) => w.collaborator?.job_title === jobTitleFilter)
+      if (debouncedJobTitleFilter) {
+        results = results.filter((w) => w.collaborator?.job_title === debouncedJobTitleFilter)
       }
 
       reportsCache.movements.withdrawals = results
       setWithdrawals(results)
     }
     setLoading(false)
-  }, [dateFrom, dateTo, leaderFilter, jobTitleFilter, worksiteFilter, itemFilter])
+  }, [
+    debouncedDateFrom,
+    debouncedDateTo,
+    debouncedLeaderFilter,
+    debouncedJobTitleFilter,
+    debouncedWorksiteFilter,
+    debouncedItemFilter,
+  ])
 
   useEffect(() => {
-    const timeout = setTimeout(() => {
-      void fetchWithdrawals()
-    }, 300)
-    return () => clearTimeout(timeout)
+    void fetchWithdrawals()
   }, [fetchWithdrawals])
 
   const leaderOptions = useMemo(

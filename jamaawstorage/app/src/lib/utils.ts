@@ -450,14 +450,14 @@ export const DEFAULT_IMAGE_UPLOAD_OPTIONS = {
   quality: 0.86,
 } as const
 
-export async function imageFileToDataUrl(
+export async function optimizeImageFileToJpegBlob(
   file: File,
   options?: {
     maxFileSizeMb?: number
     maxDimension?: number
     quality?: number
   }
-): Promise<string> {
+): Promise<Blob> {
   const maxFileSizeMb = options?.maxFileSizeMb ?? DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb
   const maxDimension = options?.maxDimension ?? DEFAULT_IMAGE_UPLOAD_OPTIONS.maxDimension
   const quality = options?.quality ?? DEFAULT_IMAGE_UPLOAD_OPTIONS.quality
@@ -496,7 +496,18 @@ export async function imageFileToDataUrl(
 
       ctx.drawImage(image, 0, 0, width, height)
       URL.revokeObjectURL(url)
-      resolve(canvas.toDataURL('image/jpeg', quality))
+      canvas.toBlob(
+        (blob) => {
+          if (!blob) {
+            reject(new Error('NÃ£o foi possÃ­vel gerar a imagem otimizada.'))
+            return
+          }
+
+          resolve(blob)
+        },
+        'image/jpeg',
+        quality,
+      )
     }
 
     image.onerror = () => {
@@ -506,4 +517,37 @@ export async function imageFileToDataUrl(
 
     image.src = url
   })
+}
+
+async function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+
+    reader.onload = () => {
+      if (typeof reader.result === 'string') {
+        resolve(reader.result)
+        return
+      }
+
+      reject(new Error('NÃ£o foi possÃ­vel ler a imagem processada.'))
+    }
+
+    reader.onerror = () => {
+      reject(new Error('NÃ£o foi possÃ­vel ler a imagem processada.'))
+    }
+
+    reader.readAsDataURL(blob)
+  })
+}
+
+export async function imageFileToDataUrl(
+  file: File,
+  options?: {
+    maxFileSizeMb?: number
+    maxDimension?: number
+    quality?: number
+  }
+): Promise<string> {
+  const blob = await optimizeImageFileToJpegBlob(file, options)
+  return blobToDataUrl(blob)
 }

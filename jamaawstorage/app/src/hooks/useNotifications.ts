@@ -21,7 +21,7 @@ const priorityOrder: Record<NotificationType, number> = {
   item_added: 3,
 }
 
-const READ_STORAGE_KEY = 'jamaaw-notifications-read'
+const LAST_SEEN_STORAGE_KEY = 'jamaaw-notifications-last-seen-at'
 
 type PendingWithdrawalRow = {
   id: string
@@ -32,14 +32,12 @@ type PendingWithdrawalRow = {
 
 type RecentItemRow = Pick<Tables<'stock_items'>, 'id' | 'name' | 'code' | 'created_at' | 'svg_icon_key'>
 
-function readStoredIds(): string[] {
+function readLastSeenAt(): string | null {
   try {
-    const raw = window.localStorage.getItem(READ_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter((value): value is string => typeof value === 'string') : []
+    const raw = window.localStorage.getItem(LAST_SEEN_STORAGE_KEY)
+    return raw && raw.trim() ? raw : null
   } catch {
-    return []
+    return null
   }
 }
 
@@ -47,8 +45,8 @@ export function useNotifications() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [lowStockItems, setLowStockItems] = useState<Tables<'stock_items'>[]>([])
   const [loading, setLoading] = useState(true)
-  const [readIds, setReadIds] = useState<string[]>(() =>
-    typeof window === 'undefined' ? [] : readStoredIds()
+  const [lastSeenAt, setLastSeenAt] = useState<string | null>(() =>
+    typeof window === 'undefined' ? null : readLastSeenAt()
   )
 
   const refetch = useCallback(async () => {
@@ -120,12 +118,6 @@ export function useNotifications() {
       })
 
       setNotifications(items)
-      setReadIds((currentReadIds) => {
-        const activeIds = new Set(items.map((item) => item.id))
-        const nextReadIds = currentReadIds.filter((id) => activeIds.has(id))
-        window.localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(nextReadIds))
-        return nextReadIds
-      })
     } catch (error) {
       console.error('Error fetching notifications:', error)
       setNotifications([])
@@ -136,16 +128,18 @@ export function useNotifications() {
   }, [])
 
   const markAllAsRead = useCallback(() => {
-    setReadIds((currentReadIds) => {
-      const nextReadIds = Array.from(new Set([...currentReadIds, ...notifications.map((item) => item.id)]))
-      window.localStorage.setItem(READ_STORAGE_KEY, JSON.stringify(nextReadIds))
-      return nextReadIds
-    })
-  }, [notifications])
+    const nextLastSeenAt = new Date().toISOString()
+    setLastSeenAt(nextLastSeenAt)
+    window.localStorage.setItem(LAST_SEEN_STORAGE_KEY, nextLastSeenAt)
+  }, [])
 
   const unreadCount = useMemo(
-    () => notifications.filter((item) => !readIds.includes(item.id)).length,
-    [notifications, readIds]
+    () =>
+      notifications.filter((item) => {
+        if (!lastSeenAt) return true
+        return new Date(item.createdAt).getTime() > new Date(lastSeenAt).getTime()
+      }).length,
+    [notifications, lastSeenAt]
   )
 
   useEffect(() => {

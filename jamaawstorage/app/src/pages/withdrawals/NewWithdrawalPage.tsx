@@ -11,7 +11,6 @@ import {
   Modal,
   Badge,
   Alert,
-  SignaturePad,
   Spinner,
 } from '../../components/ui'
 import {
@@ -23,6 +22,7 @@ import {
   KitIcon,
 } from '../../components/icons'
 import { cn, DEFAULT_IMAGE_UPLOAD_OPTIONS, generateWithdrawalCodePreview, imageFileToDataUrl } from '../../lib/utils'
+import { buildPublicStorageUrl, uploadDataUrlToStorage, uploadFileToStorage, uploadImageToStorage } from '../../lib/storage'
 import { ItemSelector } from './ItemSelector'
 import { KitSelector } from './KitSelector'
 
@@ -33,6 +33,7 @@ type StockItemRow = Tables<'stock_items'>
 type EncodedDestination = `work_site:${string}` | `collaborator:${string}`
 
 interface WithdrawalItemEntry {
+  entry_id: string
   stock_item_id: string
   lot_id: string | null
   quantity: number
@@ -50,7 +51,15 @@ interface WithdrawalGroup {
   items: WithdrawalItemEntry[]
 }
 
+interface SignatureAttachmentState {
+  url: string | null
+  name: string | null
+  error: string | null
+  uploading: boolean
+}
+
 const DEFAULT_WORKSITE_NAME = 'obra jamaaw'
+const SIGNATURE_ATTACHMENT_ACCEPT = '.png,.jpg,.jpeg,.webp,.pdf'
 
 const STEPS = [
   { key: 'destination', label: 'Solicitante e Fluxo', icon: UserIcon },
@@ -59,13 +68,25 @@ const STEPS = [
   { key: 'review', label: 'Revisao e Confirmacao', icon: ClipboardIcon },
 ] as const
 
-function makeEntryKey(entry: Pick<WithdrawalItemEntry, 'stock_item_id' | 'destination_type' | 'collaborator_id' | 'work_site_id'>): string {
+function makeEntryDuplicateKey(entry: Pick<WithdrawalItemEntry, 'stock_item_id' | 'destination_type' | 'collaborator_id' | 'work_site_id'>): string {
   return [
     entry.stock_item_id,
     entry.destination_type,
     entry.collaborator_id ?? 'none',
     entry.work_site_id ?? 'none',
   ].join(':')
+}
+
+function makeDestinationGroupKey(entry: Pick<WithdrawalItemEntry, 'destination_type' | 'collaborator_id' | 'work_site_id'>): string {
+  return [
+    entry.destination_type,
+    entry.collaborator_id ?? 'none',
+    entry.work_site_id ?? 'none',
+  ].join(':')
+}
+
+function createEntryId(): string {
+  return `withdrawal-entry-${crypto.randomUUID()}`
 }
 
 function encodeDestination(destinationType: WithdrawalDestinationType, collaboratorId: string | null, workSiteId: string | null): EncodedDestination {
@@ -119,9 +140,16 @@ export function NewWithdrawalPage() {
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
   const [photoError, setPhotoError] = useState<string | null>(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [supervisorSignature, setSupervisorSignature] = useState<string>('')
   const [requesterSignature, setRequesterSignature] = useState<string>('')
-  const [witnessSignature, setWitnessSignature] = useState<string>('')
+  const [signatureDocument, setSignatureDocument] = useState<SignatureAttachmentState>({
+    url: null,
+    name: null,
+    error: null,
+    uploading: false,
+  })
+  const [signatureProcessingHint, setSignatureProcessingHint] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -157,7 +185,7 @@ export function NewWithdrawalPage() {
   }, [])
 
   const selectedEntryKeys = useMemo(
-    () => new Set(items.map((item) => makeEntryKey(item))),
+    () => new Set(items.map((item) => makeEntryDuplicateKey(item))),
     [items],
   )
 
@@ -181,7 +209,7 @@ export function NewWithdrawalPage() {
     const map = new Map<string, WithdrawalGroup>()
 
     for (const item of items) {
-      const key = makeEntryKey(item)
+      const key = makeDestinationGroupKey(item)
       const existing = map.get(key)
 
       if (existing) {
@@ -218,6 +246,7 @@ export function NewWithdrawalPage() {
     }
 
     return {
+      entry_id: createEntryId(),
       stock_item_id: stockItem.id,
       lot_id: null,
       quantity: 1,
@@ -232,7 +261,7 @@ export function NewWithdrawalPage() {
   const handleAddItem = (stockItem: StockItemRow) => {
     const entry = createDraftEntry(stockItem)
     if (!entry) return
-    if (selectedEntryKeys.has(makeEntryKey(entry))) return
+    if (selectedEntryKeys.has(makeEntryDuplicateKey(entry))) return
 
     setItems((prev) => [...prev, entry])
     setStepErrors((prev) => {
@@ -254,7 +283,7 @@ export function NewWithdrawalPage() {
 
       entry.quantity = kitItem.quantity
 
-      if (!selectedEntryKeys.has(makeEntryKey(entry))) {
+      if (!selectedEntryKeys.has(makeEntryDuplicateKey(entry))) {
         newItems.push(entry)
       }
     }
@@ -268,19 +297,19 @@ export function NewWithdrawalPage() {
     setShowKitSelector(false)
   }
 
-  const handleUpdateQuantity = (entryKey: string, quantity: number) => {
+  const handleUpdateQuantity = (entryId: string, quantity: number) => {
     setItems((prev) =>
       prev.map((item) =>
-        makeEntryKey(item) === entryKey ? { ...item, quantity } : item,
+        item.entry_id === entryId ? { ...item, quantity } : item,
       ),
     )
   }
 
-  const handleUpdateDestination = (entryKey: string, encodedDestination: string) => {
+  const handleUpdateDestination = (entryId: string, encodedDestination: string) => {
     const nextDestination = decodeDestination(encodedDestination)
 
     setItems((prev) => {
-      const current = prev.find((item) => makeEntryKey(item) === entryKey)
+      const current = prev.find((item) => item.entry_id === entryId)
       if (!current) return prev
 
       const updatedEntry = {
@@ -289,7 +318,7 @@ export function NewWithdrawalPage() {
       }
 
       const duplicateExists = prev.some((item) =>
-        makeEntryKey(item) !== entryKey && makeEntryKey(item) === makeEntryKey(updatedEntry),
+        item.entry_id !== entryId && makeEntryDuplicateKey(item) === makeEntryDuplicateKey(updatedEntry),
       )
 
       if (duplicateExists) {
@@ -301,29 +330,116 @@ export function NewWithdrawalPage() {
       }
 
       return prev.map((item) =>
-        makeEntryKey(item) === entryKey
+        item.entry_id === entryId
           ? updatedEntry
           : item,
       )
     })
   }
 
-  const handleRemoveItem = (entryKey: string) => {
-    setItems((prev) => prev.filter((item) => makeEntryKey(item) !== entryKey))
+  const handleRemoveItem = (entryId: string) => {
+    setItems((prev) => prev.filter((item) => item.entry_id !== entryId))
   }
 
   const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
-    if (!file) return
+    if (!file || !profile) return
 
     try {
       setPhotoError(null)
-      const result = await imageFileToDataUrl(file, DEFAULT_IMAGE_UPLOAD_OPTIONS)
+      setUploadingPhoto(true)
+      const result = await uploadImageToStorage({
+        file,
+        scope: 'withdrawals',
+        entityId: profile.id,
+        options: DEFAULT_IMAGE_UPLOAD_OPTIONS,
+      })
       setPhotoPreview(result)
       setPhotoUrl(result)
     } catch (error) {
       setPhotoError(error instanceof Error ? error.message : 'Nao foi possivel enviar a foto.')
+    } finally {
+      setUploadingPhoto(false)
     }
+  }
+
+  const handleSignatureDocumentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !profile) return
+
+    try {
+      setSignatureDocument((prev) => ({ ...prev, uploading: true, error: null }))
+      setSignatureProcessingHint(null)
+
+      const url = await uploadFileToStorage({
+        file,
+        scope: 'withdrawals/signature-document',
+        entityId: profile.id,
+      })
+
+      const normalizedUrl = buildPublicStorageUrl(url)
+      setSignatureDocument({
+        url: normalizedUrl,
+        name: file.name,
+        error: null,
+        uploading: true,
+      })
+      let previewUrl: string | null = null
+
+      try {
+        if (file.type.startsWith('image/')) {
+          previewUrl = await imageFileToDataUrl(file, DEFAULT_IMAGE_UPLOAD_OPTIONS)
+        } else if (file.type === 'application/pdf') {
+          previewUrl = await pdfFileToDataUrl(file)
+        }
+
+        if (previewUrl) {
+          const extracted = await extractSignatureDataUrls(previewUrl)
+          setSupervisorSignature(extracted.supervisor)
+          setRequesterSignature(extracted.requester)
+          setSignatureProcessingHint('Assinaturas extraidas automaticamente do arquivo enviado.')
+        } else {
+          setSupervisorSignature('')
+          setRequesterSignature('')
+          setSignatureProcessingHint('Arquivo salvo como comprovante unico. Para extrair as assinaturas, envie imagem ou PDF com os campos visiveis.')
+        }
+      } catch (processingError) {
+        setSupervisorSignature('')
+        setRequesterSignature('')
+        setSignatureProcessingHint(
+          processingError instanceof Error
+            ? `${processingError.message} O arquivo foi salvo mesmo assim para os dois campos.`
+            : 'O arquivo foi salvo, mas a extracao automatica falhou.',
+        )
+      }
+
+      setSignatureDocument({
+        url: normalizedUrl,
+        name: file.name,
+        error: null,
+        uploading: false,
+      })
+    } catch (error) {
+      setSignatureDocument((prev) => ({
+        ...prev,
+        error: error instanceof Error ? error.message : 'Nao foi possivel enviar arquivo.',
+        uploading: false,
+      }))
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  const clearSignatureDocument = () => {
+    setSignatureDocument({
+      url: null,
+      name: null,
+      error: null,
+      uploading: false,
+    })
+    setSignatureProcessingHint(null)
+    setSupervisorSignature('')
+    setRequesterSignature('')
   }
 
   const refreshSelectedItemsQuantities = async () => {
@@ -422,6 +538,66 @@ export function NewWithdrawalPage() {
     setCurrentStep((prev) => Math.max(prev - 1, 0))
   }
 
+  const persistSignatureSnapshots = async () => {
+    if (!profile) {
+      return {
+        supervisorSignatureUrl: null,
+        requesterSignatureUrl: null,
+      }
+    }
+
+    const [supervisorSignatureUrl, requesterSignatureUrl] = await Promise.all([
+      supervisorSignature
+        ? uploadDataUrlToStorage({
+            dataUrl: supervisorSignature,
+            scope: 'withdrawals/supervisor-signature-print',
+            entityId: profile.id,
+          })
+        : Promise.resolve<string | null>(null),
+      requesterSignature
+        ? uploadDataUrlToStorage({
+            dataUrl: requesterSignature,
+            scope: 'withdrawals/requester-signature-print',
+            entityId: profile.id,
+          })
+        : Promise.resolve<string | null>(null),
+    ])
+
+    return {
+      supervisorSignatureUrl,
+      requesterSignatureUrl,
+    }
+  }
+
+  const notifyTelegram = async (withdrawalIds: string[]) => {
+    const { data, error } = await supabase
+      .from('withdrawals')
+      .select(
+        '*, withdrawal_items(*, stock_items(*)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*), approved_by_profile:profiles!withdrawals_authorized_by_fkey(*)',
+      )
+      .in('id', withdrawalIds)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      throw new Error(error.message)
+    }
+
+    const response = await fetch('/api/telegram-withdrawal-notify', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        withdrawals: data ?? [],
+      }),
+    })
+
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null)
+      throw new Error(payload?.error ?? 'Falha ao enviar notificacao Telegram.')
+    }
+  }
+
   const handleSubmit = async () => {
     if (!profile) return
 
@@ -441,6 +617,11 @@ export function NewWithdrawalPage() {
         return
       }
 
+      const {
+        supervisorSignatureUrl,
+        requesterSignatureUrl,
+      } = await persistSignatureSnapshots()
+
       const createdIds: string[] = []
 
       for (const group of groups) {
@@ -452,9 +633,9 @@ export function NewWithdrawalPage() {
           p_authorized_by: profile.id,
           p_notes: notes || null,
           p_photo_url: photoUrl,
-          p_supervisor_signature: supervisorSignature || null,
-          p_requester_signature: requesterSignature || null,
-          p_witness_signature: witnessSignature || null,
+          p_supervisor_signature: supervisorSignatureUrl,
+          p_requester_signature: requesterSignatureUrl,
+          p_witness_signature: null,
           p_items: group.items.map((item) => ({
             stock_item_id: item.stock_item_id,
             lot_id: item.lot_id,
@@ -472,7 +653,32 @@ export function NewWithdrawalPage() {
           return
         }
 
+        const { error: attachmentUpdateError } = await supabase
+          .from('withdrawals')
+          .update({
+            supervisor_signature_attachment_url: signatureDocument.url,
+            supervisor_signature_attachment_name: signatureDocument.name,
+            requester_signature_attachment_url: signatureDocument.url,
+            requester_signature_attachment_name: signatureDocument.name,
+          })
+          .eq('id', withdrawalId)
+
+        if (attachmentUpdateError) {
+          const partialPrefix = createdIds.length > 0
+            ? `${createdIds.length} retirada(s) ja foram criadas antes da falha. `
+            : ''
+          setSubmitError(`${partialPrefix}${attachmentUpdateError.message}`)
+          setSubmitting(false)
+          return
+        }
+
         createdIds.push(withdrawalId)
+      }
+
+      try {
+        await notifyTelegram(createdIds)
+      } catch (notifyError) {
+        console.warn('Telegram notify failed:', notifyError)
       }
 
       setSubmitting(false)
@@ -702,7 +908,7 @@ export function NewWithdrawalPage() {
               </thead>
               <tbody>
                 {items.map((item) => {
-                  const entryKey = makeEntryKey(item)
+                  const entryKey = item.entry_id
                   const isOverStock = item.quantity > item.stock_item.current_quantity
                   const isLowStock = item.stock_item.minimum_quantity > 0 && item.stock_item.current_quantity <= item.stock_item.minimum_quantity
 
@@ -780,7 +986,7 @@ export function NewWithdrawalPage() {
         {items.length > 0 && (
           <div className="mt-3 flex items-center justify-between border-t border-gray-700 pt-3">
             <span className="text-sm text-gray-400">
-              {items.length} item(ns) em {groups.length} retirada(s) de destino
+              {items.length} item(ns) distribuidos em {groups.length} destino(s)
             </span>
             <span className="text-sm font-medium text-white">
               {items.reduce((sum, item) => sum + item.quantity, 0)} unidades
@@ -858,11 +1064,13 @@ export function NewWithdrawalPage() {
                 accept="image/*"
                 capture="environment"
                 onChange={handlePhotoChange}
+                disabled={uploadingPhoto}
                 className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
               />
               <p className="text-xs text-gray-500">
                 JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB
               </p>
+              {uploadingPhoto && <p className="text-xs text-orange-300">Enviando imagem...</p>}
             </>
           )}
           {photoError && <p className="text-xs text-red-400">{photoError}</p>}
@@ -871,31 +1079,54 @@ export function NewWithdrawalPage() {
 
       <Card variant="bordered" padding="lg">
         <div className="mb-4 flex items-center justify-between">
-          <h3 className="text-lg font-semibold text-white">Assinaturas</h3>
-          <Badge variant="default" size="sm">Opcional nesta etapa</Badge>
+          <h3 className="text-lg font-semibold text-white">Documento com assinaturas</h3>
+          <Badge variant="default" size="sm">Upload unico</Badge>
         </div>
 
-        <div className="flex flex-col gap-6">
-          <SignaturePad
-            label="Assinatura do Supervisor"
-            value={supervisorSignature}
-            onChange={setSupervisorSignature}
-            placeholder="Supervisor assina aqui (opcional)"
-          />
+        <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
+          <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
+            <label className="text-sm font-medium text-gray-200">
+              Envie uma imagem ou PDF que contenha as assinaturas do supervisor e do responsavel
+            </label>
+            <p className="mt-2 text-xs text-gray-500">
+              O mesmo arquivo sera salvo nos dois campos e o sistema tenta extrair a area de assinatura automaticamente.
+            </p>
 
-          <SignaturePad
-            label="Assinatura do Solicitante"
-            value={requesterSignature}
-            onChange={setRequesterSignature}
-            placeholder="Lider solicitante assina aqui (opcional)"
-          />
+            <input
+              type="file"
+              accept={SIGNATURE_ATTACHMENT_ACCEPT}
+              onChange={(event) => void handleSignatureDocumentChange(event)}
+              disabled={signatureDocument.uploading}
+              className="mt-4 block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
+            />
+            <p className="mt-2 text-xs text-gray-500">Melhor resultado: folha/foto reta, com assinaturas na metade inferior.</p>
+            {signatureDocument.uploading && <p className="mt-2 text-xs text-orange-300">Enviando e processando arquivo...</p>}
+            {signatureDocument.error && <p className="mt-2 text-xs text-red-400">{signatureDocument.error}</p>}
+            {signatureProcessingHint && <p className="mt-2 text-xs text-emerald-300">{signatureProcessingHint}</p>}
 
-          <SignaturePad
-            label="Assinatura da Testemunha"
-            value={witnessSignature}
-            onChange={setWitnessSignature}
-            placeholder="Testemunha assina aqui (opcional)"
-          />
+            {signatureDocument.url && (
+              <div className="mt-4 flex items-center justify-between rounded-xl border border-white/8 bg-black/10 px-3 py-2">
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-white">{signatureDocument.name ?? 'Arquivo enviado'}</p>
+                  <a href={signatureDocument.url} target="_blank" rel="noreferrer" className="text-xs text-orange-300 hover:text-orange-200">
+                    Abrir documento compartilhado
+                  </a>
+                </div>
+                <button
+                  type="button"
+                  onClick={clearSignatureDocument}
+                  className="rounded-lg border border-red-400/20 bg-red-500/10 px-3 py-1 text-xs font-medium text-red-300"
+                >
+                  Remover
+                </button>
+              </div>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-1">
+            <SignaturePreview label="Supervisor" value={supervisorSignature} />
+            <SignaturePreview label="Responsavel" value={requesterSignature} />
+          </div>
         </div>
       </Card>
     </div>
@@ -927,14 +1158,14 @@ export function NewWithdrawalPage() {
 
         {groups.length > 1 && (
           <Alert variant="warning" className="mt-4">
-            Como existem destinos diferentes, o sistema vai registrar {groups.length} retiradas separadas em sequencia.
+            Existem {groups.length} destinos diferentes nesta operacao, entao o sistema vai registrar {groups.length} retiradas separadas.
           </Alert>
         )}
       </Card>
 
       {groups.map((group) => (
         <Card
-          key={`${group.destination_type}-${group.collaborator_id ?? group.work_site_id ?? 'none'}`}
+          key={makeDestinationGroupKey(group)}
           variant="bordered"
           padding="lg"
         >
@@ -959,7 +1190,7 @@ export function NewWithdrawalPage() {
               </thead>
               <tbody>
                 {group.items.map((item) => (
-                  <tr key={makeEntryKey(item)} className="border-b border-gray-800">
+                  <tr key={item.entry_id} className="border-b border-gray-800">
                     <td className="px-3 py-2 text-sm text-white">{item.stock_item.name}</td>
                     <td className="px-3 py-2 text-center text-sm text-gray-300">{item.quantity}</td>
                     <td className="px-3 py-2 text-sm text-gray-300">{item.unit}</td>
@@ -971,7 +1202,7 @@ export function NewWithdrawalPage() {
         </Card>
       ))}
 
-      {(notes || photoPreview || supervisorSignature || requesterSignature || witnessSignature) && (
+      {(notes || photoPreview || supervisorSignature || requesterSignature || signatureDocument.url) && (
         <Card variant="bordered" padding="lg">
           <h3 className="mb-4 text-lg font-semibold text-white">Anexos e assinaturas</h3>
 
@@ -985,11 +1216,16 @@ export function NewWithdrawalPage() {
             />
           )}
 
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <SignaturePreview label="Supervisor" value={supervisorSignature} />
-            <SignaturePreview label="Solicitante" value={requesterSignature} />
-            <SignaturePreview label="Testemunha" value={witnessSignature} />
+            <SignaturePreview label="Responsavel" value={requesterSignature} />
           </div>
+
+          {signatureDocument.url && (
+            <div className="mt-5">
+              <AttachmentPreviewCard label="Documento/Folha compartilhado" url={signatureDocument.url} name={signatureDocument.name} />
+            </div>
+          )}
         </Card>
       )}
 
@@ -1007,6 +1243,7 @@ export function NewWithdrawalPage() {
           variant="primary"
           size="lg"
           isLoading={submitting}
+          disabled={uploadingPhoto || signatureDocument.uploading}
           onClick={handleSubmit}
           leftIcon={<ClipboardIcon size={20} />}
         >
@@ -1082,13 +1319,268 @@ function groupTitle(group: WithdrawalGroup, collaborators: PeopleRow[], workSite
 
 function SignaturePreview({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex flex-col items-center gap-2">
-      <p className="text-xs font-medium text-gray-400">{label}</p>
+    <div className="rounded-2xl border border-white/8 bg-black/10 p-3">
+      <p className="text-xs font-medium uppercase tracking-[0.16em] text-gray-400">{label}</p>
       {value ? (
-        <img src={value} alt={`Assinatura ${label}`} className="h-16 rounded border border-gray-700 bg-white" />
+        <img src={value} alt={`Assinatura ${label}`} className="mt-3 h-24 w-full rounded-lg border border-gray-700 bg-white object-contain p-2" />
       ) : (
-        <span className="text-xs text-gray-500">Nao enviada</span>
+        <span className="mt-3 block text-xs text-gray-500">Aguardando extracao</span>
       )}
     </div>
   )
+}
+
+function isImageUrl(url: string | null | undefined): boolean {
+  if (!url) return false
+  return /\.(png|jpe?g|webp|gif)(\?|$)/i.test(url)
+}
+
+function AttachmentPreviewCard({
+  label,
+  url,
+  name,
+}: {
+  label: string
+  url: string | null
+  name: string | null
+}) {
+  if (!url) return null
+
+  return (
+    <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
+      <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-400">{label}</p>
+      <p className="mt-2 truncate text-sm text-white">{name ?? 'Anexo enviado'}</p>
+      {isImageUrl(url) ? (
+        <img src={buildPublicStorageUrl(url)} alt={label} className="mt-3 max-h-48 rounded-lg border border-gray-700" />
+      ) : null}
+      <a href={buildPublicStorageUrl(url)} target="_blank" rel="noreferrer" className="mt-3 inline-block text-sm font-medium text-orange-300 hover:text-orange-200">
+        Abrir anexo
+      </a>
+    </div>
+  )
+}
+
+async function pdfFileToDataUrl(file: File): Promise<string> {
+  const pdfjs = await import('pdfjs-dist')
+  const buffer = await file.arrayBuffer()
+  const loadingTask = pdfjs.getDocument({
+    data: new Uint8Array(buffer),
+  } as Parameters<typeof pdfjs.getDocument>[0])
+  const pdf = await loadingTask.promise
+  const page = await pdf.getPage(1)
+  const viewport = page.getViewport({ scale: 1.6 })
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    throw new Error('Nao foi possivel processar a primeira pagina do PDF.')
+  }
+
+  canvas.width = Math.ceil(viewport.width)
+  canvas.height = Math.ceil(viewport.height)
+
+  await page.render({
+    canvas,
+    canvasContext: context,
+    viewport,
+  } as Parameters<typeof page.render>[0]).promise
+
+  return canvas.toDataURL('image/jpeg', 0.9)
+}
+
+async function extractSignatureDataUrls(sourceDataUrl: string): Promise<{ supervisor: string; requester: string }> {
+  const image = await loadImageFromDataUrl(sourceDataUrl)
+  const leftArea = findSignatureFieldArea(image, 'left')
+  const rightArea = findSignatureFieldArea(image, 'right')
+  const leftCrop = await cropFieldZone(image, leftArea)
+  const rightCrop = await cropFieldZone(image, rightArea)
+
+  return {
+    supervisor: leftCrop,
+    requester: rightCrop,
+  }
+}
+
+async function cropFieldZone(
+  image: HTMLImageElement,
+  area: { x: number; y: number; width: number; height: number },
+): Promise<string> {
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    throw new Error('Nao foi possivel montar o campo de assinatura.')
+  }
+
+  canvas.width = Math.max(area.width, 1)
+  canvas.height = Math.max(area.height, 1)
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.drawImage(
+    image,
+    area.x,
+    area.y,
+    area.width,
+    area.height,
+    0,
+    0,
+    area.width,
+    area.height,
+  )
+
+  return canvas.toDataURL('image/png')
+}
+
+async function loadImageFromDataUrl(dataUrl: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('Nao foi possivel ler a imagem enviada.'))
+    image.src = dataUrl
+  })
+}
+
+function findSignatureFieldArea(
+  image: HTMLImageElement,
+  side: 'left' | 'right',
+): { x: number; y: number; width: number; height: number } {
+  const width = image.naturalWidth || image.width
+  const height = image.naturalHeight || image.height
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    return buildFallbackSignatureArea(width, height, side)
+  }
+
+  canvas.width = width
+  canvas.height = height
+  context.drawImage(image, 0, 0, width, height)
+
+  const halfArea = side === 'left'
+    ? {
+        x: Math.floor(width * 0.02),
+        y: Math.floor(height * 0.3),
+        width: Math.floor(width * 0.47),
+        height: Math.floor(height * 0.6),
+      }
+    : {
+        x: Math.floor(width * 0.49),
+        y: Math.floor(height * 0.3),
+        width: Math.floor(width * 0.39),
+        height: Math.floor(height * 0.6),
+      }
+
+  const handwritingBounds = findHandwritingBounds(context, halfArea)
+  if (!handwritingBounds) {
+    return buildFallbackSignatureArea(width, height, side)
+  }
+
+  const topBorderY = findHorizontalBorder(context, halfArea, handwritingBounds.minY, 'up')
+  const bottomBorderY = findHorizontalBorder(context, halfArea, handwritingBounds.maxY, 'down')
+
+  const cropY = Math.max((topBorderY ?? Math.floor(handwritingBounds.minY - handwritingBounds.height * 1.8)) - 8, 0)
+  const cropBottom = Math.min((bottomBorderY ?? Math.floor(handwritingBounds.maxY + handwritingBounds.height * 2.1)) + 8, height)
+
+  return {
+    x: Math.max(halfArea.x - 6, 0),
+    y: cropY,
+    width: Math.min(halfArea.width + 12, width - Math.max(halfArea.x - 6, 0)),
+    height: Math.max(cropBottom - cropY, 1),
+  }
+}
+
+function buildFallbackSignatureArea(width: number, height: number, side: 'left' | 'right') {
+  if (side === 'left') {
+    return {
+      x: Math.floor(width * 0.025),
+      y: Math.floor(height * 0.275),
+      width: Math.floor(width * 0.465),
+      height: Math.floor(height * 0.275),
+    }
+  }
+
+  return {
+    x: Math.floor(width * 0.49),
+    y: Math.floor(height * 0.275),
+    width: Math.floor(width * 0.395),
+    height: Math.floor(height * 0.275),
+  }
+}
+
+function findHandwritingBounds(
+  context: CanvasRenderingContext2D,
+  area: { x: number; y: number; width: number; height: number },
+): { minY: number; maxY: number; height: number } | null {
+  const pixels = context.getImageData(area.x, area.y, area.width, area.height).data
+  let minY = Number.POSITIVE_INFINITY
+  let maxY = -1
+  let hitCount = 0
+
+  for (let y = 0; y < area.height; y += 1) {
+    let darkPixelsInRow = 0
+
+    for (let x = 0; x < area.width; x += 1) {
+      const offset = (y * area.width + x) * 4
+      const red = pixels[offset]
+      const green = pixels[offset + 1]
+      const blue = pixels[offset + 2]
+      const alpha = pixels[offset + 3]
+      const luminance = 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+      if (alpha > 0 && luminance < 185) {
+        darkPixelsInRow += 1
+      }
+    }
+
+    const rowLooksLikeBorder = darkPixelsInRow > area.width * 0.52
+    const rowLooksLikeInk = darkPixelsInRow >= Math.max(6, Math.floor(area.width * 0.015))
+
+    if (!rowLooksLikeBorder && rowLooksLikeInk) {
+      hitCount += darkPixelsInRow
+      const absoluteY = area.y + y
+      if (absoluteY < minY) minY = absoluteY
+      if (absoluteY > maxY) maxY = absoluteY
+    }
+  }
+
+  if (!Number.isFinite(minY) || maxY <= minY || hitCount < 120) {
+    return null
+  }
+
+  return {
+    minY,
+    maxY,
+    height: maxY - minY,
+  }
+}
+
+function findHorizontalBorder(
+  context: CanvasRenderingContext2D,
+  area: { x: number; y: number; width: number; height: number },
+  fromY: number,
+  direction: 'up' | 'down',
+): number | null {
+  const startY = Math.max(area.y, Math.min(fromY, area.y + area.height - 1))
+  const endY = direction === 'up' ? area.y : area.y + area.height - 1
+  const step = direction === 'up' ? -1 : 1
+
+  for (let y = startY; direction === 'up' ? y >= endY : y <= endY; y += step) {
+    let darkPixels = 0
+    const rowPixels = context.getImageData(area.x, y, area.width, 1).data
+
+    for (let x = 0; x < area.width; x += 1) {
+      const offset = x * 4
+      const luminance = 0.2126 * rowPixels[offset] + 0.7152 * rowPixels[offset + 1] + 0.0722 * rowPixels[offset + 2]
+      if (rowPixels[offset + 3] > 0 && luminance < 175) {
+        darkPixels += 1
+      }
+    }
+
+    if (darkPixels > area.width * 0.45) {
+      return y
+    }
+  }
+
+  return null
 }

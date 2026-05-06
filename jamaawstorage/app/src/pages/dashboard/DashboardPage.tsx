@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Tables } from '../../types/database'
 import { supabase } from '../../lib/supabase'
-import { formatDateTime, cn } from '../../lib/utils'
+import { cn, formatDateTime } from '../../lib/utils'
 import {
   StatCard,
   Alert,
@@ -138,6 +138,8 @@ export function DashboardPage() {
     void fetchDashboardData()
   }, [])
 
+  const lowStockPreview = lowStockItems.slice(0, 4)
+
   const statusBadgeVariant = (
     status: string
   ): 'success' | 'warning' | 'danger' | 'default' => {
@@ -159,7 +161,7 @@ export function DashboardPage() {
       case 'approved':
         return 'Aprovada'
       case 'completed':
-        return 'Concluída'
+        return 'Concluida'
       case 'pending':
         return 'Pendente'
       case 'rejected':
@@ -193,7 +195,7 @@ export function DashboardPage() {
       <div>
         <h2 className="text-2xl font-bold text-white">Painel de Controle</h2>
         <p className="mt-1 text-sm text-gray-400">
-          Visão geral do almoxarifado e atividades recentes
+          Visao geral do almoxarifado e atividades recentes
         </p>
         {refreshing && (
           <div className="mt-2 inline-flex items-center gap-2 text-xs text-orange-200/75">
@@ -232,59 +234,89 @@ export function DashboardPage() {
 
       {lowStockItems.length > 0 && (
         <section>
-          <Alert variant="warning" title="Alertas de Estoque Baixo">
-            <span>{lowStockItems.length} item(ns) com estoque abaixo do mínimo</span>
-          </Alert>
-          <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {lowStockItems.map((item) => {
-              const percentage =
-                item.minimum_quantity > 0
-                  ? Math.round((item.current_quantity / item.minimum_quantity) * 100)
-                  : 0
-              const barColor =
-                item.current_quantity === 0
-                  ? 'bg-red-500'
-                  : item.current_quantity < item.minimum_quantity
-                    ? 'bg-orange-500'
-                    : 'bg-emerald-500'
+          <Card variant="bordered">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="max-w-2xl">
+                <div className="inline-flex items-center gap-2 rounded-full border border-orange-400/20 bg-orange-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-200">
+                  Estoque Baixo
+                </div>
+                <h3 className="mt-3 text-lg font-semibold text-white">Reposicao que pede atencao agora</h3>
+                <p className="mt-1 text-sm text-gray-400">
+                  {lowStockItems.length} item(ns) abaixo do minimo. O painel mostra so os 4 primeiros para manter o layout limpo.
+                </p>
+              </div>
+              <div className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-gray-300">
+                <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Amostra visivel</p>
+                <p className="mt-2 text-2xl font-semibold text-white">{lowStockPreview.length}</p>
+                {lowStockItems.length > lowStockPreview.length && (
+                  <p className="mt-1 text-xs text-orange-300">
+                    +{lowStockItems.length - lowStockPreview.length} item(ns) no estoque
+                  </p>
+                )}
+              </div>
+            </div>
 
-              return (
-                <Card
-                  key={item.id}
-                  variant="bordered"
-                  onClick={() => navigate('/stock')}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex flex-col gap-1">
-                      <p className="font-medium text-white">{item.name}</p>
-                      <p className="text-xs text-gray-400">
-                        {item.category ?? 'Sem categoria'} • {item.unit}
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+              {lowStockPreview.map((item) => {
+                const percentage =
+                  item.minimum_quantity > 0
+                    ? Math.round((item.current_quantity / item.minimum_quantity) * 100)
+                    : 0
+                const barColor =
+                  item.current_quantity === 0
+                    ? 'bg-red-500'
+                    : item.current_quantity < item.minimum_quantity
+                      ? 'bg-orange-500'
+                      : 'bg-emerald-500'
+
+                return (
+                  <Card
+                    key={item.id}
+                    variant="bordered"
+                    onClick={() => navigate('/stock')}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex flex-col gap-1">
+                        <p className="font-medium text-white">{item.name}</p>
+                        <p className="text-xs text-gray-400">
+                          {item.category ?? 'Sem categoria'} • {item.unit}
+                        </p>
+                      </div>
+                      <Badge
+                        variant={item.current_quantity === 0 ? 'danger' : 'warning'}
+                        size="sm"
+                      >
+                        {item.current_quantity} / {item.minimum_quantity}
+                      </Badge>
+                    </div>
+                    <div className="mt-3">
+                      <div className="h-2 w-full overflow-hidden rounded-full bg-gray-700">
+                        <div
+                          className={cn('h-full rounded-full transition-all', barColor)}
+                          style={{
+                            width: `${Math.min(percentage, 100)}%`,
+                          }}
+                        />
+                      </div>
+                      <p className="mt-1 text-right text-xs text-gray-500">
+                        {percentage}%
                       </p>
                     </div>
-                    <Badge
-                      variant={item.current_quantity === 0 ? 'danger' : 'warning'}
-                      size="sm"
-                    >
-                      {item.current_quantity} / {item.minimum_quantity}
-                    </Badge>
-                  </div>
-                  <div className="mt-3">
-                    <div className="h-2 w-full overflow-hidden rounded-full bg-gray-700">
-                      <div
-                        className={cn('h-full rounded-full transition-all', barColor)}
-                        style={{
-                          width: `${Math.min(percentage, 100)}%`,
-                        }}
-                      />
-                    </div>
-                    <p className="mt-1 text-right text-xs text-gray-500">
-                      {percentage}%
-                    </p>
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
+                  </Card>
+                )
+              })}
+            </div>
+
+            {lowStockItems.length > lowStockPreview.length && (
+              <button
+                type="button"
+                onClick={() => navigate('/stock')}
+                className="mt-4 text-sm font-medium text-orange-300 transition-colors hover:text-orange-200"
+              >
+                Ver lista completa no estoque
+              </button>
+            )}
+          </Card>
         </section>
       )}
 
@@ -294,7 +326,7 @@ export function DashboardPage() {
             Retiradas Recentes
           </h3>
           <p className="mt-1 text-sm text-gray-400">
-            Últimas retiradas registradas no sistema
+            Ultimas retiradas registradas no sistema
           </p>
 
           {recentWithdrawals.length === 0 ? (
@@ -302,7 +334,7 @@ export function DashboardPage() {
               <EmptyState
                 icon={<ClipboardIcon size={48} />}
                 title="Nenhuma retirada registrada"
-                description="As retiradas aparecerão aqui quando forem criadas"
+                description="As retiradas aparecerao aqui quando forem criadas"
               />
             </div>
           ) : (
@@ -310,7 +342,7 @@ export function DashboardPage() {
               <table className="w-full">
                 <thead>
                   <tr className="bg-gray-800">
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Código</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Codigo</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Solicitante</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Destino</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Itens</th>
@@ -326,10 +358,10 @@ export function DashboardPage() {
                       onClick={() => navigate('/withdrawals')}
                     >
                       <td className="px-4 py-3 text-sm text-white">
-                        {withdrawal.code ?? '—'}
+                        {withdrawal.code ?? '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">
-                        {withdrawal.requested_by_person?.full_name ?? '—'}
+                        {withdrawal.requested_by_person?.full_name ?? '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">
                         {withdrawal.destination_type === 'collaborator' ? 'Colaborador' : 'Obra'}

@@ -100,7 +100,17 @@ export function ProfileModal({ profile, onClose }: ProfileModalProps) {
 
           {/* Avatar */}
           <div style={styles.avatarWrapper}>
-            <div style={styles.avatar}>{initials}</div>
+            <div style={styles.avatar}>
+              {profile.photo_url ? (
+                <img
+                  src={profile.photo_url}
+                  alt={profile.full_name ?? 'Supervisor'}
+                  style={styles.avatarImage}
+                />
+              ) : (
+                initials
+              )}
+            </div>
             <div style={styles.avatarRing} aria-hidden="true" />
           </div>
 
@@ -264,6 +274,12 @@ const styles = {
     fontFamily: "'Outfit', sans-serif",
     position: 'relative' as const,
     zIndex: 1,
+    overflow: 'hidden' as const,
+  },
+  avatarImage: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
   },
   avatarRing: {
     position: 'absolute' as const,

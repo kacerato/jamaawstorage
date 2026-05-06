@@ -5,6 +5,7 @@ import { supabase } from '../../lib/supabase'
 import { cn, formatDate, formatDateTime, formatQuantity } from '../../lib/utils'
 import { Button, Badge, DataTable, Modal, Card, Alert, Spinner, Select, Input } from '../../components/ui'
 import { UserIcon, HelmetIcon, PackageIcon, ClipboardIcon, ChartIcon, CameraIcon, SignatureIcon } from '../../components/icons'
+import { ItemVisual } from '../../components/items/ItemVisual'
 import { PersonForm } from './PersonForm'
 import { PersonInventoryModal } from './PersonInventoryModal'
 import {
@@ -39,6 +40,7 @@ type ConsumptionData = {
 
 type TabType = 'profile' | 'inventory' | 'withdrawals' | 'consumption'
 type DatePeriod = 'week' | 'month' | 'custom'
+type InventoryActionMode = 'delete' | 'return_to_stock' | null
 
 interface CustomDateRange {
   from: string
@@ -64,7 +66,12 @@ export function PersonDetailPage() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showToggleModal, setShowToggleModal] = useState(false)
   const [showInventoryModal, setShowInventoryModal] = useState(false)
+  const [showInventoryActionModal, setShowInventoryActionModal] = useState(false)
   const [toggling, setToggling] = useState(false)
+  const [inventorySubmitting, setInventorySubmitting] = useState(false)
+  const [inventoryActionMode, setInventoryActionMode] = useState<InventoryActionMode>(null)
+  const [inventoryActionQuantity, setInventoryActionQuantity] = useState('1')
+  const [selectedInventoryItem, setSelectedInventoryItem] = useState<PersonWithDetails['inventory'][0] | null>(null)
 
   const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([])
   const [withdrawalsLoading, setWithdrawalsLoading] = useState(false)
@@ -161,7 +168,11 @@ export function PersonDetailPage() {
     notes: raw.notes,
     photo_url: raw.photo_url,
     supervisor_signature: raw.supervisor_signature,
+    supervisor_signature_attachment_url: raw.supervisor_signature_attachment_url,
+    supervisor_signature_attachment_name: raw.supervisor_signature_attachment_name,
     requester_signature: raw.requester_signature,
+    requester_signature_attachment_url: raw.requester_signature_attachment_url,
+    requester_signature_attachment_name: raw.requester_signature_attachment_name,
     witness_signature: raw.witness_signature,
     withdrawn_at: raw.withdrawn_at,
     created_at: raw.created_at,
@@ -267,6 +278,51 @@ export function PersonDetailPage() {
     void fetchPerson()
   }
 
+  const openInventoryActionModal = (inventoryItem: PersonWithDetails['inventory'][0]) => {
+    setSelectedInventoryItem(inventoryItem)
+    setInventoryActionQuantity('1')
+    setInventoryActionMode(null)
+    setShowInventoryActionModal(true)
+  }
+
+  const handleInventoryAction = async (mode: Exclude<InventoryActionMode, null>) => {
+    if (!selectedInventoryItem || !person) return
+
+    const quantity = Number.parseInt(inventoryActionQuantity, 10)
+    if (!Number.isFinite(quantity) || quantity <= 0) {
+      setError('Informe uma quantidade valida para retirar do inventario.')
+      return
+    }
+
+    if (quantity > selectedInventoryItem.quantity) {
+      setError(`Quantidade acima do inventario atual. Maximo: ${selectedInventoryItem.quantity}.`)
+      return
+    }
+
+    setInventorySubmitting(true)
+    setInventoryActionMode(mode)
+    setError(null)
+
+    const { error: actionError } = await supabase.rpc('remove_inventory_item_from_person', {
+      p_person_id: person.id,
+      p_stock_item_id: selectedInventoryItem.stock_item_id,
+      p_quantity: quantity,
+      p_destination: mode,
+    })
+
+    if (actionError) {
+      setError(actionError.message)
+      setInventorySubmitting(false)
+      return
+    }
+
+    setInventorySubmitting(false)
+    setShowInventoryActionModal(false)
+    setSelectedInventoryItem(null)
+    setInventoryActionMode(null)
+    await fetchPerson()
+  }
+
   const getInitials = (name: string): string => {
     return name
       .split(' ')
@@ -353,6 +409,13 @@ export function PersonDetailPage() {
 
   const inventoryColumns = [
     {
+      key: 'stock_items.svg_icon_key',
+      header: '',
+      render: (_value: unknown, row: PersonWithDetails['inventory'][0]) => (
+        <ItemVisual iconKey={row.stock_items.svg_icon_key} size={28} />
+      ),
+    },
+    {
       key: 'stock_items.name',
       header: 'Item',
       sortable: true,
@@ -364,7 +427,7 @@ export function PersonDetailPage() {
       key: 'stock_items.code',
       header: 'Codigo',
       render: (_value: unknown, row: PersonWithDetails['inventory'][0]) => (
-        <span className="text-gray-400">{row.stock_items.name.substring(0, 3).toUpperCase()}-{row.stock_item_id.substring(0, 4)}</span>
+        <span className="font-mono text-gray-400">{row.stock_items.code}</span>
       ),
     },
     {
@@ -387,6 +450,23 @@ export function PersonDetailPage() {
       header: 'Ultima Atualizacao',
       sortable: true,
       render: (value: unknown) => formatDate(value as string),
+    },
+    {
+      key: 'actions',
+      header: 'Acao',
+      className: 'text-right',
+      render: (_value: unknown, row: PersonWithDetails['inventory'][0]) => (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            openInventoryActionModal(row)
+          }}
+          className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/16"
+        >
+          Retirar
+        </button>
+      ),
     },
   ]
 
@@ -773,7 +853,7 @@ export function PersonDetailPage() {
         isOpen={showInventoryModal}
         onClose={() => setShowInventoryModal(false)}
         title="Adicionar Itens e Kits ao Inventario"
-        size="md"
+        size="xl"
       >
         <PersonInventoryModal
           onClose={() => setShowInventoryModal(false)}
@@ -781,6 +861,65 @@ export function PersonDetailPage() {
           personName={person.full_name}
           onAdded={() => void fetchPerson()}
         />
+      </Modal>
+
+      <Modal
+        isOpen={showInventoryActionModal}
+        onClose={() => {
+          setShowInventoryActionModal(false)
+          setSelectedInventoryItem(null)
+          setInventoryActionMode(null)
+        }}
+        title="Retirar item do inventario"
+        size="sm"
+      >
+        {selectedInventoryItem && (
+          <div className="flex flex-col gap-4">
+            <div className="rounded-2xl border border-white/8 bg-[#111217] p-4">
+              <div className="flex items-center gap-3">
+                <ItemVisual iconKey={selectedInventoryItem.stock_items.svg_icon_key} size={34} />
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-semibold text-white">{selectedInventoryItem.stock_items.name}</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Disponivel no colaborador: {formatQuantity(selectedInventoryItem.quantity, selectedInventoryItem.stock_items.unit)}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <Input
+              label="Quantidade para retirar"
+              type="number"
+              min={1}
+              max={selectedInventoryItem.quantity}
+              value={inventoryActionQuantity}
+              onChange={(event) => setInventoryActionQuantity(event.target.value)}
+            />
+
+            <p className="text-sm text-gray-400">
+              Escolha se o item vai ser excluido do inventario ou devolvido ao estoque principal.
+            </p>
+
+            <div className="grid gap-3">
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => void handleInventoryAction('return_to_stock')}
+                isLoading={inventorySubmitting && inventoryActionMode === 'return_to_stock'}
+              >
+                Mover pro estoque
+              </Button>
+              <Button
+                type="button"
+                variant="danger"
+                onClick={() => void handleInventoryAction('delete')}
+                isLoading={inventorySubmitting && inventoryActionMode === 'delete'}
+              >
+                Excluir item
+              </Button>
+            </div>
+          </div>
+        )}
       </Modal>
     </div>
   )
@@ -830,7 +969,11 @@ interface RawWithdrawalRow {
   notes: string | null
   photo_url: string | null
   supervisor_signature: string | null
+  supervisor_signature_attachment_url: string | null
+  supervisor_signature_attachment_name: string | null
   requester_signature: string | null
+  requester_signature_attachment_url: string | null
+  requester_signature_attachment_name: string | null
   witness_signature: string | null
   withdrawn_at: string | null
   created_at: string
