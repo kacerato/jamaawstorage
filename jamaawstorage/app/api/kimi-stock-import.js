@@ -17,39 +17,55 @@ function extractXmlPayload(content) {
 
 function buildCatalogPrompt(stockItems) {
   return stockItems
-    .map((item) => `- code="${item.code}" | name="${item.name}" | id="${item.id}"`)
+    .map((item) => `${item.id} | ${item.code} | ${item.name}`)
     .join('\n')
+}
+
+function normalizeExtractedContent(content) {
+  return String(content ?? '')
+    .replace(/\r/g, '')
+    .replace(/\t/g, ' ')
+    .replace(/[ ]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 function buildMessages(fileContent, stockItems) {
   const catalogPrompt = buildCatalogPrompt(stockItems)
+  const normalizedFileContent = normalizeExtractedContent(fileContent)
 
   return [
     {
       role: 'system',
       content: [
         'You extract stock-import items from OCR or document text.',
+        'Read the entire file content before answering.',
         'Return XML only. No markdown fences. No explanation.',
-        'Match stock items case-insensitively and accent-insensitively.',
-        'If text has extra descriptors, keep only the canonical stock item name when the catalog makes the match clear.',
-        'Never create a separate item only because uppercase/lowercase changed.',
-        'When a safe match exists, fill matched_stock_code, matched_stock_name, and stock_item_id from the provided catalog.',
-        'When a safe match does not exist, leave matched_stock_code, matched_stock_name, and stock_item_id empty.',
+        'Extract every real stock line that contains an item with a positive integer quantity.',
+        'Ignore headers, totals, addresses, taxes, signatures, dates, page numbers, prices, and duplicated noise.',
+        'Merge exact duplicate items when they clearly refer to the same item and sum their quantities.',
+        'Match catalog items case-insensitively and accent-insensitively.',
+        'If the catalog makes the match clear, normalize the item name to the canonical catalog name.',
+        'Never create a separate item only because uppercase, lowercase, punctuation, or accents changed.',
+        'When a safe match exists, fill matched_stock_code, matched_stock_name, and stock_item_id from the catalog.',
+        'When a safe match does not exist, keep matched_stock_code, matched_stock_name, and stock_item_id empty.',
+        'Quantity must be an integer without unit text.',
+        'Keep the XML short and deterministic.',
         'Output schema:',
         '<stock_import><items><item><name>...</name><quantity>...</quantity><matched_stock_code>...</matched_stock_code><matched_stock_name>...</matched_stock_name><stock_item_id>...</stock_item_id></item></items></stock_import>',
       ].join('\n'),
     },
     {
       role: 'system',
-      content: `STOCK CATALOG\n${catalogPrompt}`,
+      content: `STOCK CATALOG\nid | code | name\n${catalogPrompt}`,
     },
     {
       role: 'system',
-      content: `EXTRACTED FILE CONTENT\n${fileContent}`,
+      content: `EXTRACTED FILE CONTENT\n${normalizedFileContent}`,
     },
     {
       role: 'user',
-      content: 'Extract the stock items from this document and return the XML.',
+      content: 'Extract the stock items from this document and return the XML now.',
     },
   ]
 }

@@ -62,6 +62,8 @@ interface PrintTableDocumentOptions {
   generatedAt?: string
   columns: PrintTableColumn[]
   rows: Record<string, unknown>[]
+  orientation?: 'portrait' | 'landscape'
+  compact?: boolean
 }
 
 interface PrintTableSection {
@@ -86,6 +88,8 @@ export function openPrintTableDocument({
   generatedAt,
   columns,
   rows,
+  orientation = 'portrait',
+  compact = false,
 }: PrintTableDocumentOptions): void {
   const generatedLabel = generatedAt ?? new Date().toLocaleString('pt-BR')
   const tableHead = columns
@@ -129,15 +133,15 @@ export function openPrintTableDocument({
         background: white;
       }
       .page {
-        padding: 32px;
+        padding: ${compact ? '20px' : '32px'};
       }
       .header {
-        margin-bottom: 24px;
+        margin-bottom: ${compact ? '14px' : '24px'};
         border-bottom: 2px solid var(--line);
-        padding-bottom: 18px;
+        padding-bottom: ${compact ? '12px' : '18px'};
       }
       .eyebrow {
-        font-size: 11px;
+        font-size: ${compact ? '10px' : '11px'};
         font-weight: 700;
         letter-spacing: 0.22em;
         text-transform: uppercase;
@@ -146,14 +150,14 @@ export function openPrintTableDocument({
       }
       h1 {
         margin: 0;
-        font-size: 28px;
+        font-size: ${compact ? '22px' : '28px'};
         line-height: 1.1;
       }
       .subtitle,
       .meta {
         margin: 8px 0 0;
         color: var(--muted);
-        font-size: 13px;
+        font-size: ${compact ? '11px' : '13px'};
       }
       table {
         width: 100%;
@@ -162,15 +166,15 @@ export function openPrintTableDocument({
       }
       th, td {
         border: 1px solid var(--line);
-        padding: 10px 12px;
+        padding: ${compact ? '6px 8px' : '10px 12px'};
         text-align: left;
         vertical-align: top;
-        font-size: 12px;
+        font-size: ${compact ? '10px' : '12px'};
         word-break: break-word;
       }
       th {
         background: var(--soft);
-        font-size: 11px;
+        font-size: ${compact ? '9px' : '11px'};
         letter-spacing: 0.08em;
         text-transform: uppercase;
       }
@@ -180,13 +184,17 @@ export function openPrintTableDocument({
         padding: 28px 12px;
       }
       .footer {
-        margin-top: 18px;
+        margin-top: ${compact ? '12px' : '18px'};
         color: var(--muted);
-        font-size: 11px;
+        font-size: ${compact ? '10px' : '11px'};
+      }
+      @page {
+        size: A4 ${orientation};
+        margin: ${compact ? '8mm' : '12mm'};
       }
       @media print {
         body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-        .page { padding: 20px; }
+        .page { padding: ${compact ? '8px' : '20px'}; }
       }
     </style>
   </head>
