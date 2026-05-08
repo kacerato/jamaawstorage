@@ -146,7 +146,9 @@ export interface Database {
           role: AppRole
           job_title: string | null
           sector: string | null
+          cpf: string | null
           photo_url: string | null
+          document_attachments: Record<string, unknown>[]
           is_active: boolean
           created_at: string
           updated_at: string
@@ -158,7 +160,9 @@ export interface Database {
           role?: AppRole
           job_title?: string | null
           sector?: string | null
+          cpf?: string | null
           photo_url?: string | null
+          document_attachments?: Record<string, unknown>[]
           is_active?: boolean
           created_by?: string | null
           created_at?: string
@@ -171,13 +175,23 @@ export interface Database {
           role?: AppRole
           job_title?: string | null
           sector?: string | null
+          cpf?: string | null
           photo_url?: string | null
+          document_attachments?: Record<string, unknown>[]
           is_active?: boolean
           created_by?: string | null
           created_at?: string
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "people_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
       }
   person_inventories: {
     Row: {

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import type { Tables, AppRole, WithdrawalDestinationType } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { cn, formatDate, formatDateTime, formatQuantity } from '../../lib/utils'
+import { buildPublicStorageUrl } from '../../lib/storage'
 import { Button, Badge, DataTable, Modal, Card, Alert, Spinner, Select, Input } from '../../components/ui'
 import { UserIcon, HelmetIcon, PackageIcon, ClipboardIcon, ChartIcon, CameraIcon, SignatureIcon } from '../../components/icons'
 import { ItemVisual } from '../../components/items/ItemVisual'
@@ -19,7 +20,8 @@ import {
 } from 'recharts'
 import { startOfWeek, startOfMonth, subWeeks, subMonths, parseISO, isAfter } from 'date-fns'
 
-type PersonWithDetails = Tables<'people'> & {
+type PersonWithDetails = Omit<Tables<'people'>, 'document_attachments'> & {
+  document_attachments: PersonAttachment[]
   inventory: (Tables<'person_inventories'> & {
     stock_items: Tables<'stock_items'>
   })[]
@@ -114,7 +116,9 @@ export function PersonDetailPage() {
       role: raw.role,
       job_title: raw.job_title,
       sector: raw.sector,
+      cpf: raw.cpf,
       photo_url: raw.photo_url,
+      document_attachments: readAttachments(raw.document_attachments),
       is_active: raw.is_active,
       created_at: raw.created_at,
       updated_at: raw.updated_at,
@@ -642,11 +646,41 @@ export function PersonDetailPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <DetailField label="Nome Completo" value={person.full_name} />
             <DetailField label="Matricula" value={person.employee_id ?? '-'} />
+            <DetailField label="CPF" value={formatCpf(person.cpf)} />
             <DetailField label="Cargo" value={person.role === 'leader' ? 'Lider' : 'Colaborador'} />
             <DetailField label="Setor" value={person.sector ?? '-'} />
             <DetailField label="Status" value={person.is_active ? 'Ativo' : 'Inativo'} />
             <DetailField label="Criado em" value={formatDateTime(person.created_at)} />
             <DetailField label="Atualizado em" value={formatDateTime(person.updated_at)} />
+          </div>
+
+          <div className="mt-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-300/80">Documentos anexados</h4>
+              <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>
+                Renomear ou remover
+              </Button>
+            </div>
+            {person.document_attachments.length > 0 ? (
+              <div className="mt-3 grid gap-3">
+                {person.document_attachments.map((document, index) => (
+                  <a
+                    key={`${document.url}-${index}`}
+                    href={buildPublicStorageUrl(document.url)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-gray-200 transition-colors hover:border-orange-400/30 hover:bg-white/6"
+                  >
+                    <span className="truncate">{document.name}</span>
+                    <span className="ml-3 shrink-0 text-orange-300">Abrir</span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-3 rounded-2xl border border-dashed border-white/10 bg-white/3 px-4 py-4 text-sm text-gray-500">
+                Nenhum documento anexado para este colaborador.
+              </div>
+            )}
           </div>
         </Card>
       )}
@@ -897,7 +931,7 @@ export function PersonDetailPage() {
             />
 
             <p className="text-sm text-gray-400">
-              Escolha se o item vai ser excluido do inventario ou devolvido ao estoque principal.
+              Escolha o destino dos itens retirados deste inventario antes de confirmar a movimentacao.
             </p>
 
             <div className="grid gap-3">
@@ -907,7 +941,7 @@ export function PersonDetailPage() {
                 onClick={() => void handleInventoryAction('return_to_stock')}
                 isLoading={inventorySubmitting && inventoryActionMode === 'return_to_stock'}
               >
-                Mover pro estoque
+                Devolver ao estoque
               </Button>
               <Button
                 type="button"
@@ -915,7 +949,7 @@ export function PersonDetailPage() {
                 onClick={() => void handleInventoryAction('delete')}
                 isLoading={inventorySubmitting && inventoryActionMode === 'delete'}
               >
-                Excluir item
+                Excluir definitivamente
               </Button>
             </div>
           </div>
@@ -941,7 +975,9 @@ interface RawPersonDetailRow {
   role: AppRole
   job_title: string | null
   sector: string | null
+  cpf: string | null
   photo_url: string | null
+  document_attachments: Record<string, unknown>[]
   is_active: boolean
   created_at: string
   updated_at: string
@@ -954,6 +990,34 @@ interface RawPersonDetailRow {
     updated_at: string
     stock_items: Tables<'stock_items'>
   }[]
+}
+
+type PersonAttachment = {
+  name: string
+  url: string
+}
+
+function formatCpf(value: string | null): string {
+  const digits = (value ?? '').replace(/\D/g, '').slice(0, 11)
+  if (digits.length !== 11) return value ?? '-'
+  return `${digits.slice(0, 3)}.${digits.slice(3, 6)}.${digits.slice(6, 9)}-${digits.slice(9, 11)}`
+}
+
+function readAttachments(value: unknown): PersonAttachment[] {
+  if (!Array.isArray(value)) return []
+
+  return value.flatMap((entry) => {
+    if (!entry || typeof entry !== 'object') return []
+
+    const maybeName = 'name' in entry ? entry.name : null
+    const maybeUrl = 'url' in entry ? entry.url : null
+
+    if (typeof maybeName !== 'string' || typeof maybeUrl !== 'string' || !maybeUrl.trim()) {
+      return []
+    }
+
+    return [{ name: maybeName.trim() || 'Documento', url: maybeUrl.trim() }]
+  })
 }
 
 interface RawWithdrawalRow {

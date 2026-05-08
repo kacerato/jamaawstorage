@@ -71,7 +71,7 @@ export function PeoplePage() {
       // Query simplificada - sem join complexo com inventories
       let query = supabase
         .from('people')
-        .select('id, full_name, employee_id, role, job_title, sector, photo_url, is_active, created_at, updated_at', { count: 'exact' })
+        .select('id, full_name, employee_id, role, job_title, sector, cpf, photo_url, document_attachments, is_active, created_at, updated_at', { count: 'exact' })
         .order('full_name')
         .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1)
 
@@ -141,7 +141,9 @@ export function PeoplePage() {
           role: row.role,
           job_title: row.job_title,
           sector: row.sector,
+          cpf: row.cpf,
           photo_url: row.photo_url,
+          document_attachments: row.document_attachments ?? [],
           is_active: row.is_active,
           created_at: row.created_at,
           updated_at: row.updated_at,
@@ -521,7 +523,9 @@ interface RawPersonRow {
   role: AppRole
   job_title: string | null
   sector: string | null
+  cpf: string | null
   photo_url: string | null
+  document_attachments: Record<string, unknown>[]
   is_active: boolean
   created_at: string
   updated_at: string

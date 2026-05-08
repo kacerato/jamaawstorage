@@ -182,13 +182,24 @@ function exportToCSV(data: Record<string, unknown>[], filename: string) {
   URL.revokeObjectURL(url)
 }
 
-function exportToPDF(data: Record<string, unknown>[], title: string, subtitle: string, filename: string) {
+function exportToPDF(
+  data: Record<string, unknown>[],
+  title: string,
+  subtitle: string,
+  filename: string,
+  options?: {
+    orientation?: 'portrait' | 'landscape'
+    compact?: boolean
+  },
+) {
   if (data.length === 0) return
 
   openPrintTableDocument({
     title,
     subtitle,
     filename,
+    orientation: options?.orientation,
+    compact: options?.compact,
     columns: Object.keys(data[0]).map((key) => ({
       key,
       label: key,
@@ -692,6 +703,7 @@ function StockOverviewTab() {
       'Estoque Geral',
       'Panorama completo dos itens ativos do estoque.',
       'estoque-geral.pdf',
+      { orientation: 'landscape', compact: true },
     )
   }
 
@@ -1591,11 +1603,11 @@ function LowStockTab() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <Alert variant="warning" title="Itens com estoque abaixo do minimo" className="flex-1">
+      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+        <Alert variant="warning" title="Itens com estoque abaixo do minimo" className="min-w-0 flex-1">
           {lowStockItems.length} item(ns) encontrados abaixo da quantidade minima
         </Alert>
-        <div className="ml-4 flex gap-2">
+        <div className="flex flex-wrap gap-2 xl:ml-4 xl:justify-end">
           <Button variant="outline" size="sm" onClick={handleExportCSV}>
             Exportar CSV
           </Button>
