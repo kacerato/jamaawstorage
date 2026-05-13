@@ -12,7 +12,7 @@ export interface WithdrawalWithDetails extends Tables<'withdrawals'> {
   withdrawal_items: (Tables<'withdrawal_items'> & {
     stock_items: Tables<'stock_items'>
   })[]
-  requested_by_person: Tables<'people'>
+  requested_by_person: Tables<'people'> | null
   collaborator?: Tables<'people'> | null
   work_site?: Tables<'work_sites'> | null
   approved_by_profile?: Tables<'profiles'> | null
@@ -71,7 +71,7 @@ export interface WithdrawalListItem {
   supervisor_signature: string | null
   requester_signature: string | null
   withdrawal_items?: { id: string }[]
-  requested_by_person: Tables<'people'>
+  requested_by_person: Tables<'people'> | null
   collaborator: Tables<'people'> | null
   work_site: Tables<'work_sites'> | null
 }

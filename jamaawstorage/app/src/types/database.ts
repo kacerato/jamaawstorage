@@ -143,6 +143,7 @@ export interface Database {
           id: string
           full_name: string
           employee_id: string | null
+          profile_id: string | null
           role: AppRole
           job_title: string | null
           sector: string | null
@@ -157,6 +158,7 @@ export interface Database {
           id?: string
           full_name: string
           employee_id?: string | null
+          profile_id?: string | null
           role?: AppRole
           job_title?: string | null
           sector?: string | null
@@ -172,6 +174,7 @@ export interface Database {
           id?: string
           full_name?: string
           employee_id?: string | null
+          profile_id?: string | null
           role?: AppRole
           job_title?: string | null
           sector?: string | null
@@ -188,6 +191,13 @@ export interface Database {
             foreignKeyName: "people_created_by_fkey"
             columns: ["created_by"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "people_profile_id_fkey"
+            columns: ["profile_id"]
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           }

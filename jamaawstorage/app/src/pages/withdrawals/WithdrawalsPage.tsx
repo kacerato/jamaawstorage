@@ -13,10 +13,10 @@ type WithdrawalRowForTable = WithdrawalListItem & Record<string, unknown>
 
 const withdrawalsPageCache: {
   withdrawals: WithdrawalListItem[]
-  leaders: PeopleRow[]
+  requesters: PeopleRow[]
 } = {
   withdrawals: [],
-  leaders: [],
+  requesters: [],
 }
 
 const statusOptions = [
@@ -45,7 +45,7 @@ export function WithdrawalsPage() {
   const initialQuery = searchParams.get('q') ?? ''
   const createdCount = Number(searchParams.get('created') ?? '0')
   const [withdrawals, setWithdrawals] = useState<WithdrawalListItem[]>(withdrawalsPageCache.withdrawals)
-  const [leaders, setLeaders] = useState<PeopleRow[]>(withdrawalsPageCache.leaders)
+  const [requesters, setRequesters] = useState<PeopleRow[]>(withdrawalsPageCache.requesters)
   const [loading, setLoading] = useState(withdrawalsPageCache.withdrawals.length === 0)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -59,20 +59,20 @@ export function WithdrawalsPage() {
   useEffect(() => {
     let cancelled = false
 
-    if (withdrawalsPageCache.leaders.length > 0) return
+    if (withdrawalsPageCache.requesters.length > 0) return
 
     void supabase
       .from('people')
       .select('*')
       .eq('is_active', true)
-      .eq('role', 'leader')
+      .in('role', ['leader', 'supervisor'])
       .order('full_name')
       .then(({ data }) => {
         if (cancelled) return
         if (data) {
-          const nextLeaders = data as PeopleRow[]
-          withdrawalsPageCache.leaders = nextLeaders
-          setLeaders(nextLeaders)
+          const nextRequesters = data as PeopleRow[]
+          withdrawalsPageCache.requesters = nextRequesters
+          setRequesters(nextRequesters)
         }
       })
 
@@ -152,15 +152,15 @@ export function WithdrawalsPage() {
     }
   }, [searchParams, searchCode])
 
-  const leaderOptions = useMemo(
+  const requesterOptions = useMemo(
     () => [
-      { value: '', label: 'Todos os lideres' },
-      ...leaders.map((leader) => ({
-        value: leader.id,
-        label: leader.full_name,
+      { value: '', label: 'Todos os solicitantes' },
+      ...requesters.map((requester) => ({
+        value: requester.id,
+        label: requester.full_name,
       })),
     ],
-    [leaders]
+    [requesters]
   )
 
   const tableData = useMemo<WithdrawalRowForTable[]>(
@@ -181,7 +181,7 @@ export function WithdrawalsPage() {
     },
     {
       key: 'requested_by' as const,
-      header: 'Lider Solicitante',
+      header: 'Solicitante',
       render: (_value: unknown, row: WithdrawalRowForTable) => {
         const withdrawal = row as unknown as WithdrawalListItem
         return withdrawal.requested_by_person?.full_name ?? '-'
@@ -300,10 +300,10 @@ export function WithdrawalsPage() {
           </div>
           <div className="w-52">
             <Select
-              options={leaderOptions}
+              options={requesterOptions}
               value={leaderFilter}
               onChange={(e) => setLeaderFilter(e.target.value)}
-              placeholder="Lider"
+              placeholder="Solicitante"
             />
           </div>
           <div className="w-40">

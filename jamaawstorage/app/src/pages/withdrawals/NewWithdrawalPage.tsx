@@ -122,7 +122,7 @@ export function NewWithdrawalPage() {
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [stepErrors, setStepErrors] = useState<Record<string, string>>({})
 
-  const [leaders, setLeaders] = useState<PeopleRow[]>([])
+  const [requesters, setRequesters] = useState<PeopleRow[]>([])
   const [collaborators, setCollaborators] = useState<PeopleRow[]>([])
   const [workSites, setWorkSites] = useState<WorkSiteRow[]>([])
   const [loadingOptions, setLoadingOptions] = useState(true)
@@ -157,13 +157,13 @@ export function NewWithdrawalPage() {
   useEffect(() => {
     let cancelled = false
     Promise.all([
-      supabase.from('people').select('*').eq('is_active', true).eq('role', 'leader').order('full_name'),
+      supabase.from('people').select('*').eq('is_active', true).in('role', ['leader', 'supervisor']).order('full_name'),
       supabase.from('people').select('*').eq('is_active', true).eq('role', 'collaborator').order('full_name'),
       supabase.from('work_sites').select('*').eq('is_active', true).order('name'),
-    ]).then(([leadersRes, collaboratorsRes, workSitesRes]) => {
+    ]).then(([requestersRes, collaboratorsRes, workSitesRes]) => {
       if (cancelled) return
 
-      if (leadersRes.data) setLeaders(leadersRes.data as PeopleRow[])
+      if (requestersRes.data) setRequesters(requestersRes.data as PeopleRow[])
       if (collaboratorsRes.data) setCollaborators(collaboratorsRes.data as PeopleRow[])
 
       if (workSitesRes.data) {
@@ -186,6 +186,15 @@ export function NewWithdrawalPage() {
       cancelled = true
     }
   }, [])
+
+  useEffect(() => {
+    if (!profile || requestedBy || requesters.length === 0) return
+
+    const currentRequester = requesters.find((requester) => requester.profile_id === profile.id)
+    if (currentRequester) {
+      setRequestedBy(currentRequester.id)
+    }
+  }, [profile, requestedBy, requesters])
 
   const selectedEntryKeys = useMemo(
     () => new Set(items.map((item) => makeEntryDuplicateKey(item))),
@@ -484,7 +493,7 @@ export function NewWithdrawalPage() {
     const errors: Record<string, string> = {}
 
     if (step === 0) {
-      if (!requestedBy) errors.requestedBy = 'Selecione o lider solicitante'
+      if (!requestedBy) errors.requestedBy = 'Selecione quem solicitou a retirada'
       if (draftDestinationType === 'collaborator' && !draftCollaboratorId) {
         errors.collaboratorId = 'Selecione um colaborador para usar como destino padrao'
       }
@@ -696,17 +705,23 @@ export function NewWithdrawalPage() {
     }
   }
 
-  const leaderOptions = leaders.map((leader) => ({
-    value: leader.id,
-    label: `${leader.full_name}${leader.employee_id ? ` (${leader.employee_id})` : ''}`,
-  }))
+  const requesterOptions = requesters.map((requester) => {
+    const suffix = requester.employee_id ? ` (${requester.employee_id})` : ''
+    const roleLabel = requester.role === 'supervisor' ? 'Supervisor' : 'Lider'
+    const currentUserLabel = requester.profile_id === profile?.id ? ' - voce' : ''
+
+    return {
+      value: requester.id,
+      label: `${requester.full_name}${suffix} - ${roleLabel}${currentUserLabel}`,
+    }
+  })
 
   const collaboratorOptions = collaborators.map((collaborator) => ({
     value: collaborator.id,
     label: `${collaborator.full_name}${collaborator.employee_id ? ` (${collaborator.employee_id})` : ''}`,
   }))
 
-  const selectedLeader = leaders.find((leader) => leader.id === requestedBy)
+  const selectedRequester = requesters.find((requester) => requester.id === requestedBy)
 
   const renderStepIndicator = () => (
     <div className="mb-8 flex items-center justify-between">
@@ -769,9 +784,9 @@ export function NewWithdrawalPage() {
         ) : (
           <div className="flex flex-col gap-5">
             <Select
-              label="Lider Solicitante"
-              placeholder="Selecione o lider"
-              options={leaderOptions}
+              label="Solicitante"
+              placeholder="Selecione quem solicitou"
+              options={requesterOptions}
               value={requestedBy}
               onChange={(event) => {
                 setRequestedBy(event.target.value)
@@ -1176,8 +1191,8 @@ export function NewWithdrawalPage() {
             <p className="text-sm text-white">{generateWithdrawalCodePreview()}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Lider solicitante</p>
-            <p className="text-sm text-white">{selectedLeader?.full_name ?? '-'}</p>
+            <p className="text-xs font-medium text-gray-400">Solicitante</p>
+            <p className="text-sm text-white">{selectedRequester?.full_name ?? '-'}</p>
           </div>
           <div>
             <p className="text-xs font-medium text-gray-400">Retiradas que serao criadas</p>

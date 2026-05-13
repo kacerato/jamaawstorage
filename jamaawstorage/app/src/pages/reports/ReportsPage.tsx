@@ -45,7 +45,7 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'stock', label: 'Estoque Geral' },
   { key: 'abc', label: 'Curva ABC de Saida' },
   { key: 'lowstock', label: 'Itens Abaixo do Minimo' },
-  { key: 'leader', label: 'Consumo por Lider' },
+  { key: 'leader', label: 'Consumo por Solicitante' },
 ]
 
 const PERIOD_PRESETS: { value: ReportPeriod; label: string }[] = [
@@ -272,7 +272,7 @@ function MovementsTab() {
   useEffect(() => {
     async function fetchFilters() {
       const [leadersRes, worksitesRes, itemsRes] = await Promise.all([
-        supabase.from('people').select('*').eq('is_active', true).eq('role', 'leader').order('full_name'),
+        supabase.from('people').select('*').eq('is_active', true).in('role', ['leader', 'supervisor']).order('full_name'),
         supabase.from('work_sites').select('*').eq('is_active', true).order('name'),
         supabase.from('stock_items').select('*').order('name'),
       ])
@@ -357,7 +357,7 @@ function MovementsTab() {
 
   const leaderOptions = useMemo(
     () => [
-      { value: '', label: 'Todos os lideres' },
+      { value: '', label: 'Todos os solicitantes' },
       ...leaders.map((l) => ({ value: l.id, label: l.full_name })),
     ],
     [leaders],
@@ -407,7 +407,7 @@ function MovementsTab() {
       },
       {
         key: 'requested_by' as const,
-        header: 'Lider',
+        header: 'Solicitante',
         render: (_v: unknown, row: WithdrawalRowForTable) =>
           (row as unknown as WithdrawalWithItems).requested_by_person?.full_name ?? '-',
       },
@@ -456,7 +456,7 @@ function MovementsTab() {
     const rows = withdrawals.map((w) => ({
       Data: formatDateTime(w.created_at),
       Codigo: w.code,
-      Lider: w.requested_by_person?.full_name ?? '',
+      Solicitante: w.requested_by_person?.full_name ?? '',
       Destino:
         w.destination_type === 'collaborator'
           ? w.collaborator?.full_name ?? 'Colaborador'
@@ -473,7 +473,7 @@ function MovementsTab() {
     const rows = withdrawals.map((w) => ({
       Data: formatDateTime(w.created_at),
       Codigo: w.code,
-      Lider: w.requested_by_person?.full_name ?? '',
+      Solicitante: w.requested_by_person?.full_name ?? '',
       Destino:
         w.destination_type === 'collaborator'
           ? w.collaborator?.full_name ?? 'Colaborador'
@@ -509,7 +509,7 @@ function MovementsTab() {
           </div>
           <div className="w-52">
             <Select
-              label="Lider"
+              label="Solicitante"
               options={leaderOptions}
               value={leaderFilter}
               onChange={(e) => setLeaderFilter(e.target.value)}
@@ -1656,7 +1656,7 @@ function LeaderConsumptionTab() {
         .from('people')
         .select('*')
         .eq('is_active', true)
-        .eq('role', 'leader')
+        .in('role', ['leader', 'supervisor'])
         .order('full_name')
 
       if (data) {
@@ -1669,7 +1669,7 @@ function LeaderConsumptionTab() {
 
   const leaderOptions = useMemo(
     () => [
-      { value: 'all', label: 'Todos os lideres' },
+      { value: 'all', label: 'Todos os solicitantes' },
       ...leaders.map((l) => ({ value: l.id, label: l.full_name })),
     ],
     [leaders],
@@ -1765,7 +1765,7 @@ function LeaderConsumptionTab() {
           .map(([name, quantity]) => ({ name, quantity }))
         return {
           leaderId,
-          leaderName: leaderNames.get(leaderId) ?? 'Lider',
+          leaderName: leaderNames.get(leaderId) ?? 'Solicitante',
           items,
           totalItems: items.reduce((sum, item) => sum + item.quantity, 0),
           totalWithdrawals: withdrawalIdsByLeader.get(leaderId)?.size ?? 0,
@@ -1803,15 +1803,15 @@ function LeaderConsumptionTab() {
       Item: item.name,
       Quantidade: item.quantity,
     }))
-    exportToCSV(rows, selectedLeader === 'all' ? 'consumo-todos-lideres.csv' : `consumo-lider-${selectedLeader}.csv`)
+    exportToCSV(rows, selectedLeader === 'all' ? 'consumo-todos-solicitantes.csv' : `consumo-solicitante-${selectedLeader}.csv`)
   }
 
   const handleExportPDF = () => {
     if (selectedLeader === 'all') {
       openPrintSectionedTableDocument({
-        title: 'Consumo por Lider',
-        subtitle: 'Relatorio separado por lider no periodo selecionado.',
-        filename: 'consumo-todos-lideres.pdf',
+        title: 'Consumo por Solicitante',
+        subtitle: 'Relatorio separado por solicitante no periodo selecionado.',
+        filename: 'consumo-todos-solicitantes.pdf',
         sections: sections.map((section) => ({
           title: section.leaderName,
           subtitle: `Retiradas: ${section.totalWithdrawals} | Itens retirados: ${section.totalItems}`,
@@ -1832,7 +1832,7 @@ function LeaderConsumptionTab() {
       Item: item.name,
       Quantidade: item.quantity,
     }))
-    exportToPDF(rows, 'Consumo por Lider', 'Resumo dos itens mais retirados pelo lider selecionado.', `consumo-lider-${selectedLeader}.pdf`)
+    exportToPDF(rows, 'Consumo por Solicitante', 'Resumo dos itens mais retirados pelo solicitante selecionado.', `consumo-solicitante-${selectedLeader}.pdf`)
   }
 
   return (
@@ -1841,7 +1841,7 @@ function LeaderConsumptionTab() {
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-64">
             <Select
-              label="Lider"
+              label="Solicitante"
               options={leaderOptions}
               value={selectedLeader}
               onChange={(e) => setSelectedLeader(e.target.value)}
@@ -1914,7 +1914,7 @@ function LeaderConsumptionTab() {
         <EmptyState
           icon={<ChartIcon size={48} />}
           title="Sem dados"
-          description="Nenhuma retirada encontrada para este lider no periodo selecionado"
+          description="Nenhuma retirada encontrada para este solicitante no periodo selecionado"
         />
       ) : (
         <>
@@ -1933,7 +1933,7 @@ function LeaderConsumptionTab() {
 
           <Card variant="bordered" padding="md">
             <h3 className="mb-4 text-sm font-semibold text-gray-300">
-              {selectedLeader === 'all' ? 'Itens mais retirados por todos os lideres' : 'Itens mais retirados pelo lider'}
+              {selectedLeader === 'all' ? 'Itens mais retirados por todos os solicitantes' : 'Itens mais retirados pelo solicitante'}
             </h3>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">

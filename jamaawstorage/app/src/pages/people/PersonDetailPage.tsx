@@ -113,6 +113,7 @@ export function PersonDetailPage() {
       id: raw.id,
       full_name: raw.full_name,
       employee_id: raw.employee_id,
+      profile_id: raw.profile_id,
       role: raw.role,
       job_title: raw.job_title,
       sector: raw.sector,
@@ -972,6 +973,7 @@ interface RawPersonDetailRow {
   id: string
   full_name: string
   employee_id: string | null
+  profile_id: string | null
   role: AppRole
   job_title: string | null
   sector: string | null

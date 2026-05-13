@@ -93,7 +93,8 @@ export function DashboardPage() {
           supabase
             .from('people')
             .select('*', { count: 'exact', head: true })
-            .eq('is_active', true),
+            .eq('is_active', true)
+            .neq('role', 'supervisor'),
           supabase
             .from('withdrawals')
             .select('*, requested_by_person:people!withdrawals_requested_by_fkey(*), withdrawal_items(id)')
