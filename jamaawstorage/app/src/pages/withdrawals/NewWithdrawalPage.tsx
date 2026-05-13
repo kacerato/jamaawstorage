@@ -1381,9 +1381,11 @@ function SignaturePreview({ label, value }: { label: string; value: string }) {
     <div className="rounded-2xl border border-white/8 bg-black/10 p-3">
       <p className="text-xs font-medium uppercase tracking-[0.16em] text-gray-400">{label}</p>
       {value ? (
-        <img src={value} alt={`Assinatura ${label}`} className="mt-3 h-24 w-full rounded-lg border border-gray-700 bg-white object-contain p-2" />
+        <img src={value} alt={`Assinatura ${label}`} className="mt-3 h-36 w-full rounded-lg border border-gray-700 bg-white object-contain p-3" />
       ) : (
-        <span className="mt-3 block text-xs text-gray-500">Aguardando extracao</span>
+        <span className="mt-3 flex h-36 items-center justify-center rounded-lg border border-dashed border-gray-700 bg-white/3 px-3 text-xs text-gray-500">
+          Aguardando extracao
+        </span>
       )}
     </div>
   )

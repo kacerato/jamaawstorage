@@ -320,7 +320,7 @@ export function WithdrawalDetailPage() {
               <img
                 src={withdrawal.supervisor_signature}
                 alt="Assinatura do supervisor"
-                className="h-20 rounded border border-gray-700 bg-white p-1"
+                className="h-32 rounded border border-gray-700 bg-white p-2"
               />
             ) : (
               <span className="text-xs text-gray-500">Nao assinado</span>
@@ -332,7 +332,7 @@ export function WithdrawalDetailPage() {
               <img
                 src={withdrawal.requester_signature}
                 alt="Assinatura do solicitante"
-                className="h-20 rounded border border-gray-700 bg-white p-1"
+                className="h-32 rounded border border-gray-700 bg-white p-2"
               />
             ) : (
               <span className="text-xs text-gray-500">Nao assinado</span>
@@ -344,7 +344,7 @@ export function WithdrawalDetailPage() {
               <img
                 src={withdrawal.witness_signature}
                 alt="Assinatura da testemunha"
-                className="h-20 rounded border border-gray-700 bg-white p-1"
+                className="h-32 rounded border border-gray-700 bg-white p-2"
               />
             ) : (
               <span className="text-xs text-gray-500">Opcional</span>
