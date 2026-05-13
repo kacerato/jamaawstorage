@@ -314,38 +314,44 @@ export function WithdrawalDetailPage() {
           )}
         </h3>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col gap-2">
             <p className="text-xs font-medium text-gray-400">Supervisor</p>
             {withdrawal.supervisor_signature ? (
-              <img
-                src={withdrawal.supervisor_signature}
-                alt="Assinatura do supervisor"
-                className="h-32 rounded border border-gray-700 bg-white p-2"
-              />
+              <div className="flex min-h-[220px] items-center justify-center rounded border border-gray-700 bg-white p-3">
+                <img
+                  src={withdrawal.supervisor_signature}
+                  alt="Assinatura do supervisor"
+                  className="h-[190px] w-full object-contain"
+                />
+              </div>
             ) : (
               <span className="text-xs text-gray-500">Nao assinado</span>
             )}
           </div>
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col gap-2">
             <p className="text-xs font-medium text-gray-400">Solicitante</p>
             {withdrawal.requester_signature ? (
-              <img
-                src={withdrawal.requester_signature}
-                alt="Assinatura do solicitante"
-                className="h-32 rounded border border-gray-700 bg-white p-2"
-              />
+              <div className="flex min-h-[220px] items-center justify-center rounded border border-gray-700 bg-white p-3">
+                <img
+                  src={withdrawal.requester_signature}
+                  alt="Assinatura do solicitante"
+                  className="h-[190px] w-full object-contain"
+                />
+              </div>
             ) : (
               <span className="text-xs text-gray-500">Nao assinado</span>
             )}
           </div>
-          <div className="flex flex-col items-center gap-2">
+          <div className="flex flex-col gap-2">
             <p className="text-xs font-medium text-gray-400">Testemunha</p>
             {withdrawal.witness_signature ? (
-              <img
-                src={withdrawal.witness_signature}
-                alt="Assinatura da testemunha"
-                className="h-32 rounded border border-gray-700 bg-white p-2"
-              />
+              <div className="flex min-h-[220px] items-center justify-center rounded border border-gray-700 bg-white p-3">
+                <img
+                  src={withdrawal.witness_signature}
+                  alt="Assinatura da testemunha"
+                  className="h-[190px] w-full object-contain"
+                />
+              </div>
             ) : (
               <span className="text-xs text-gray-500">Opcional</span>
             )}
