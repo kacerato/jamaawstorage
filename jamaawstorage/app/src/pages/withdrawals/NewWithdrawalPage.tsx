@@ -154,6 +154,14 @@ export function NewWithdrawalPage() {
   const [dragActivePhoto, setDragActivePhoto] = useState(false)
   const [dragActiveDoc, setDragActiveDoc] = useState(false)
 
+  const availableRequesters = useMemo(
+    () =>
+      requesters.filter((requester) =>
+        requester.role === 'leader' || requester.profile_id === profile?.id,
+      ),
+    [profile?.id, requesters],
+  )
+
   useEffect(() => {
     let cancelled = false
     Promise.all([
@@ -188,13 +196,13 @@ export function NewWithdrawalPage() {
   }, [])
 
   useEffect(() => {
-    if (!profile || requestedBy || requesters.length === 0) return
+    if (!profile || requestedBy || availableRequesters.length === 0) return
 
-    const currentRequester = requesters.find((requester) => requester.profile_id === profile.id)
+    const currentRequester = availableRequesters.find((requester) => requester.profile_id === profile.id)
     if (currentRequester) {
       setRequestedBy(currentRequester.id)
     }
-  }, [profile, requestedBy, requesters])
+  }, [availableRequesters, profile, requestedBy])
 
   const selectedEntryKeys = useMemo(
     () => new Set(items.map((item) => makeEntryDuplicateKey(item))),
@@ -705,7 +713,7 @@ export function NewWithdrawalPage() {
     }
   }
 
-  const requesterOptions = requesters.map((requester) => {
+  const requesterOptions = availableRequesters.map((requester) => {
     const suffix = requester.employee_id ? ` (${requester.employee_id})` : ''
     const roleLabel = requester.role === 'supervisor' ? 'Supervisor' : 'Lider'
     const currentUserLabel = requester.profile_id === profile?.id ? ' - voce' : ''
@@ -721,7 +729,7 @@ export function NewWithdrawalPage() {
     label: `${collaborator.full_name}${collaborator.employee_id ? ` (${collaborator.employee_id})` : ''}`,
   }))
 
-  const selectedRequester = requesters.find((requester) => requester.id === requestedBy)
+  const selectedRequester = availableRequesters.find((requester) => requester.id === requestedBy)
 
   const renderStepIndicator = () => (
     <div className="mb-8 flex items-center justify-between">
@@ -798,6 +806,9 @@ export function NewWithdrawalPage() {
               }}
               error={stepErrors.requestedBy}
             />
+            <p className="text-xs text-gray-500">
+              Supervisores so podem registrar retiradas no proprio nome. Para outras solicitacoes, escolha um lider.
+            </p>
 
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-gray-300">Destino padrao para proximos itens</label>
