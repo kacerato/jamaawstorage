@@ -531,6 +531,15 @@ export function NewWithdrawalPage() {
       }
     }
 
+    if (step === 2) {
+      const hasSharedSignatureDocument = !!signatureDocument.url
+      const hasExtractedSignature = !!supervisorSignature || !!requesterSignature
+
+      if (!hasSharedSignatureDocument && !hasExtractedSignature) {
+        errors.signatures = 'Envie o documento/foto com as assinaturas antes de continuar.'
+      }
+    }
+
     setStepErrors(errors)
     return Object.keys(errors).length === 0
   }
@@ -641,6 +650,13 @@ export function NewWithdrawalPage() {
         supervisorSignatureUrl,
         requesterSignatureUrl,
       } = await persistSignatureSnapshots()
+
+      if (!signatureDocument.url && !supervisorSignatureUrl && !requesterSignatureUrl) {
+        setSubmitError('Envie o documento/foto com as assinaturas antes de concluir a retirada.')
+        setCurrentStep(2)
+        setSubmitting(false)
+        return
+      }
 
       const createdIds: string[] = []
 
@@ -1125,6 +1141,12 @@ export function NewWithdrawalPage() {
           <h3 className="text-lg font-semibold text-white">Documento com assinaturas</h3>
           <Badge variant="default" size="sm">Upload unico</Badge>
         </div>
+
+        {stepErrors.signatures && (
+          <Alert variant="danger" className="mb-4">
+            {stepErrors.signatures}
+          </Alert>
+        )}
 
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
           <div 
