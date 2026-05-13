@@ -151,6 +151,9 @@ export function NewWithdrawalPage() {
   })
   const [signatureProcessingHint, setSignatureProcessingHint] = useState<string | null>(null)
 
+  const [dragActivePhoto, setDragActivePhoto] = useState(false)
+  const [dragActiveDoc, setDragActiveDoc] = useState(false)
+
   useEffect(() => {
     let cancelled = false
     Promise.all([
@@ -675,11 +678,9 @@ export function NewWithdrawalPage() {
         createdIds.push(withdrawalId)
       }
 
-      try {
-        await notifyTelegram(createdIds)
-      } catch (notifyError) {
+      notifyTelegram(createdIds).catch((notifyError) => {
         console.warn('Telegram notify failed:', notifyError)
-      }
+      })
 
       setSubmitting(false)
 
@@ -1058,7 +1059,23 @@ export function NewWithdrawalPage() {
               </button>
             </div>
           ) : (
-            <>
+            <div 
+              onDragOver={(e) => { e.preventDefault(); setDragActivePhoto(true) }}
+              onDragLeave={(e) => { e.preventDefault(); setDragActivePhoto(false) }}
+              onDrop={async (e) => {
+                e.preventDefault()
+                setDragActivePhoto(false)
+                const file = e.dataTransfer.files?.[0]
+                if (file) {
+                  const synthEvent = { target: { files: [file], value: '' } } as unknown as React.ChangeEvent<HTMLInputElement>
+                  await handlePhotoChange(synthEvent)
+                }
+              }}
+              className={cn(
+                "rounded-lg border-2 border-dashed p-4 transition-colors",
+                dragActivePhoto ? "border-orange-500 bg-orange-500/10" : "border-gray-700 bg-gray-900/50"
+              )}
+            >
               <input
                 type="file"
                 accept="image/*"
@@ -1067,11 +1084,11 @@ export function NewWithdrawalPage() {
                 disabled={uploadingPhoto}
                 className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
               />
-              <p className="text-xs text-gray-500">
-                JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB
+              <p className="mt-2 text-xs text-gray-500">
+                Solte um arquivo aqui ou clique acima. JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB
               </p>
-              {uploadingPhoto && <p className="text-xs text-orange-300">Enviando imagem...</p>}
-            </>
+              {uploadingPhoto && <p className="mt-2 text-xs text-orange-300">Enviando imagem...</p>}
+            </div>
           )}
           {photoError && <p className="text-xs text-red-400">{photoError}</p>}
         </div>
@@ -1084,7 +1101,23 @@ export function NewWithdrawalPage() {
         </div>
 
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
+          <div 
+            className={cn(
+              "rounded-2xl border border-dashed p-4 transition-colors",
+              dragActiveDoc ? "border-orange-500 bg-orange-500/10" : "border-white/8 bg-white/3"
+            )}
+            onDragOver={(e) => { e.preventDefault(); setDragActiveDoc(true) }}
+            onDragLeave={(e) => { e.preventDefault(); setDragActiveDoc(false) }}
+            onDrop={async (e) => {
+              e.preventDefault()
+              setDragActiveDoc(false)
+              const file = e.dataTransfer.files?.[0]
+              if (file) {
+                const synthEvent = { target: { files: [file], value: '' } } as unknown as React.ChangeEvent<HTMLInputElement>
+                await handleSignatureDocumentChange(synthEvent)
+              }
+            }}
+          >
             <label className="text-sm font-medium text-gray-200">
               Envie uma imagem ou PDF que contenha as assinaturas do supervisor e do responsavel
             </label>
@@ -1099,7 +1132,7 @@ export function NewWithdrawalPage() {
               disabled={signatureDocument.uploading}
               className="mt-4 block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
             />
-            <p className="mt-2 text-xs text-gray-500">Melhor resultado: folha/foto reta, com assinaturas na metade inferior.</p>
+            <p className="mt-2 text-xs text-gray-500">Solte o arquivo aqui ou clique. Melhor resultado: folha/foto reta, com assinaturas na metade inferior.</p>
             {signatureDocument.uploading && <p className="mt-2 text-xs text-orange-300">Enviando e processando arquivo...</p>}
             {signatureDocument.error && <p className="mt-2 text-xs text-red-400">{signatureDocument.error}</p>}
             {signatureProcessingHint && <p className="mt-2 text-xs text-emerald-300">{signatureProcessingHint}</p>}
