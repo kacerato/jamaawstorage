@@ -1,6 +1,7 @@
 export { WithdrawalsPage } from './WithdrawalsPage'
 export { NewWithdrawalPage } from './NewWithdrawalPage'
 export { WithdrawalDetailPage } from './WithdrawalDetailPage'
+export { EditWithdrawalPage } from './EditWithdrawalPage'
 export { WithdrawalRoutes } from './WithdrawalRoutes'
 export { ItemSelector } from './ItemSelector'
 export { KitSelector } from './KitSelector'

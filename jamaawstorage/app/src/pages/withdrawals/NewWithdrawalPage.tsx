@@ -702,7 +702,7 @@ export function NewWithdrawalPage() {
       setSubmitting(false)
 
       if (createdIds.length === 1) {
-        navigate(`/withdrawals/${createdIds[0]}`)
+        navigate(`/withdrawals/${createdIds[0]}?printTerm=1`)
         return
       }
 

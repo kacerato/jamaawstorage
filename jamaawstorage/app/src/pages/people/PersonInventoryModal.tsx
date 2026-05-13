@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { formatQuantity } from '../../lib/utils'
 import { Alert, Button, Input, Select } from '../../components/ui'
 import { ItemVisual } from '../../components/items/ItemVisual'
+import { StockItemPicker } from '../../components/items/StockItemPicker'
 
 interface PersonInventoryModalProps {
   onClose: () => void
@@ -196,11 +197,6 @@ export function PersonInventoryModal({
   const parsedQuantity = Number(quantity)
   const selectedKitAvailability = selectedKit ? getKitAvailability(selectedKit) : null
 
-  const stockOptions = availableItems.map((item) => ({
-    value: item.id,
-    label: `${item.name} (${item.unit})`,
-  }))
-
   const kitOptions = availableKits.map((kit) => {
     const availability = getKitAvailability(kit)
     return {
@@ -348,13 +344,19 @@ export function PersonInventoryModal({
 
                   <div className="min-w-[220px] flex-[1.4]">
                     {draftType === 'item' ? (
-                      <Select
-                        label="Item do Estoque"
-                        value={selectedItemId}
-                        onChange={(e) => setSelectedItemId(e.target.value)}
-                        options={stockOptions}
-                        placeholder="Selecione um item"
-                      />
+                      <div className="flex flex-col gap-1.5">
+                        <label className="text-sm font-medium text-gray-300">Item do Estoque</label>
+                        <StockItemPicker
+                          items={availableItems}
+                          selectedId={selectedItemId}
+                          onSelect={(item) => {
+                            setSelectedItemId(item.id)
+                            setError(null)
+                          }}
+                          searchPlaceholder="Buscar item por nome, codigo ou categoria..."
+                          emptyMessage="Nenhum item ativo com saldo disponivel."
+                        />
+                      </div>
                     ) : (
                       <Select
                         label="Kit"

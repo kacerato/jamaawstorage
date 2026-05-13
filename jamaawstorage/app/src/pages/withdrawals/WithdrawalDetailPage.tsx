@@ -1,8 +1,9 @@
-import { useState, useEffect } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import type { WithdrawalWithDetails, WithdrawalStatus } from '../../types'
 import { buildPublicStorageUrl } from '../../lib/storage'
+import { openPrintWithdrawalTerm } from './withdrawalPrint'
 import {
   Button,
   Card,
@@ -38,10 +39,15 @@ const statusLabels: Record<WithdrawalStatus, string> = {
 export function WithdrawalDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const shouldAutoPrint = searchParams.get('printTerm') === '1'
+  const wasUpdated = searchParams.get('updated') === '1'
+  const autoPrintHandledRef = useRef(false)
 
   const [withdrawal, setWithdrawal] = useState<WithdrawalRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [updateLogCount, setUpdateLogCount] = useState(0)
 
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -69,8 +75,26 @@ export function WithdrawalDetailPage() {
         setLoading(false)
       })
 
+    supabase
+      .from('audit_logs')
+      .select('id', { count: 'exact', head: true })
+      .eq('table_name', 'withdrawals')
+      .eq('record_id', id)
+      .eq('action', 'UPDATE')
+      .then(({ count }) => {
+        if (!cancelled) {
+          setUpdateLogCount(count ?? 0)
+        }
+      })
+
     return () => { cancelled = true }
   }, [id])
+
+  useEffect(() => {
+    if (!withdrawal || !shouldAutoPrint || autoPrintHandledRef.current) return
+    autoPrintHandledRef.current = true
+    openPrintWithdrawalTerm(withdrawal)
+  }, [shouldAutoPrint, withdrawal])
 
   const handleCancel = async () => {
     if (!withdrawal) return
@@ -119,6 +143,7 @@ export function WithdrawalDetailPage() {
   }
 
   const canCancel = withdrawal.status === 'completed' || withdrawal.status === 'approved' || withdrawal.status === 'pending'
+  const canEdit = withdrawal.status === 'completed' || withdrawal.status === 'approved'
   const hasSupervisorSignature = !!withdrawal.supervisor_signature
   const hasRequesterSignature = !!withdrawal.requester_signature
   const bothSignaturesPresent = hasSupervisorSignature && hasRequesterSignature
@@ -150,15 +175,37 @@ export function WithdrawalDetailPage() {
             </p>
           </div>
         </div>
-        {canCancel && (
+        <div className="flex items-center gap-2">
           <Button
-            variant="danger"
-            onClick={() => setShowCancelModal(true)}
+            variant="secondary"
+            onClick={() => openPrintWithdrawalTerm(withdrawal)}
           >
-            Cancelar Retirada
+            Gerar Termo PDF
           </Button>
-        )}
+          {canEdit && (
+            <Button
+              variant="outline"
+              onClick={() => navigate(`/withdrawals/${withdrawal.id}/edit`)}
+            >
+              Editar Retirada
+            </Button>
+          )}
+          {canCancel && (
+            <Button
+              variant="danger"
+              onClick={() => setShowCancelModal(true)}
+            >
+              Cancelar Retirada
+            </Button>
+          )}
+        </div>
       </div>
+
+      {wasUpdated && (
+        <Alert variant="success" title="Retirada atualizada">
+          As alteracoes foram salvas e registradas na auditoria.
+        </Alert>
+      )}
 
       <Card variant="bordered" padding="lg">
         <h3 className="mb-4 text-lg font-semibold text-white">Detalhes</h3>
@@ -185,6 +232,12 @@ export function WithdrawalDetailPage() {
           <div>
             <p className="text-xs font-medium text-gray-400">Observacoes</p>
             <p className="text-sm text-white">{withdrawal.notes ?? 'Nenhuma'}</p>
+          </div>
+          <div>
+            <p className="text-xs font-medium text-gray-400">Alteracoes em log</p>
+            <p className="text-sm text-white">
+              {updateLogCount > 0 ? `${updateLogCount} atualizacao(oes) registrada(s)` : 'Nenhuma alteracao apos a criacao'}
+            </p>
           </div>
         </div>
       </Card>
