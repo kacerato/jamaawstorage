@@ -15,6 +15,7 @@ import {
   Select,
   Spinner,
 } from '../../components/ui'
+import { ClipboardIcon } from '../../components/icons'
 
 type StockItemRow = Tables<'stock_items'>
 type PersonRow = Tables<'people'>
@@ -543,7 +544,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         <div className="mt-4">
           {filteredRequests.length === 0 ? (
             <EmptyState
-              icon={<span className="text-3xl">↩</span>}
+              icon={<ClipboardIcon size={48} />}
               title="Nenhuma devolucao encontrada"
               description="Quando um item usado voltar ao almoxarifado, ele aparece aqui para triagem e aprovacao."
               action={{
