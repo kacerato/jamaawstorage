@@ -15,7 +15,9 @@ import {
   Select,
   Spinner,
 } from '../../components/ui'
-import { ClipboardIcon } from '../../components/icons'
+import { ClipboardIcon, PackageIcon } from '../../components/icons'
+import { StockItemPicker } from '../../components/items/StockItemPicker'
+import { ItemVisual } from '../../components/items/ItemVisual'
 
 type StockItemRow = Tables<'stock_items'>
 type PersonRow = Tables<'people'>
@@ -40,9 +42,13 @@ interface StockReturnsTabProps {
   embedded?: boolean
 }
 
-interface ReturnFormState {
+interface ReturnDraftItem {
   stock_item_id: string
   quantity: string
+}
+
+interface ReturnFormState {
+  items: ReturnDraftItem[]
   source_type: ReturnSourceType
   source_person_id: string
   source_work_site_id: string
@@ -54,8 +60,7 @@ interface ReturnFormState {
 }
 
 interface ReturnFormErrors {
-  stock_item_id?: string
-  quantity?: string
+  items?: string
   source_person_id?: string
   source_work_site_id?: string
   form?: string
@@ -69,8 +74,7 @@ const STATUS_OPTIONS = [
 ]
 
 const initialFormState: ReturnFormState = {
-  stock_item_id: '',
-  quantity: '1',
+  items: [],
   source_type: 'collaborator',
   source_person_id: '',
   source_work_site_id: '',
@@ -230,11 +234,6 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const pendingCount = requests.filter((row) => row.status === 'pending').length
   const heldCount = requests.filter((row) => row.status === 'held').length
 
-  const stockItemOptions = stockItems.map((item) => ({
-    value: item.id,
-    label: `${item.name} (${item.code})`,
-  }))
-
   const collaboratorOptions = people
     .filter((person) => person.role === 'collaborator' || person.role === 'leader')
     .map((person) => ({
@@ -261,14 +260,17 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
 
   const validateForm = (): boolean => {
     const nextErrors: ReturnFormErrors = {}
-    const quantity = Number.parseInt(form.quantity, 10)
 
-    if (!form.stock_item_id) {
-      nextErrors.stock_item_id = 'Escolha o item devolvido.'
-    }
-
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      nextErrors.quantity = 'Informe uma quantidade maior que zero.'
+    if (form.items.length === 0) {
+      nextErrors.items = 'Adicione pelo menos um item para a devolucao.'
+    } else {
+      const hasInvalidQuantity = form.items.some((item) => {
+        const quantity = Number.parseInt(item.quantity, 10)
+        return !Number.isFinite(quantity) || quantity <= 0
+      })
+      if (hasInvalidQuantity) {
+        nextErrors.items = 'Todas as quantidades precisam ser maiores que zero.'
+      }
     }
 
     if (form.source_type === 'collaborator' && !form.source_person_id) {
@@ -346,10 +348,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       return
     }
 
-    const quantity = Number.parseInt(form.quantity, 10)
-    const payload: TablesInsert<'stock_return_requests'> = {
-      stock_item_id: form.stock_item_id,
-      quantity,
+    const sharedPayload = {
       source_type: form.source_type,
       source_person_id: form.source_type === 'collaborator' ? form.source_person_id : null,
       source_work_site_id: form.source_type === 'work_site' ? form.source_work_site_id : null,
@@ -360,6 +359,11 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       document_name: form.document_name,
       created_by: profileId,
     }
+    const payload: TablesInsert<'stock_return_requests'>[] = form.items.map((item) => ({
+      stock_item_id: item.stock_item_id,
+      quantity: Number.parseInt(item.quantity, 10),
+      ...sharedPayload,
+    }))
 
     setSubmitting(true)
     setFormErrors({})
@@ -476,6 +480,46 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       ),
     },
   ]
+
+  const selectedItemIds = new Set(form.items.map((item) => item.stock_item_id))
+
+  const selectedItemsSummary = form.items
+    .map((item) => {
+      const stockItem = stockItems.find((stock) => stock.id === item.stock_item_id)
+      if (!stockItem) return null
+      return {
+        draft: item,
+        stockItem,
+      }
+    })
+    .filter((value): value is { draft: ReturnDraftItem; stockItem: StockItemRow } => Boolean(value))
+
+  const handleAddDraftItem = (item: StockItemRow) => {
+    setForm((prev) => ({
+      ...prev,
+      items: [...prev.items, { stock_item_id: item.id, quantity: '1' }],
+    }))
+    setFormErrors((prev) => ({ ...prev, items: undefined }))
+  }
+
+  const handleDraftQuantityChange = (stockItemId: string, quantity: string) => {
+    setForm((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.stock_item_id === stockItemId
+          ? { ...item, quantity }
+          : item,
+      ),
+    }))
+    setFormErrors((prev) => ({ ...prev, items: undefined }))
+  }
+
+  const handleRemoveDraftItem = (stockItemId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      items: prev.items.filter((item) => item.stock_item_id !== stockItemId),
+    }))
+  }
 
   if (loading) {
     return (
@@ -675,26 +719,102 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         isOpen={showCreateModal}
         onClose={closeCreateModal}
         title="Registrar devolucao para triagem"
-        size="lg"
+        size="xl"
       >
         <div className="space-y-5">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Select
-              label="Item"
-              value={form.stock_item_id}
-              onChange={(event) => setForm((prev) => ({ ...prev, stock_item_id: event.target.value }))}
-              options={stockItemOptions}
-              placeholder="Selecione o item"
-              error={formErrors.stock_item_id}
-            />
-            <Input
-              label="Quantidade"
-              type="number"
-              min="1"
-              value={form.quantity}
-              onChange={(event) => setForm((prev) => ({ ...prev, quantity: event.target.value }))}
-              error={formErrors.quantity}
-            />
+          <div className="grid gap-5 xl:grid-cols-[minmax(0,1.2fr)_minmax(320px,0.9fr)]">
+            <Card variant="bordered" className="border-white/8 bg-white/3">
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div>
+                  <p className="text-sm font-medium text-white">Selecionar itens devolvidos</p>
+                  <p className="mt-1 text-xs text-gray-500">
+                    Use a busca nativa do estoque e clique para adicionar varios itens de uma vez.
+                  </p>
+                </div>
+                <div className="rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-gray-400">
+                  {form.items.length} item(ns)
+                </div>
+              </div>
+
+              <StockItemPicker
+                items={stockItems}
+                onSelect={handleAddDraftItem}
+                disabledIds={selectedItemIds}
+                emptyMessage="Nenhum item disponivel para devolucao."
+              />
+            </Card>
+
+            <Card variant="bordered" className="border-white/8 bg-[#101115]">
+              <div className="mb-4">
+                <p className="text-sm font-medium text-white">Itens escolhidos</p>
+                <p className="mt-1 text-xs text-gray-500">
+                  Ajuste a quantidade de cada item antes de registrar a triagem.
+                </p>
+              </div>
+
+              {formErrors.items && (
+                <Alert variant="danger" className="mb-4">
+                  {formErrors.items}
+                </Alert>
+              )}
+
+              {selectedItemsSummary.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 bg-black/20 px-4 py-8 text-center">
+                  <PackageIcon size={36} className="mx-auto text-gray-600" />
+                  <p className="mt-3 text-sm text-gray-400">
+                    Nenhum item adicionado ainda.
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {selectedItemsSummary.map(({ draft, stockItem }) => (
+                    <div
+                      key={stockItem.id}
+                      className="rounded-2xl border border-white/8 bg-black/20 p-3"
+                    >
+                      <div className="flex gap-3">
+                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-orange-400/12 bg-orange-500/10">
+                          <ItemVisual iconKey={stockItem.svg_icon_key} size={28} />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="truncate text-sm font-medium text-white">{stockItem.name}</p>
+                              <p className="mt-1 text-xs text-gray-500">
+                                {stockItem.code ?? '-'} • {stockItem.category ?? 'Sem categoria'} • Disponivel {formatQuantity(stockItem.current_quantity, stockItem.unit)}
+                              </p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveDraftItem(stockItem.id)}
+                              className="rounded-xl border border-red-500/15 bg-red-500/8 px-2 py-1 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/14"
+                            >
+                              Remover
+                            </button>
+                          </div>
+
+                          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="w-full sm:max-w-[120px]">
+                              <Input
+                                label="Qtd"
+                                type="number"
+                                min="1"
+                                value={draft.quantity}
+                                onChange={(event) => handleDraftQuantityChange(stockItem.id, event.target.value)}
+                              />
+                            </div>
+                            <Badge variant="default" size="sm">
+                              {stockItem.unit}
+                            </Badge>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
           </div>
 
           <div className="grid gap-4 md:grid-cols-2">
@@ -850,7 +970,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
               isLoading={submitting}
               disabled={uploadingPhoto || uploadingDocument}
             >
-              Registrar na triagem
+              Registrar {form.items.length > 1 ? `${form.items.length} devolucoes` : 'na triagem'}
             </Button>
           </div>
         </div>
