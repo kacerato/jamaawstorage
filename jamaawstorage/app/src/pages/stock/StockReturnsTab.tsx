@@ -552,6 +552,31 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     setShowProcessModal(true)
   }
 
+  const handleProcessApproveQuantityChange = (value: string) => {
+    if (!selectedRequest) return
+
+    const remaining = Math.max(selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity, 0)
+    const parsed = Number.parseInt(value, 10)
+    const safeApprove = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), remaining) : 0
+    const safeHold = remaining - safeApprove
+
+    setProcessForm((prev) => ({
+      ...prev,
+      approve_quantity: String(safeApprove),
+      hold_quantity: String(safeHold),
+    }))
+    setProcessError(null)
+  }
+
+  const handleSingleUnitDecision = (mode: 'approve' | 'hold') => {
+    setProcessForm((prev) => ({
+      ...prev,
+      approve_quantity: mode === 'approve' ? '1' : '0',
+      hold_quantity: mode === 'hold' ? '1' : '0',
+    }))
+    setProcessError(null)
+  }
+
   const handleProcessRequest = async () => {
     if (!selectedRequest) return
 
@@ -1085,36 +1110,88 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       >
         {selectedRequest ? (
           <div className="space-y-4">
+            {(() => {
+              const remaining = selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity
+              const approveQuantity = Number.parseInt(processForm.approve_quantity, 10)
+              const safeApproveQuantity = Number.isFinite(approveQuantity) ? Math.min(Math.max(approveQuantity, 0), remaining) : 0
+              const safeHoldQuantity = remaining - safeApproveQuantity
+
+              return (
+                <>
             <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
               <p className="text-sm font-medium text-white">{selectedRequest.stock_item?.name ?? 'Item devolvido'}</p>
               <p className="mt-1 text-xs text-gray-500">
-                Restante para decidir: {selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity}
+                Restante para decidir: {remaining}
               </p>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
-              <Input
-                label="Voltar para estoque"
-                type="number"
-                min="0"
-                value={processForm.approve_quantity}
-                onChange={(event) => setProcessForm((prev) => ({ ...prev, approve_quantity: event.target.value }))}
-              />
-              <Input
-                label="Manter na triagem"
-                type="number"
-                min="0"
-                value={processForm.hold_quantity}
-                onChange={(event) => setProcessForm((prev) => ({ ...prev, hold_quantity: event.target.value }))}
-              />
-            </div>
+            {remaining === 1 ? (
+              <div className="grid gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleSingleUnitDecision('approve')}
+                  className={cn(
+                    'rounded-2xl border p-4 text-left transition-colors',
+                    safeApproveQuantity === 1
+                      ? 'border-emerald-500/40 bg-emerald-500/10'
+                      : 'border-white/8 bg-white/3 hover:bg-white/5',
+                  )}
+                >
+                  <p className="text-sm font-medium text-white">Voltar a unidade para o estoque</p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    A unidade sai da triagem e volta para uso no almoxarifado.
+                  </p>
+                </button>
 
-            <TextArea
-              label="Observacao da triagem"
-              placeholder="Explique por que parte do item vai continuar na triagem."
-              value={processForm.triage_notes}
-              onChange={(event) => setProcessForm((prev) => ({ ...prev, triage_notes: event.target.value }))}
-            />
+                <button
+                  type="button"
+                  onClick={() => handleSingleUnitDecision('hold')}
+                  className={cn(
+                    'rounded-2xl border p-4 text-left transition-colors',
+                    safeHoldQuantity === 1
+                      ? 'border-sky-500/40 bg-sky-500/10'
+                      : 'border-white/8 bg-white/3 hover:bg-white/5',
+                  )}
+                >
+                  <p className="text-sm font-medium text-white">Manter a unidade na triagem</p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    A unidade continua separada aguardando analise, reparo ou nova decisao.
+                  </p>
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <Input
+                  label="Quantidade que volta para o estoque"
+                  type="number"
+                  min="0"
+                  max={remaining}
+                  value={processForm.approve_quantity}
+                  onChange={(event) => handleProcessApproveQuantityChange(event.target.value)}
+                  helperText={`O restante (${safeHoldQuantity}) ficara automaticamente mantido na triagem.`}
+                />
+
+                <div className="grid gap-3 md:grid-cols-2">
+                  <Card variant="bordered" className="border-emerald-500/15 bg-emerald-500/8">
+                    <p className="text-xs uppercase tracking-[0.22em] text-emerald-200/70">Volta ao estoque</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{safeApproveQuantity}</p>
+                  </Card>
+                  <Card variant="bordered" className="border-sky-500/15 bg-sky-500/8">
+                    <p className="text-xs uppercase tracking-[0.22em] text-sky-200/70">Fica na triagem</p>
+                    <p className="mt-2 text-2xl font-semibold text-white">{safeHoldQuantity}</p>
+                  </Card>
+                </div>
+              </div>
+            )}
+
+            {safeHoldQuantity > 0 && (
+              <TextArea
+                label="Observacao da triagem"
+                placeholder="Explique por que essa quantidade vai continuar na triagem."
+                value={processForm.triage_notes}
+                onChange={(event) => setProcessForm((prev) => ({ ...prev, triage_notes: event.target.value }))}
+              />
+            )}
 
             {processError && (
               <Alert variant="danger">{processError}</Alert>
@@ -1128,6 +1205,9 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                 Salvar decisao
               </Button>
             </div>
+                </>
+              )
+            })()}
           </div>
         ) : null}
       </Modal>
