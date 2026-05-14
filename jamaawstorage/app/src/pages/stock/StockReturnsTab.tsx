@@ -745,7 +745,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             </Card>
 
             <Card variant="bordered" className="border-white/8 bg-[#101115]">
-              <div className="mb-4">
+              <div className="mb-3">
                 <p className="text-sm font-medium text-white">Itens escolhidos</p>
                 <p className="mt-1 text-xs text-gray-500">
                   Ajuste a quantidade de cada item antes de registrar a triagem.
@@ -766,36 +766,36 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                   </p>
                 </div>
               ) : (
-                <div className="space-y-3">
+                <div className="max-h-[420px] space-y-2 overflow-y-auto pr-1">
                   {selectedItemsSummary.map(({ draft, stockItem }) => (
                     <div
                       key={stockItem.id}
-                      className="rounded-2xl border border-white/8 bg-black/20 p-3"
+                      className="rounded-2xl border border-white/8 bg-black/20 p-2.5"
                     >
-                      <div className="flex gap-3">
-                        <div className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl border border-orange-400/12 bg-orange-500/10">
-                          <ItemVisual iconKey={stockItem.svg_icon_key} size={28} />
+                      <div className="flex gap-2.5">
+                        <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl border border-orange-400/12 bg-orange-500/10">
+                          <ItemVisual iconKey={stockItem.svg_icon_key} size={24} />
                         </div>
 
                         <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                               <p className="truncate text-sm font-medium text-white">{stockItem.name}</p>
-                              <p className="mt-1 text-xs text-gray-500">
+                              <p className="mt-0.5 text-xs text-gray-500">
                                 {stockItem.code ?? '-'} • {stockItem.category ?? 'Sem categoria'} • Disponivel {formatQuantity(stockItem.current_quantity, stockItem.unit)}
                               </p>
                             </div>
                             <button
                               type="button"
                               onClick={() => handleRemoveDraftItem(stockItem.id)}
-                              className="rounded-xl border border-red-500/15 bg-red-500/8 px-2 py-1 text-xs font-medium text-red-300 transition-colors hover:bg-red-500/14"
+                              className="rounded-xl border border-red-500/15 bg-red-500/8 px-2 py-1 text-[11px] font-medium text-red-300 transition-colors hover:bg-red-500/14"
                             >
                               Remover
                             </button>
                           </div>
 
-                          <div className="mt-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                            <div className="w-full sm:max-w-[120px]">
+                          <div className="mt-2 flex items-end justify-between gap-3">
+                            <div className="w-[96px]">
                               <Input
                                 label="Qtd"
                                 type="number"
