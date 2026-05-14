@@ -45,6 +45,7 @@ interface StockReturnsTabProps {
 interface ReturnDraftItem {
   stock_item_id: string
   quantity: string
+  item_photo_url: string | null
 }
 
 interface ReturnFormState {
@@ -64,6 +65,12 @@ interface ReturnFormErrors {
   source_person_id?: string
   source_work_site_id?: string
   form?: string
+}
+
+interface ProcessFormState {
+  approve_quantity: string
+  hold_quantity: string
+  triage_notes: string
 }
 
 const STATUS_OPTIONS = [
@@ -129,6 +136,14 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const [formErrors, setFormErrors] = useState<ReturnFormErrors>({})
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [uploadingDocument, setUploadingDocument] = useState(false)
+  const [uploadingItemPhotoId, setUploadingItemPhotoId] = useState<string | null>(null)
+  const [showProcessModal, setShowProcessModal] = useState(false)
+  const [processForm, setProcessForm] = useState<ProcessFormState>({
+    approve_quantity: '0',
+    hold_quantity: '0',
+    triage_notes: '',
+  })
+  const [processError, setProcessError] = useState<string | null>(null)
 
   const fetchBaseOptions = useCallback(async () => {
     const [stockItemsResult, peopleResult, workSitesResult] = await Promise.all([
@@ -178,6 +193,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     const mapped = ((data ?? []) as ReturnRequestWithDetails[]).map((row) => ({
       ...row,
       photo_url: normalizeUrl(row.photo_url),
+      item_photo_url: normalizeUrl(row.item_photo_url),
       document_url: normalizeUrl(row.document_url),
     }))
 
@@ -362,6 +378,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     const payload: TablesInsert<'stock_return_requests'>[] = form.items.map((item) => ({
       stock_item_id: item.stock_item_id,
       quantity: Number.parseInt(item.quantity, 10),
+      item_photo_url: item.item_photo_url,
       ...sharedPayload,
     }))
 
@@ -387,47 +404,6 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     }
   }
 
-  const handleApprove = async (requestId: string) => {
-    setUpdatingRequestId(requestId)
-    setError(null)
-    try {
-      const { error: rpcError } = await supabase.rpc('approve_stock_return_request', {
-        p_request_id: requestId,
-      })
-
-      if (rpcError) {
-        throw new Error(rpcError.message)
-      }
-
-      await fetchRequests()
-    } catch (approveError) {
-      setError(approveError instanceof Error ? approveError.message : 'Nao foi possivel aprovar a devolucao.')
-    } finally {
-      setUpdatingRequestId(null)
-    }
-  }
-
-  const handleStatusChange = async (requestId: string, nextStatus: 'pending' | 'held') => {
-    setUpdatingRequestId(requestId)
-    setError(null)
-    try {
-      const { error: rpcError } = await supabase.rpc('set_stock_return_request_status', {
-        p_request_id: requestId,
-        p_status: nextStatus,
-      })
-
-      if (rpcError) {
-        throw new Error(rpcError.message)
-      }
-
-      await fetchRequests()
-    } catch (statusError) {
-      setError(statusError instanceof Error ? statusError.message : 'Nao foi possivel atualizar a triagem.')
-    } finally {
-      setUpdatingRequestId(null)
-    }
-  }
-
   const columns = [
     {
       key: 'stock_item',
@@ -447,6 +423,16 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         <span className="font-semibold text-orange-200">
           {formatQuantity(row.quantity, row.stock_item?.unit ?? 'un')}
         </span>
+      ),
+    },
+    {
+      key: 'distribution',
+      header: 'Triagem',
+      render: (_value: unknown, row: ReturnRowRecord) => (
+        <div className="flex flex-col text-xs">
+          <span className="text-emerald-300">Volta: {row.approved_quantity}</span>
+          <span className="text-sky-300">Mantido: {row.held_quantity}</span>
+        </div>
       ),
     },
     {
@@ -497,7 +483,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const handleAddDraftItem = (item: StockItemRow) => {
     setForm((prev) => ({
       ...prev,
-      items: [...prev.items, { stock_item_id: item.id, quantity: '1' }],
+      items: [...prev.items, { stock_item_id: item.id, quantity: '1', item_photo_url: null }],
     }))
     setFormErrors((prev) => ({ ...prev, items: undefined }))
   }
@@ -519,6 +505,97 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       ...prev,
       items: prev.items.filter((item) => item.stock_item_id !== stockItemId),
     }))
+  }
+
+  const handleDraftItemPhotoChange = async (stockItemId: string, event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file || !profileId) return
+
+    try {
+      setUploadingItemPhotoId(stockItemId)
+      setFormErrors((prev) => ({ ...prev, form: undefined }))
+      const url = await uploadImageToStorage({
+        file,
+        scope: 'stock-returns/item-photos',
+        entityId: `${profileId}-${stockItemId}`,
+        options: DEFAULT_IMAGE_UPLOAD_OPTIONS,
+      })
+
+      setForm((prev) => ({
+        ...prev,
+        items: prev.items.map((item) =>
+          item.stock_item_id === stockItemId
+            ? { ...item, item_photo_url: normalizeUrl(url) }
+            : item,
+        ),
+      }))
+    } catch (uploadError) {
+      setFormErrors((prev) => ({
+        ...prev,
+        form: uploadError instanceof Error ? uploadError.message : 'Nao foi possivel enviar a foto individual do item.',
+      }))
+    } finally {
+      setUploadingItemPhotoId(null)
+      event.target.value = ''
+    }
+  }
+
+  const openProcessModal = (request: ReturnRequestWithDetails) => {
+    const remaining = Math.max(request.quantity - request.approved_quantity - request.held_quantity, 0)
+    setSelectedRequest(request)
+    setProcessForm({
+      approve_quantity: String(remaining),
+      hold_quantity: '0',
+      triage_notes: request.triage_notes ?? '',
+    })
+    setProcessError(null)
+    setShowProcessModal(true)
+  }
+
+  const handleProcessRequest = async () => {
+    if (!selectedRequest) return
+
+    const approveQuantity = Number.parseInt(processForm.approve_quantity, 10)
+    const holdQuantity = Number.parseInt(processForm.hold_quantity, 10)
+    const remaining = selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity
+
+    if (!Number.isFinite(approveQuantity) || approveQuantity < 0 || !Number.isFinite(holdQuantity) || holdQuantity < 0) {
+      setProcessError('Informe quantidades validas para devolucao e triagem.')
+      return
+    }
+
+    if (approveQuantity + holdQuantity !== remaining) {
+      setProcessError(`Distribua exatamente a quantidade restante: ${remaining}.`)
+      return
+    }
+
+    if (holdQuantity > 0 && !processForm.triage_notes.trim()) {
+      setProcessError('Adicione uma observacao para o que vai continuar na triagem.')
+      return
+    }
+
+    setUpdatingRequestId(selectedRequest.id)
+    setProcessError(null)
+    setError(null)
+    try {
+      const { error: rpcError } = await supabase.rpc('process_stock_return_request', {
+        p_request_id: selectedRequest.id,
+        p_approve_quantity: approveQuantity,
+        p_hold_quantity: holdQuantity,
+        p_triage_notes: processForm.triage_notes.trim() || null,
+      })
+
+      if (rpcError) {
+        throw new Error(rpcError.message)
+      }
+
+      setShowProcessModal(false)
+      await fetchRequests()
+    } catch (processRpcError) {
+      setProcessError(processRpcError instanceof Error ? processRpcError.message : 'Nao foi possivel processar a devolucao.')
+    } finally {
+      setUpdatingRequestId(null)
+    }
   }
 
   if (loading) {
@@ -626,30 +703,12 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {selectedRequest.status !== 'approved' && (
+              {selectedRequest.approved_quantity + selectedRequest.held_quantity < selectedRequest.quantity && (
                 <Button
-                  onClick={() => void handleApprove(selectedRequest.id)}
-                  isLoading={updatingRequestId === selectedRequest.id}
-                >
-                  Aprovar e voltar ao estoque
-                </Button>
-              )}
-              {selectedRequest.status !== 'held' && selectedRequest.status !== 'approved' && (
-                <Button
-                  variant="secondary"
-                  onClick={() => void handleStatusChange(selectedRequest.id, 'held')}
+                  onClick={() => openProcessModal(selectedRequest)}
                   disabled={updatingRequestId === selectedRequest.id}
                 >
-                  Manter na triagem
-                </Button>
-              )}
-              {selectedRequest.status === 'held' && (
-                <Button
-                  variant="secondary"
-                  onClick={() => void handleStatusChange(selectedRequest.id, 'pending')}
-                  disabled={updatingRequestId === selectedRequest.id}
-                >
-                  Voltar para pendente
+                  Processar quantidades
                 </Button>
               )}
             </div>
@@ -659,6 +718,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             <DetailCard label="Origem" value={sourceLabel(selectedRequest)} />
             <DetailCard label="Tipo de origem" value={selectedRequest.source_type === 'collaborator' ? 'Colaborador' : 'Obra'} />
             <DetailCard label="Registrado em" value={formatDateTime(selectedRequest.created_at)} />
+            <DetailCard label="Distribuicao" value={`Volta ${selectedRequest.approved_quantity} • Mantido ${selectedRequest.held_quantity} • Total ${selectedRequest.quantity}`} />
             <DetailCard
               label="Aprovado por"
               value={
@@ -669,17 +729,18 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             />
           </div>
 
-          {(selectedRequest.source_details || selectedRequest.notes) && (
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          {(selectedRequest.source_details || selectedRequest.notes || selectedRequest.triage_notes) && (
+            <div className="mt-5 grid gap-4 lg:grid-cols-3">
               <TextBlock title="Detalhes de origem" text={selectedRequest.source_details} emptyText="Nenhum detalhe adicional informado." />
               <TextBlock title="Observacoes" text={selectedRequest.notes} emptyText="Nenhuma observacao registrada." />
+              <TextBlock title="Observacao da triagem" text={selectedRequest.triage_notes} emptyText="Nenhuma observacao de triagem registrada." />
             </div>
           )}
 
-          {(selectedRequest.photo_url || selectedRequest.document_url) && (
-            <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          {(selectedRequest.photo_url || selectedRequest.item_photo_url || selectedRequest.document_url) && (
+            <div className="mt-5 grid gap-4 lg:grid-cols-3">
               <Card variant="bordered" className="border-white/8 bg-white/3">
-                <p className="text-sm font-medium text-white">Foto</p>
+                <p className="text-sm font-medium text-white">Foto geral</p>
                 {selectedRequest.photo_url ? (
                   <a href={selectedRequest.photo_url} target="_blank" rel="noreferrer">
                     <img
@@ -690,6 +751,20 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                   </a>
                 ) : (
                   <p className="mt-3 text-sm text-gray-500">Nenhuma foto anexada.</p>
+                )}
+              </Card>
+              <Card variant="bordered" className="border-white/8 bg-white/3">
+                <p className="text-sm font-medium text-white">Foto do item</p>
+                {selectedRequest.item_photo_url ? (
+                  <a href={selectedRequest.item_photo_url} target="_blank" rel="noreferrer">
+                    <img
+                      src={selectedRequest.item_photo_url}
+                      alt="Foto individual do item"
+                      className="mt-3 max-h-72 w-full rounded-xl border border-white/8 object-cover"
+                    />
+                  </a>
+                ) : (
+                  <p className="mt-3 text-sm text-gray-500">Nenhuma foto individual anexada.</p>
                 )}
               </Card>
               <Card variant="bordered" className="border-white/8 bg-white/3">
@@ -807,6 +882,32 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                             <Badge variant="default" size="sm">
                               {stockItem.unit}
                             </Badge>
+                          </div>
+                          <div className="mt-2 flex items-center justify-between gap-3">
+                            <label className="cursor-pointer text-xs font-medium text-orange-300 hover:text-orange-200">
+                              <input
+                                type="file"
+                                accept="image/png,image/jpeg,image/webp"
+                                className="hidden"
+                                onChange={(event) => void handleDraftItemPhotoChange(stockItem.id, event)}
+                                disabled={uploadingItemPhotoId === stockItem.id}
+                              />
+                              {uploadingItemPhotoId === stockItem.id
+                                ? 'Enviando foto do item...'
+                                : draft.item_photo_url
+                                  ? 'Trocar foto do item'
+                                  : 'Adicionar foto do item'}
+                            </label>
+                            {draft.item_photo_url ? (
+                              <a
+                                href={draft.item_photo_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="text-xs text-gray-400 hover:text-white"
+                              >
+                                Abrir foto
+                              </a>
+                            ) : null}
                           </div>
                         </div>
                       </div>
@@ -974,6 +1075,61 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={showProcessModal && Boolean(selectedRequest)}
+        onClose={() => setShowProcessModal(false)}
+        title="Processar devolucao"
+        size="md"
+      >
+        {selectedRequest ? (
+          <div className="space-y-4">
+            <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
+              <p className="text-sm font-medium text-white">{selectedRequest.stock_item?.name ?? 'Item devolvido'}</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Restante para decidir: {selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity}
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input
+                label="Voltar para estoque"
+                type="number"
+                min="0"
+                value={processForm.approve_quantity}
+                onChange={(event) => setProcessForm((prev) => ({ ...prev, approve_quantity: event.target.value }))}
+              />
+              <Input
+                label="Manter na triagem"
+                type="number"
+                min="0"
+                value={processForm.hold_quantity}
+                onChange={(event) => setProcessForm((prev) => ({ ...prev, hold_quantity: event.target.value }))}
+              />
+            </div>
+
+            <TextArea
+              label="Observacao da triagem"
+              placeholder="Explique por que parte do item vai continuar na triagem."
+              value={processForm.triage_notes}
+              onChange={(event) => setProcessForm((prev) => ({ ...prev, triage_notes: event.target.value }))}
+            />
+
+            {processError && (
+              <Alert variant="danger">{processError}</Alert>
+            )}
+
+            <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
+              <Button variant="secondary" onClick={() => setShowProcessModal(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={() => void handleProcessRequest()} isLoading={updatingRequestId === selectedRequest.id}>
+                Salvar decisao
+              </Button>
+            </div>
+          </div>
+        ) : null}
       </Modal>
     </div>
   )

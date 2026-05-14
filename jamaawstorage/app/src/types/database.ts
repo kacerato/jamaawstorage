@@ -145,14 +145,18 @@ export interface Database {
           id: string
           stock_item_id: string
           quantity: number
+          approved_quantity: number
+          held_quantity: number
           source_type: StockReturnSourceType
           source_person_id: string | null
           source_work_site_id: string | null
           source_details: string | null
           notes: string | null
           photo_url: string | null
+          item_photo_url: string | null
           document_url: string | null
           document_name: string | null
+          triage_notes: string | null
           status: StockReturnRequestStatus
           created_by: string | null
           approved_by: string | null
@@ -164,14 +168,18 @@ export interface Database {
           id?: string
           stock_item_id: string
           quantity: number
+          approved_quantity?: number
+          held_quantity?: number
           source_type: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
           source_details?: string | null
           notes?: string | null
           photo_url?: string | null
+          item_photo_url?: string | null
           document_url?: string | null
           document_name?: string | null
+          triage_notes?: string | null
           status?: StockReturnRequestStatus
           created_by?: string | null
           approved_by?: string | null
@@ -183,14 +191,18 @@ export interface Database {
           id?: string
           stock_item_id?: string
           quantity?: number
+          approved_quantity?: number
+          held_quantity?: number
           source_type?: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
           source_details?: string | null
           notes?: string | null
           photo_url?: string | null
+          item_photo_url?: string | null
           document_url?: string | null
           document_name?: string | null
+          triage_notes?: string | null
           status?: StockReturnRequestStatus
           created_by?: string | null
           approved_by?: string | null
@@ -691,16 +703,12 @@ export interface Database {
     }
     Returns: number
   }
-  set_stock_return_request_status: {
+  process_stock_return_request: {
     Args: {
       p_request_id: string
-      p_status: 'pending' | 'held'
-    }
-    Returns: Database['public']['Tables']['stock_return_requests']['Row']
-  }
-  approve_stock_return_request: {
-    Args: {
-      p_request_id: string
+      p_approve_quantity: number
+      p_hold_quantity: number
+      p_triage_notes?: string | null
     }
     Returns: Database['public']['Tables']['stock_return_requests']['Row']
   }
