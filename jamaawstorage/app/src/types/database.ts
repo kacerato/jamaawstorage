@@ -3,6 +3,7 @@ export type AppRole = 'supervisor' | 'leader' | 'collaborator'
 export type WithdrawalDestinationType = 'collaborator' | 'work_site'
 export type StockReturnSourceType = 'collaborator' | 'work_site'
 export type StockReturnRequestStatus = 'pending' | 'held' | 'approved'
+export type StockConditionCategory = 'new' | 'used' | 'damaged'
 
 export interface Database {
   public: {
@@ -54,6 +55,9 @@ export interface Database {
           category: string | null
           svg_icon_key: string | null
           current_quantity: number
+          quantity_new: number
+          quantity_used: number
+          quantity_damaged: number
           minimum_quantity: number
           is_active: boolean
           created_by: string | null
@@ -70,6 +74,9 @@ export interface Database {
           category?: string | null
           svg_icon_key?: string | null
           current_quantity?: number
+          quantity_new?: number
+          quantity_used?: number
+          quantity_damaged?: number
           minimum_quantity?: number
           is_active?: boolean
           created_by?: string | null
@@ -86,6 +93,9 @@ export interface Database {
           category?: string | null
           svg_icon_key?: string | null
           current_quantity?: number
+          quantity_new?: number
+          quantity_used?: number
+          quantity_damaged?: number
           minimum_quantity?: number
           is_active?: boolean
           created_by?: string | null
@@ -147,6 +157,7 @@ export interface Database {
           quantity: number
           approved_quantity: number
           held_quantity: number
+          item_condition: 'used' | 'damaged'
           source_type: StockReturnSourceType
           source_person_id: string | null
           source_work_site_id: string | null
@@ -170,6 +181,7 @@ export interface Database {
           quantity: number
           approved_quantity?: number
           held_quantity?: number
+          item_condition?: 'used' | 'damaged'
           source_type: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
@@ -193,6 +205,7 @@ export interface Database {
           quantity?: number
           approved_quantity?: number
           held_quantity?: number
+          item_condition?: 'used' | 'damaged'
           source_type?: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
@@ -676,6 +689,10 @@ export interface Database {
       p_minimum_quantity?: number
       p_svg_icon_key?: string | null
       p_stock_adjustment?: number
+      p_quantity_new?: number | null
+      p_quantity_used?: number | null
+      p_quantity_damaged?: number | null
+      p_adjustment_bucket?: 'new' | 'used' | 'damaged'
     }
     Returns: number
   }

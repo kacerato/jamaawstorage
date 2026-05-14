@@ -82,6 +82,10 @@ interface UpdateStockItemRpcArgs {
   p_minimum_quantity: number
   p_svg_icon_key: string | null
   p_stock_adjustment: number
+  p_quantity_new?: number | null
+  p_quantity_used?: number | null
+  p_quantity_damaged?: number | null
+  p_adjustment_bucket?: 'new' | 'used' | 'damaged'
 }
 
 function isRpcOverloadAmbiguity(message: string | undefined): boolean {
@@ -150,7 +154,7 @@ export function StockPage() {
       let query = supabase
         .from('stock_items')
         .select(
-          'id, code, name, category, ca_nr, current_quantity, minimum_quantity, unit, is_active, svg_icon_key, description, created_at, updated_at',
+          'id, code, name, category, ca_nr, current_quantity, quantity_new, quantity_used, quantity_damaged, minimum_quantity, unit, is_active, svg_icon_key, description, created_at, updated_at',
           { count: 'exact' }
         )
         .order('name', { ascending: true })
@@ -303,6 +307,9 @@ export function StockPage() {
           ca_nr: data.ca_nr ?? null,
           svg_icon_key: data.svg_icon_key ?? null,
           current_quantity: data.current_quantity ?? 0,
+          quantity_new: data.quantity_new ?? 0,
+          quantity_used: data.quantity_used ?? 0,
+          quantity_damaged: data.quantity_damaged ?? 0,
           minimum_quantity: data.minimum_quantity ?? 0,
           created_by: profile.id,
         })
@@ -337,6 +344,10 @@ export function StockPage() {
         p_minimum_quantity: data.minimum_quantity ?? selectedItem.minimum_quantity,
         p_svg_icon_key: data.svg_icon_key ?? null,
         p_stock_adjustment: data.stock_adjustment ?? 0,
+        p_quantity_new: data.quantity_new ?? selectedItem.quantity_new,
+        p_quantity_used: data.quantity_used ?? selectedItem.quantity_used,
+        p_quantity_damaged: data.quantity_damaged ?? selectedItem.quantity_damaged,
+        p_adjustment_bucket: (data as TablesUpdate<'stock_items'> & { adjustment_bucket?: 'new' | 'used' | 'damaged' }).adjustment_bucket ?? 'new',
       })
 
       if (updateError) {
@@ -488,9 +499,22 @@ export function StockPage() {
       header: 'Qtd Atual',
       sortable: true,
       render: (_value: unknown, row: StockRowRecord) => (
-        <span className={cn('font-semibold', quantityColor(row.current_quantity, row.minimum_quantity))}>
-          {formatQuantity(row.current_quantity, row.unit)}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className={cn('font-semibold', quantityColor(row.current_quantity, row.minimum_quantity))}>
+            {formatQuantity(row.current_quantity, row.unit)}
+          </span>
+          <div className="flex flex-wrap gap-1">
+            {(row.quantity_new as number) > 0 ? (
+              <Badge variant="success" size="sm">Novo {(row.quantity_new as number)}</Badge>
+            ) : null}
+            {(row.quantity_used as number) > 0 ? (
+              <Badge variant="info" size="sm">Usado {(row.quantity_used as number)}</Badge>
+            ) : null}
+            {(row.quantity_damaged as number) > 0 ? (
+              <Badge variant="danger" size="sm">Avaria {(row.quantity_damaged as number)}</Badge>
+            ) : null}
+          </div>
+        </div>
       ),
     },
     {

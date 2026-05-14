@@ -43,6 +43,7 @@ type InventoryGroup = {
   stockItemCode: string | null
   stockItemUnit: string
   stockItemIconKey: string | null
+  itemCondition: 'used' | 'damaged' | 'mixed'
   totalQuantity: number
   entries: ReturnRequestWithDetails[]
 }
@@ -56,6 +57,7 @@ interface ReturnDraftItem {
   stock_item_id: string
   quantity: string
   item_photo_url: string | null
+  item_condition: 'used' | 'damaged'
 }
 
 interface ReturnFormState {
@@ -119,6 +121,23 @@ function statusVariant(status: ReturnStatus): 'warning' | 'info' | 'success' {
   return 'success'
 }
 
+function conditionLabel(condition: 'used' | 'damaged' | 'mixed'): string {
+  if (condition === 'used') return 'Usado'
+  if (condition === 'damaged') return 'Com avaria'
+  return 'Misto'
+}
+
+function conditionVariant(condition: 'used' | 'damaged' | 'mixed'): 'info' | 'danger' | 'warning' {
+  if (condition === 'used') return 'info'
+  if (condition === 'damaged') return 'danger'
+  return 'warning'
+}
+
+function conditionDescription(condition: 'used' | 'damaged'): string {
+  if (condition === 'used') return 'Pronto para limpeza, revisao ou nova liberacao.'
+  return 'Precisa avaliacao tecnica, reparo ou descarte.'
+}
+
 function sourceLabel(row: ReturnRequestWithDetails): string {
   if (row.source_type === 'collaborator') {
     const person = row.source_person
@@ -139,7 +158,7 @@ function buildInventoryGroups(
     const quantity = quantitySelector(row)
     if (quantity <= 0) return
 
-    const key = row.stock_item_id
+    const key = `${row.stock_item_id}:${row.item_condition}`
     const existing = groups.get(key)
 
     if (existing) {
@@ -155,6 +174,7 @@ function buildInventoryGroups(
       stockItemCode: row.stock_item?.code ?? null,
       stockItemUnit: row.stock_item?.unit ?? 'un',
       stockItemIconKey: row.stock_item?.svg_icon_key ?? null,
+      itemCondition: row.item_condition,
       totalQuantity: quantity,
       entries: [row],
     })
@@ -293,6 +313,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         row.notes,
         row.document_name,
         sourceLabel(row),
+        conditionLabel(row.item_condition),
       ]
         .filter(Boolean)
         .join(' ')
@@ -449,6 +470,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       stock_item_id: item.stock_item_id,
       quantity: Number.parseInt(item.quantity, 10),
       item_photo_url: item.item_photo_url,
+      item_condition: item.item_condition,
       ...sharedPayload,
     }))
 
@@ -490,9 +512,14 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       header: 'Quantidade',
       sortable: true,
       render: (_value: unknown, row: ReturnRowRecord) => (
-        <span className="font-semibold text-orange-200">
-          {formatQuantity(row.quantity, row.stock_item?.unit ?? 'un')}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className="font-semibold text-orange-200">
+            {formatQuantity(row.quantity, row.stock_item?.unit ?? 'un')}
+          </span>
+          <Badge variant={conditionVariant(row.item_condition as 'used' | 'damaged' | 'mixed')} size="sm">
+            {conditionLabel(row.item_condition as 'used' | 'damaged' | 'mixed')}
+          </Badge>
+        </div>
       ),
     },
     {
@@ -553,7 +580,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const handleAddDraftItem = (item: StockItemRow) => {
     setForm((prev) => ({
       ...prev,
-      items: [...prev.items, { stock_item_id: item.id, quantity: '1', item_photo_url: null }],
+      items: [...prev.items, { stock_item_id: item.id, quantity: '1', item_photo_url: null, item_condition: 'used' }],
     }))
     setFormErrors((prev) => ({ ...prev, items: undefined }))
   }
@@ -568,6 +595,17 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       ),
     }))
     setFormErrors((prev) => ({ ...prev, items: undefined }))
+  }
+
+  const handleDraftConditionChange = (stockItemId: string, itemCondition: 'used' | 'damaged') => {
+    setForm((prev) => ({
+      ...prev,
+      items: prev.items.map((item) =>
+        item.stock_item_id === stockItemId
+          ? { ...item, item_condition: itemCondition }
+          : item,
+      ),
+    }))
   }
 
   const handleRemoveDraftItem = (stockItemId: string) => {
@@ -853,6 +891,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
           <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <DetailCard label="Origem" value={sourceLabel(selectedRequest)} />
             <DetailCard label="Tipo de origem" value={selectedRequest.source_type === 'collaborator' ? 'Colaborador' : 'Obra'} />
+            <DetailCard label="Estado do item" value={conditionLabel(selectedRequest.item_condition)} />
             <DetailCard label="Registrado em" value={formatDateTime(selectedRequest.created_at)} />
             <DetailCard label="Distribuicao" value={`Volta ${selectedRequest.approved_quantity} • Mantido ${selectedRequest.held_quantity} • Total ${selectedRequest.quantity}`} />
             <DetailCard
@@ -1005,8 +1044,8 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                             </button>
                           </div>
 
-                          <div className="mt-2 flex items-end justify-between gap-3">
-                            <div className="w-[96px]">
+                          <div className="mt-3 rounded-2xl border border-white/8 bg-white/4 p-3">
+                            <div className="grid gap-3 md:grid-cols-[96px_minmax(0,1fr)]">
                               <Input
                                 label="Qtd"
                                 type="number"
@@ -1014,10 +1053,53 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                                 value={draft.quantity}
                                 onChange={(event) => handleDraftQuantityChange(stockItem.id, event.target.value)}
                               />
+                              <div className="space-y-2">
+                                <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">Estado do item</p>
+                                <div className="grid grid-cols-2 gap-2">
+                                  {([
+                                    { value: 'used', label: 'Usado', hint: 'Voltou em condicao de uso.' },
+                                    { value: 'damaged', label: 'Com avaria', hint: 'Voltou precisando avaliacao.' },
+                                  ] as const).map((option) => {
+                                    const isActive = draft.item_condition === option.value
+                                    return (
+                                      <button
+                                        key={option.value}
+                                        type="button"
+                                        onClick={() => handleDraftConditionChange(stockItem.id, option.value)}
+                                        className={cn(
+                                          'rounded-2xl border p-3 text-left transition-colors',
+                                          isActive
+                                            ? option.value === 'used'
+                                              ? 'border-sky-400/40 bg-sky-500/12'
+                                              : 'border-red-400/35 bg-red-500/10'
+                                            : 'border-white/8 bg-black/20 hover:bg-white/6',
+                                        )}
+                                      >
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-sm font-medium text-white">{option.label}</span>
+                                          <Badge
+                                            variant={option.value === 'used' ? 'info' : 'danger'}
+                                            size="sm"
+                                            className="shrink-0"
+                                          >
+                                            {option.value === 'used' ? 'Uso' : 'Avaria'}
+                                          </Badge>
+                                        </div>
+                                        <p className="mt-1 text-xs text-gray-400">{option.hint}</p>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </div>
                             </div>
-                            <Badge variant="default" size="sm">
-                              {stockItem.unit}
-                            </Badge>
+                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+                              <p className="text-xs text-gray-500">
+                                {conditionDescription(draft.item_condition)}
+                              </p>
+                              <Badge variant="default" size="sm">
+                                {stockItem.unit}
+                              </Badge>
+                            </div>
                           </div>
                           <div className="mt-2 flex items-center justify-between gap-3">
                             <label className="cursor-pointer text-xs font-medium text-orange-300 hover:text-orange-200">
@@ -1467,9 +1549,14 @@ function InventoryStatusSection({
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <p className="truncate text-base font-semibold text-white">{group.stockItemName}</p>
-                        <p className="mt-1 text-xs text-gray-500">
-                          {group.stockItemCode ?? '-'} • {group.entries.length} registro(s)
-                        </p>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <p className="text-xs text-gray-500">
+                            {group.stockItemCode ?? '-'} • {group.entries.length} registro(s)
+                          </p>
+                          <Badge variant={conditionVariant(group.itemCondition)} size="sm">
+                            {conditionLabel(group.itemCondition)}
+                          </Badge>
+                        </div>
                       </div>
                       <span className={cn(
                         'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
@@ -1506,9 +1593,14 @@ function InventoryStatusSection({
                       >
                         <div className="flex flex-wrap items-start justify-between gap-3">
                           <div>
-                            <div className={cn('inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs', toneStyles.sourcePill)}>
-                              {entry.source_type === 'collaborator' ? <UserIcon size={12} /> : <BuildingIcon size={12} />}
-                              <span>{sourceLabel(entry)}</span>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <div className={cn('inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs', toneStyles.sourcePill)}>
+                                {entry.source_type === 'collaborator' ? <UserIcon size={12} /> : <BuildingIcon size={12} />}
+                                <span>{sourceLabel(entry)}</span>
+                              </div>
+                              <Badge variant={conditionVariant(entry.item_condition)} size="sm">
+                                {conditionLabel(entry.item_condition)}
+                              </Badge>
                             </div>
                             <p className="mt-2 text-sm font-medium text-white">
                               {quantityLabel}: {formatQuantity(entryQuantity, entry.stock_item?.unit ?? 'un')}

@@ -15,7 +15,11 @@ interface StockItemFormData {
   category: string
   unit: string
   current_quantity: number
+  quantity_new: number
+  quantity_used: number
+  quantity_damaged: number
   stock_adjustment: number
+  adjustment_bucket: 'new' | 'used' | 'damaged'
   minimum_quantity: number
   ca_nr: string
 }
@@ -23,6 +27,7 @@ interface StockItemFormData {
 interface FormErrors {
   name?: string
   current_quantity?: string
+  quantity_breakdown?: string
   minimum_quantity?: string
 }
 
@@ -80,7 +85,11 @@ function initFormData(item: StockItemRow | null): StockItemFormData {
       category: '',
       unit: 'un',
       current_quantity: 0,
+      quantity_new: 0,
+      quantity_used: 0,
+      quantity_damaged: 0,
       stock_adjustment: 0,
+      adjustment_bucket: 'new',
       minimum_quantity: 0,
       ca_nr: '',
     }
@@ -93,7 +102,11 @@ function initFormData(item: StockItemRow | null): StockItemFormData {
     category: item.category ?? '',
     unit: item.unit,
     current_quantity: item.current_quantity,
+    quantity_new: item.quantity_new,
+    quantity_used: item.quantity_used,
+    quantity_damaged: item.quantity_damaged,
     stock_adjustment: 0,
+    adjustment_bucket: 'new',
     minimum_quantity: item.minimum_quantity,
     ca_nr: item.ca_nr ?? '',
   }
@@ -122,6 +135,12 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
     const next: FormErrors = {}
     if (!formData.name.trim()) next.name = 'Nome e obrigatorio'
     if (formData.current_quantity < 0) next.current_quantity = 'Deve ser maior ou igual a 0'
+    if (formData.quantity_new < 0 || formData.quantity_used < 0 || formData.quantity_damaged < 0) {
+      next.quantity_breakdown = 'As quantidades por estado nao podem ser negativas'
+    }
+    if (formData.quantity_new + formData.quantity_used + formData.quantity_damaged !== formData.current_quantity) {
+      next.quantity_breakdown = 'A soma de novo, usado e avaria deve bater com a quantidade total'
+    }
     if (formData.minimum_quantity < 0) next.minimum_quantity = 'Deve ser maior ou igual a 0'
     setErrors(next)
     return Object.keys(next).length === 0
@@ -136,6 +155,26 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
         return next
       })
     }
+  }
+
+  const handleConditionQuantityChange = (
+    field: 'quantity_new' | 'quantity_used' | 'quantity_damaged',
+    rawValue: string,
+  ) => {
+    const parsed = parseInt(rawValue, 10) || 0
+    setFormData((prev) => {
+      const next = { ...prev, [field]: parsed }
+      return {
+        ...next,
+        current_quantity: next.quantity_new + next.quantity_used + next.quantity_damaged,
+      }
+    })
+    setErrors((prev) => {
+      const next = { ...prev }
+      delete next.quantity_breakdown
+      delete next.current_quantity
+      return next
+    })
   }
 
   const handlePhotoUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -188,12 +227,16 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
       minimum_quantity: formData.minimum_quantity,
       ca_nr: formData.ca_nr.trim() || null,
       svg_icon_key: svgIconKey,
+      quantity_new: formData.quantity_new,
+      quantity_used: formData.quantity_used,
+      quantity_damaged: formData.quantity_damaged,
     }
 
     if (isEditing) {
       await onSubmit({
         ...basePayload,
         stock_adjustment: signedAdjustment,
+        adjustment_bucket: formData.adjustment_bucket,
         updated_at: new Date().toISOString(),
       } as StockItemUpdate & { stock_adjustment?: number })
       return
@@ -380,15 +423,16 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
             <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-3">
               <p className="text-sm font-medium text-gray-200">Quantidade atual</p>
               <p className="mt-1 text-sm text-orange-300">{formData.current_quantity} {formData.unit}</p>
-              <p className="mt-1 text-xs text-gray-500">Entradas e correcoes usam ajuste aditivo para evitar conflito entre supervisores.</p>
+              <p className="mt-1 text-xs text-gray-500">A composicao abaixo mostra quanto esta novo, usado ou com avaria.</p>
             </div>
           ) : (
             <Input
-              label="Quantidade inicial"
+              label="Quantidade total"
               type="number"
               min={0}
               value={String(formData.current_quantity)}
-              onChange={(event) => handleChange('current_quantity', parseInt(event.target.value, 10) || 0)}
+              disabled
+              helperText="A quantidade total e calculada automaticamente pela composicao abaixo."
               error={errors.current_quantity}
             />
           )}
@@ -430,9 +474,19 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 onChange={(event) => handleChange('stock_adjustment', parseInt(event.target.value, 10) || 0)}
                 helperText={
                   adjustmentMode === 'add'
-                    ? 'Use para entrada de estoque.'
-                    : 'Use para diminuir o estoque.'
+                    ? 'Use para entrada de estoque no estado escolhido.'
+                    : 'Use para diminuir o estoque no estado escolhido.'
                 }
+              />
+              <Select
+                label="Estado do ajuste"
+                value={formData.adjustment_bucket}
+                onChange={(event) => handleChange('adjustment_bucket', event.target.value as 'new' | 'used' | 'damaged')}
+                options={[
+                  { value: 'new', label: 'Novo' },
+                  { value: 'used', label: 'Usado' },
+                  { value: 'damaged', label: 'Com avaria' },
+                ]}
               />
             </div>
           )}
@@ -444,6 +498,49 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
             onChange={(event) => handleChange('minimum_quantity', parseInt(event.target.value, 10) || 0)}
             error={errors.minimum_quantity}
           />
+        </div>
+
+        <div className="mt-4 rounded-2xl border border-white/8 bg-[#0f1013] p-4">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium text-white">Composicao do estoque</p>
+              <p className="mt-1 text-xs text-gray-500">
+                Separe opcionalmente o total em itens novos, usados e com avaria.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-right">
+              <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Total</p>
+              <p className="mt-1 text-sm font-semibold text-white">{formData.current_quantity} {formData.unit}</p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <Input
+              label="Novos"
+              type="number"
+              min={0}
+              value={String(formData.quantity_new)}
+              onChange={(event) => handleConditionQuantityChange('quantity_new', event.target.value)}
+            />
+            <Input
+              label="Usados"
+              type="number"
+              min={0}
+              value={String(formData.quantity_used)}
+              onChange={(event) => handleConditionQuantityChange('quantity_used', event.target.value)}
+            />
+            <Input
+              label="Com avaria"
+              type="number"
+              min={0}
+              value={String(formData.quantity_damaged)}
+              onChange={(event) => handleConditionQuantityChange('quantity_damaged', event.target.value)}
+            />
+          </div>
+
+          {errors.quantity_breakdown && (
+            <p className="mt-3 text-sm text-red-400">{errors.quantity_breakdown}</p>
+          )}
         </div>
       </div>
 
