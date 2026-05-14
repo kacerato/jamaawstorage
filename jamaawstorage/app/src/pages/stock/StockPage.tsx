@@ -20,6 +20,7 @@ import { ItemVisual } from '../../components/items/ItemVisual'
 import { StockItemForm } from './StockItemForm'
 import { StockImportModal } from './StockImportModal'
 import { KitsPage } from '../kits/KitsPage'
+import { StockReturnsTab } from './StockReturnsTab'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 type StockItemRow = Tables<'stock_items'>
@@ -110,7 +111,8 @@ async function updateStockItemWithFallback(args: UpdateStockItemRpcArgs) {
 export function StockPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { profile } = useAuth()
-  const activeTab = searchParams.get('tab') === 'kits' ? 'kits' : 'items'
+  const currentTab = searchParams.get('tab')
+  const activeTab = currentTab === 'kits' || currentTab === 'returns' ? currentTab : 'items'
   const initialQuery = searchParams.get('q') ?? ''
 
   const [items, setItems] = useState<StockItemWithLowStock[]>(stockPageCache.items)
@@ -538,10 +540,26 @@ export function StockPage() {
         >
           Kits
         </button>
+        <button
+          type="button"
+          onClick={() => setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            next.set('tab', 'returns')
+            return next
+          })}
+          className={cn(
+            'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === 'returns' ? 'bg-orange-500/14 text-orange-200' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+          )}
+        >
+          Itens devolvidos
+        </button>
       </div>
 
       {activeTab === 'kits' ? (
         <KitsPage embedded initialQuery={initialQuery} />
+      ) : activeTab === 'returns' ? (
+        <StockReturnsTab embedded profileId={profile?.id ?? null} />
       ) : (
         <>
       <div className="flex items-center justify-between">

@@ -1,6 +1,8 @@
 export type AppRole = 'supervisor' | 'leader' | 'collaborator'
 
 export type WithdrawalDestinationType = 'collaborator' | 'work_site'
+export type StockReturnSourceType = 'collaborator' | 'work_site'
+export type StockReturnRequestStatus = 'pending' | 'held' | 'approved'
 
 export interface Database {
   public: {
@@ -138,7 +140,103 @@ export interface Database {
           }
         ]
       }
-      people: {
+      stock_return_requests: {
+        Row: {
+          id: string
+          stock_item_id: string
+          quantity: number
+          source_type: StockReturnSourceType
+          source_person_id: string | null
+          source_work_site_id: string | null
+          source_details: string | null
+          notes: string | null
+          photo_url: string | null
+          document_url: string | null
+          document_name: string | null
+          status: StockReturnRequestStatus
+          created_by: string | null
+          approved_by: string | null
+          approved_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          stock_item_id: string
+          quantity: number
+          source_type: StockReturnSourceType
+          source_person_id?: string | null
+          source_work_site_id?: string | null
+          source_details?: string | null
+          notes?: string | null
+          photo_url?: string | null
+          document_url?: string | null
+          document_name?: string | null
+          status?: StockReturnRequestStatus
+          created_by?: string | null
+          approved_by?: string | null
+          approved_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          stock_item_id?: string
+          quantity?: number
+          source_type?: StockReturnSourceType
+          source_person_id?: string | null
+          source_work_site_id?: string | null
+          source_details?: string | null
+          notes?: string | null
+          photo_url?: string | null
+          document_url?: string | null
+          document_name?: string | null
+          status?: StockReturnRequestStatus
+          created_by?: string | null
+          approved_by?: string | null
+          approved_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_return_requests_stock_item_id_fkey"
+            columns: ["stock_item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_return_requests_source_person_id_fkey"
+            columns: ["source_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_return_requests_source_work_site_id_fkey"
+            columns: ["source_work_site_id"]
+            isOneToOne: false
+            referencedRelation: "work_sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_return_requests_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_return_requests_approved_by_fkey"
+            columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+  people: {
         Row: {
           id: string
           full_name: string
@@ -592,6 +690,19 @@ export interface Database {
       p_destination: string
     }
     Returns: number
+  }
+  set_stock_return_request_status: {
+    Args: {
+      p_request_id: string
+      p_status: 'pending' | 'held'
+    }
+    Returns: Database['public']['Tables']['stock_return_requests']['Row']
+  }
+  approve_stock_return_request: {
+    Args: {
+      p_request_id: string
+    }
+    Returns: Database['public']['Tables']['stock_return_requests']['Row']
   }
   create_completed_withdrawal: {
     Args: {
