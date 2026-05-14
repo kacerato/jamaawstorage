@@ -15,7 +15,7 @@ import {
   Select,
   Spinner,
 } from '../../components/ui'
-import { ClipboardIcon, PackageIcon } from '../../components/icons'
+import { BuildingIcon, CameraIcon, ClipboardIcon, PackageIcon, UserIcon } from '../../components/icons'
 import { StockItemPicker } from '../../components/items/StockItemPicker'
 import { ItemVisual } from '../../components/items/ItemVisual'
 
@@ -36,6 +36,16 @@ type ReturnRequestWithDetails = StockReturnRequestRow & {
 }
 
 type ReturnRowRecord = ReturnRequestWithDetails & Record<string, unknown>
+type HeldGroup = {
+  key: string
+  stockItemId: string
+  stockItemName: string
+  stockItemCode: string | null
+  stockItemUnit: string
+  stockItemIconKey: string | null
+  totalHeldQuantity: number
+  entries: ReturnRequestWithDetails[]
+}
 
 interface StockReturnsTabProps {
   profileId: string | null
@@ -138,6 +148,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const [uploadingDocument, setUploadingDocument] = useState(false)
   const [uploadingItemPhotoId, setUploadingItemPhotoId] = useState<string | null>(null)
   const [showProcessModal, setShowProcessModal] = useState(false)
+  const [expandedHeldGroupId, setExpandedHeldGroupId] = useState<string | null>(null)
   const [processForm, setProcessForm] = useState<ProcessFormState>({
     approve_quantity: '0',
     hold_quantity: '0',
@@ -249,6 +260,44 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
 
   const pendingCount = requests.filter((row) => row.status === 'pending').length
   const heldCount = requests.filter((row) => row.status === 'held').length
+
+  const heldInventoryGroups = useMemo<HeldGroup[]>(() => {
+    const groups = new Map<string, HeldGroup>()
+
+    filteredRequests
+      .filter((row) => row.held_quantity > 0)
+      .forEach((row) => {
+        const key = row.stock_item_id
+        const existing = groups.get(key)
+
+        if (existing) {
+          existing.totalHeldQuantity += row.held_quantity
+          existing.entries.push(row)
+          return
+        }
+
+        groups.set(key, {
+          key,
+          stockItemId: row.stock_item_id,
+          stockItemName: row.stock_item?.name ?? 'Item removido',
+          stockItemCode: row.stock_item?.code ?? null,
+          stockItemUnit: row.stock_item?.unit ?? 'un',
+          stockItemIconKey: row.stock_item?.svg_icon_key ?? null,
+          totalHeldQuantity: row.held_quantity,
+          entries: [row],
+        })
+      })
+
+    return Array.from(groups.values())
+      .sort((a, b) => {
+        if (b.totalHeldQuantity !== a.totalHeldQuantity) return b.totalHeldQuantity - a.totalHeldQuantity
+        return a.stockItemName.localeCompare(b.stockItemName, 'pt-BR')
+      })
+      .map((group) => ({
+        ...group,
+        entries: [...group.entries].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+      }))
+  }, [filteredRequests])
 
   const collaboratorOptions = people
     .filter((person) => person.role === 'collaborator' || person.role === 'leader')
@@ -664,6 +713,149 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         <Alert variant="danger" title="Erro na triagem">
           {error}
         </Alert>
+      )}
+
+      {heldInventoryGroups.length > 0 && (
+        <div className="space-y-4">
+          <div className="flex items-end justify-between gap-4">
+            <div>
+              <h3 className="text-xl font-semibold text-white">Estoque mantido na triagem</h3>
+              <p className="mt-1 text-sm text-gray-400">
+                Clique no item para abrir os registros individuais mantidos, com origem, foto e observacao de cada devolucao.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-sky-500/15 bg-sky-500/10 px-4 py-3 text-right">
+              <p className="text-xs uppercase tracking-[0.22em] text-sky-200/70">Itens em triagem</p>
+              <p className="mt-1 text-2xl font-semibold text-white">{heldInventoryGroups.length}</p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
+            {heldInventoryGroups.map((group) => {
+              const isExpanded = expandedHeldGroupId === group.key
+
+              return (
+                <Card
+                  key={group.key}
+                  variant="bordered"
+                  className={cn(
+                    'overflow-hidden border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,22,0.98)_0%,_rgba(10,10,13,0.98)_100%)] transition-colors',
+                    isExpanded && 'border-sky-400/30 shadow-[0_18px_40px_rgba(14,165,233,0.08)]',
+                  )}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setExpandedHeldGroupId((current) => current === group.key ? null : group.key)}
+                    className="w-full text-left"
+                  >
+                    <div className="flex items-start gap-4">
+                      <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border border-sky-400/12 bg-sky-500/10">
+                        <ItemVisual iconKey={group.stockItemIconKey} size={30} />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="truncate text-base font-semibold text-white">{group.stockItemName}</p>
+                            <p className="mt-1 text-xs text-gray-500">
+                              {group.stockItemCode ?? '-'} • {group.entries.length} registro(s)
+                            </p>
+                          </div>
+                          <span className={cn(
+                            'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                            isExpanded
+                              ? 'border-sky-400/30 bg-sky-500/12 text-sky-100'
+                              : 'border-white/8 bg-white/4 text-gray-300',
+                          )}>
+                            {isExpanded ? 'Fechar' : 'Abrir'}
+                          </span>
+                        </div>
+
+                        <div className="mt-4 flex items-end justify-between gap-3">
+                          <div>
+                            <p className="text-[11px] uppercase tracking-[0.22em] text-sky-200/70">Mantido na triagem</p>
+                            <p className="mt-1 text-2xl font-semibold text-white">
+                              {formatQuantity(group.totalHeldQuantity, group.stockItemUnit)}
+                            </p>
+                          </div>
+                          <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-right">
+                            <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Ultima entrada</p>
+                            <p className="mt-1 text-sm text-gray-200">{formatDateTime(group.entries[0].created_at)}</p>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </button>
+
+                  {isExpanded && (
+                    <div className="mt-4 space-y-3 border-t border-white/8 pt-4">
+                      {group.entries.map((entry) => (
+                        <div
+                          key={entry.id}
+                          className="rounded-2xl border border-white/8 bg-white/4 p-3"
+                        >
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div>
+                              <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/15 bg-sky-500/8 px-3 py-1 text-xs text-sky-100">
+                                {entry.source_type === 'collaborator' ? <UserIcon size={12} /> : <BuildingIcon size={12} />}
+                                <span>{sourceLabel(entry)}</span>
+                              </div>
+                              <p className="mt-2 text-sm font-medium text-white">
+                                Mantido: {formatQuantity(entry.held_quantity, entry.stock_item?.unit ?? 'un')}
+                              </p>
+                              <p className="mt-1 text-xs text-gray-500">{formatDateTime(entry.created_at)}</p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                              {entry.item_photo_url ? (
+                                <a
+                                  href={entry.item_photo_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-gray-200 hover:bg-white/8"
+                                >
+                                  <CameraIcon size={12} />
+                                  Foto do item
+                                </a>
+                              ) : null}
+                              {entry.photo_url ? (
+                                <a
+                                  href={entry.photo_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-gray-200 hover:bg-white/8"
+                                >
+                                  <ClipboardIcon size={12} />
+                                  Foto geral
+                                </a>
+                              ) : null}
+                            </div>
+                          </div>
+
+                          {(entry.triage_notes || entry.notes || entry.source_details) && (
+                            <div className="mt-3 grid gap-3 md:grid-cols-3">
+                              <MiniInfo
+                                label="Motivo da triagem"
+                                text={entry.triage_notes ?? 'Sem motivo registrado.'}
+                              />
+                              <MiniInfo
+                                label="Observacao geral"
+                                text={entry.notes ?? 'Sem observacao geral.'}
+                              />
+                              <MiniInfo
+                                label="Como voltou"
+                                text={entry.source_details ?? 'Sem detalhe de retorno.'}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </Card>
+              )
+            })}
+          </div>
+        </div>
       )}
 
       <Card>
@@ -1230,6 +1422,15 @@ function TextBlock({ title, text, emptyText }: { title: string; text: string | n
       <p className="text-sm font-medium text-white">{title}</p>
       <p className="mt-3 whitespace-pre-wrap text-sm text-gray-300">{text?.trim() || emptyText}</p>
     </Card>
+  )
+}
+
+function MiniInfo({ label, text }: { label: string; text: string }) {
+  return (
+    <div className="rounded-2xl border border-white/8 bg-black/20 p-3">
+      <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">{label}</p>
+      <p className="mt-2 whitespace-pre-wrap text-xs text-gray-300">{text}</p>
+    </div>
   )
 }
 
