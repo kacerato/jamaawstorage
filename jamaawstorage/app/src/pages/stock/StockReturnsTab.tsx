@@ -36,14 +36,14 @@ type ReturnRequestWithDetails = StockReturnRequestRow & {
 }
 
 type ReturnRowRecord = ReturnRequestWithDetails & Record<string, unknown>
-type HeldGroup = {
+type InventoryGroup = {
   key: string
   stockItemId: string
   stockItemName: string
   stockItemCode: string | null
   stockItemUnit: string
   stockItemIconKey: string | null
-  totalHeldQuantity: number
+  totalQuantity: number
   entries: ReturnRequestWithDetails[]
 }
 
@@ -129,6 +129,48 @@ function sourceLabel(row: ReturnRequestWithDetails): string {
   return row.source_work_site?.name ?? 'Obra'
 }
 
+function buildInventoryGroups(
+  requests: ReturnRequestWithDetails[],
+  quantitySelector: (row: ReturnRequestWithDetails) => number,
+): InventoryGroup[] {
+  const groups = new Map<string, InventoryGroup>()
+
+  requests.forEach((row) => {
+    const quantity = quantitySelector(row)
+    if (quantity <= 0) return
+
+    const key = row.stock_item_id
+    const existing = groups.get(key)
+
+    if (existing) {
+      existing.totalQuantity += quantity
+      existing.entries.push(row)
+      return
+    }
+
+    groups.set(key, {
+      key,
+      stockItemId: row.stock_item_id,
+      stockItemName: row.stock_item?.name ?? 'Item removido',
+      stockItemCode: row.stock_item?.code ?? null,
+      stockItemUnit: row.stock_item?.unit ?? 'un',
+      stockItemIconKey: row.stock_item?.svg_icon_key ?? null,
+      totalQuantity: quantity,
+      entries: [row],
+    })
+  })
+
+  return Array.from(groups.values())
+    .sort((a, b) => {
+      if (b.totalQuantity !== a.totalQuantity) return b.totalQuantity - a.totalQuantity
+      return a.stockItemName.localeCompare(b.stockItemName, 'pt-BR')
+    })
+    .map((group) => ({
+      ...group,
+      entries: [...group.entries].sort((a, b) => b.created_at.localeCompare(a.created_at)),
+    }))
+}
+
 export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTabProps) {
   const [requests, setRequests] = useState<ReturnRequestWithDetails[]>([])
   const [stockItems, setStockItems] = useState<StockItemRow[]>([])
@@ -146,9 +188,11 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const [formErrors, setFormErrors] = useState<ReturnFormErrors>({})
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [uploadingDocument, setUploadingDocument] = useState(false)
+  const [dragActivePhoto, setDragActivePhoto] = useState(false)
+  const [dragActiveDoc, setDragActiveDoc] = useState(false)
   const [uploadingItemPhotoId, setUploadingItemPhotoId] = useState<string | null>(null)
   const [showProcessModal, setShowProcessModal] = useState(false)
-  const [expandedHeldGroupId, setExpandedHeldGroupId] = useState<string | null>(null)
+  const [expandedGroupKey, setExpandedGroupKey] = useState<string | null>(null)
   const [processForm, setProcessForm] = useState<ProcessFormState>({
     approve_quantity: '0',
     hold_quantity: '0',
@@ -261,43 +305,20 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const pendingCount = requests.filter((row) => row.status === 'pending').length
   const heldCount = requests.filter((row) => row.status === 'held').length
 
-  const heldInventoryGroups = useMemo<HeldGroup[]>(() => {
-    const groups = new Map<string, HeldGroup>()
+  const pendingInventoryGroups = useMemo(
+    () => buildInventoryGroups(filteredRequests, (row) => row.quantity - row.approved_quantity - row.held_quantity),
+    [filteredRequests],
+  )
 
-    filteredRequests
-      .filter((row) => row.held_quantity > 0)
-      .forEach((row) => {
-        const key = row.stock_item_id
-        const existing = groups.get(key)
+  const heldInventoryGroups = useMemo(
+    () => buildInventoryGroups(filteredRequests, (row) => row.held_quantity),
+    [filteredRequests],
+  )
 
-        if (existing) {
-          existing.totalHeldQuantity += row.held_quantity
-          existing.entries.push(row)
-          return
-        }
-
-        groups.set(key, {
-          key,
-          stockItemId: row.stock_item_id,
-          stockItemName: row.stock_item?.name ?? 'Item removido',
-          stockItemCode: row.stock_item?.code ?? null,
-          stockItemUnit: row.stock_item?.unit ?? 'un',
-          stockItemIconKey: row.stock_item?.svg_icon_key ?? null,
-          totalHeldQuantity: row.held_quantity,
-          entries: [row],
-        })
-      })
-
-    return Array.from(groups.values())
-      .sort((a, b) => {
-        if (b.totalHeldQuantity !== a.totalHeldQuantity) return b.totalHeldQuantity - a.totalHeldQuantity
-        return a.stockItemName.localeCompare(b.stockItemName, 'pt-BR')
-      })
-      .map((group) => ({
-        ...group,
-        entries: [...group.entries].sort((a, b) => b.created_at.localeCompare(a.created_at)),
-      }))
-  }, [filteredRequests])
+  const approvedInventoryGroups = useMemo(
+    () => buildInventoryGroups(filteredRequests, (row) => row.approved_quantity),
+    [filteredRequests],
+  )
 
   const collaboratorOptions = people
     .filter((person) => person.role === 'collaborator' || person.role === 'leader')
@@ -715,148 +736,46 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         </Alert>
       )}
 
-      {heldInventoryGroups.length > 0 && (
-        <div className="space-y-4">
-          <div className="flex items-end justify-between gap-4">
-            <div>
-              <h3 className="text-xl font-semibold text-white">Estoque mantido na triagem</h3>
-              <p className="mt-1 text-sm text-gray-400">
-                Clique no item para abrir os registros individuais mantidos, com origem, foto e observacao de cada devolucao.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-sky-500/15 bg-sky-500/10 px-4 py-3 text-right">
-              <p className="text-xs uppercase tracking-[0.22em] text-sky-200/70">Itens em triagem</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{heldInventoryGroups.length}</p>
-            </div>
-          </div>
+      <div className="space-y-8">
+        <InventoryStatusSection
+          title="Estoque aguardando decisao"
+          description="Itens ainda pendentes de processamento. Clique no item para abrir os registros individuais antes de decidir."
+          badgeLabel="Pendentes"
+          badgeValue={pendingInventoryGroups.length}
+          tone="warning"
+          quantityLabel="Aguardando decisao"
+          groups={pendingInventoryGroups}
+          expandedGroupKey={expandedGroupKey}
+          onToggleGroup={setExpandedGroupKey}
+          quantityForEntry={(entry) => entry.quantity - entry.approved_quantity - entry.held_quantity}
+        />
 
-          <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-3">
-            {heldInventoryGroups.map((group) => {
-              const isExpanded = expandedHeldGroupId === group.key
+        <InventoryStatusSection
+          title="Estoque mantido na triagem"
+          description="Clique no item para abrir os registros individuais mantidos, com origem, foto e observacao de cada devolucao."
+          badgeLabel="Itens em triagem"
+          badgeValue={heldInventoryGroups.length}
+          tone="info"
+          quantityLabel="Mantido na triagem"
+          groups={heldInventoryGroups}
+          expandedGroupKey={expandedGroupKey}
+          onToggleGroup={setExpandedGroupKey}
+          quantityForEntry={(entry) => entry.held_quantity}
+        />
 
-              return (
-                <Card
-                  key={group.key}
-                  variant="bordered"
-                  className={cn(
-                    'overflow-hidden border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,22,0.98)_0%,_rgba(10,10,13,0.98)_100%)] transition-colors',
-                    isExpanded && 'border-sky-400/30 shadow-[0_18px_40px_rgba(14,165,233,0.08)]',
-                  )}
-                >
-                  <button
-                    type="button"
-                    onClick={() => setExpandedHeldGroupId((current) => current === group.key ? null : group.key)}
-                    className="w-full text-left"
-                  >
-                    <div className="flex items-start gap-4">
-                      <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border border-sky-400/12 bg-sky-500/10">
-                        <ItemVisual iconKey={group.stockItemIconKey} size={30} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="truncate text-base font-semibold text-white">{group.stockItemName}</p>
-                            <p className="mt-1 text-xs text-gray-500">
-                              {group.stockItemCode ?? '-'} • {group.entries.length} registro(s)
-                            </p>
-                          </div>
-                          <span className={cn(
-                            'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
-                            isExpanded
-                              ? 'border-sky-400/30 bg-sky-500/12 text-sky-100'
-                              : 'border-white/8 bg-white/4 text-gray-300',
-                          )}>
-                            {isExpanded ? 'Fechar' : 'Abrir'}
-                          </span>
-                        </div>
-
-                        <div className="mt-4 flex items-end justify-between gap-3">
-                          <div>
-                            <p className="text-[11px] uppercase tracking-[0.22em] text-sky-200/70">Mantido na triagem</p>
-                            <p className="mt-1 text-2xl font-semibold text-white">
-                              {formatQuantity(group.totalHeldQuantity, group.stockItemUnit)}
-                            </p>
-                          </div>
-                          <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-right">
-                            <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Ultima entrada</p>
-                            <p className="mt-1 text-sm text-gray-200">{formatDateTime(group.entries[0].created_at)}</p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </button>
-
-                  {isExpanded && (
-                    <div className="mt-4 space-y-3 border-t border-white/8 pt-4">
-                      {group.entries.map((entry) => (
-                        <div
-                          key={entry.id}
-                          className="rounded-2xl border border-white/8 bg-white/4 p-3"
-                        >
-                          <div className="flex flex-wrap items-start justify-between gap-3">
-                            <div>
-                              <div className="inline-flex items-center gap-2 rounded-full border border-sky-500/15 bg-sky-500/8 px-3 py-1 text-xs text-sky-100">
-                                {entry.source_type === 'collaborator' ? <UserIcon size={12} /> : <BuildingIcon size={12} />}
-                                <span>{sourceLabel(entry)}</span>
-                              </div>
-                              <p className="mt-2 text-sm font-medium text-white">
-                                Mantido: {formatQuantity(entry.held_quantity, entry.stock_item?.unit ?? 'un')}
-                              </p>
-                              <p className="mt-1 text-xs text-gray-500">{formatDateTime(entry.created_at)}</p>
-                            </div>
-
-                            <div className="flex flex-wrap gap-2">
-                              {entry.item_photo_url ? (
-                                <a
-                                  href={entry.item_photo_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-gray-200 hover:bg-white/8"
-                                >
-                                  <CameraIcon size={12} />
-                                  Foto do item
-                                </a>
-                              ) : null}
-                              {entry.photo_url ? (
-                                <a
-                                  href={entry.photo_url}
-                                  target="_blank"
-                                  rel="noreferrer"
-                                  className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-gray-200 hover:bg-white/8"
-                                >
-                                  <ClipboardIcon size={12} />
-                                  Foto geral
-                                </a>
-                              ) : null}
-                            </div>
-                          </div>
-
-                          {(entry.triage_notes || entry.notes || entry.source_details) && (
-                            <div className="mt-3 grid gap-3 md:grid-cols-3">
-                              <MiniInfo
-                                label="Motivo da triagem"
-                                text={entry.triage_notes ?? 'Sem motivo registrado.'}
-                              />
-                              <MiniInfo
-                                label="Observacao geral"
-                                text={entry.notes ?? 'Sem observacao geral.'}
-                              />
-                              <MiniInfo
-                                label="Como voltou"
-                                text={entry.source_details ?? 'Sem detalhe de retorno.'}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </Card>
-              )
-            })}
-          </div>
-        </div>
-      )}
+        <InventoryStatusSection
+          title="Estoque aprovado para uso"
+          description="Itens que ja voltaram para uso no almoxarifado, mas continuam com o historico individual preservado."
+          badgeLabel="Aprovados"
+          badgeValue={approvedInventoryGroups.length}
+          tone="success"
+          quantityLabel="Voltou ao estoque"
+          groups={approvedInventoryGroups}
+          expandedGroupKey={expandedGroupKey}
+          onToggleGroup={setExpandedGroupKey}
+          quantityForEntry={(entry) => entry.approved_quantity}
+        />
+      </div>
 
       <Card>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -1198,21 +1117,6 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                     JPG, PNG ou WEBP. Serve para mostrar o estado em que o item voltou.
                   </p>
                 </div>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept="image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(event) => void handlePhotoChange(event)}
-                    disabled={uploadingPhoto}
-                  />
-                  <span className={cn(
-                    'inline-flex rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    uploadingPhoto ? 'bg-gray-700 text-gray-300' : 'bg-gray-800 text-white hover:bg-gray-700'
-                  )}>
-                    {uploadingPhoto ? 'Enviando foto...' : form.photo_url ? 'Trocar foto' : 'Anexar foto'}
-                  </span>
-                </label>
               </div>
 
               {form.photo_url ? (
@@ -1224,8 +1128,40 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                   />
                 </a>
               ) : (
-                <div className="mt-4 rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-gray-500">
-                  Nenhuma foto anexada.
+                <div
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    setDragActivePhoto(true)
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault()
+                    setDragActivePhoto(false)
+                  }}
+                  onDrop={async (event) => {
+                    event.preventDefault()
+                    setDragActivePhoto(false)
+                    const file = event.dataTransfer.files?.[0]
+                    if (file) {
+                      const synthEvent = { target: { files: [file], value: '' } } as unknown as ChangeEvent<HTMLInputElement>
+                      await handlePhotoChange(synthEvent)
+                    }
+                  }}
+                  className={cn(
+                    'mt-4 rounded-xl border-2 border-dashed p-4 transition-colors',
+                    dragActivePhoto ? 'border-orange-500 bg-orange-500/10' : 'border-white/10 bg-black/20',
+                  )}
+                >
+                  <input
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                    onChange={(event) => void handlePhotoChange(event)}
+                    disabled={uploadingPhoto}
+                    className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
+                  />
+                  <p className="mt-3 text-xs text-gray-500">
+                    Solte uma foto aqui ou clique acima. JPG, PNG ou WEBP, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB.
+                  </p>
+                  {uploadingPhoto ? <p className="mt-2 text-xs text-orange-300">Enviando imagem...</p> : null}
                 </div>
               )}
             </Card>
@@ -1238,21 +1174,6 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                     PDF, DOC, DOCX ou imagem. Laudo, comprovante ou qualquer anexo de suporte.
                   </p>
                 </div>
-                <label className="cursor-pointer">
-                  <input
-                    type="file"
-                    accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/webp"
-                    className="hidden"
-                    onChange={(event) => void handleDocumentChange(event)}
-                    disabled={uploadingDocument}
-                  />
-                  <span className={cn(
-                    'inline-flex rounded-lg px-3 py-2 text-sm font-medium transition-colors',
-                    uploadingDocument ? 'bg-gray-700 text-gray-300' : 'bg-gray-800 text-white hover:bg-gray-700'
-                  )}>
-                    {uploadingDocument ? 'Enviando documento...' : form.document_url ? 'Trocar documento' : 'Anexar documento'}
-                  </span>
-                </label>
               </div>
 
               {form.document_url ? (
@@ -1268,8 +1189,40 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                   </a>
                 </div>
               ) : (
-                <div className="mt-4 rounded-xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-gray-500">
-                  Nenhum documento anexado.
+                <div
+                  onDragOver={(event) => {
+                    event.preventDefault()
+                    setDragActiveDoc(true)
+                  }}
+                  onDragLeave={(event) => {
+                    event.preventDefault()
+                    setDragActiveDoc(false)
+                  }}
+                  onDrop={async (event) => {
+                    event.preventDefault()
+                    setDragActiveDoc(false)
+                    const file = event.dataTransfer.files?.[0]
+                    if (file) {
+                      const synthEvent = { target: { files: [file], value: '' } } as unknown as ChangeEvent<HTMLInputElement>
+                      await handleDocumentChange(synthEvent)
+                    }
+                  }}
+                  className={cn(
+                    'mt-4 rounded-xl border-2 border-dashed p-4 transition-colors',
+                    dragActiveDoc ? 'border-orange-500 bg-orange-500/10' : 'border-white/10 bg-black/20',
+                  )}
+                >
+                  <input
+                    type="file"
+                    accept="application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/png,image/jpeg,image/webp"
+                    onChange={(event) => void handleDocumentChange(event)}
+                    disabled={uploadingDocument}
+                    className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
+                  />
+                  <p className="mt-3 text-xs text-gray-500">
+                    Solte o documento aqui ou clique acima. PDF, DOC, DOCX ou imagem.
+                  </p>
+                  {uploadingDocument ? <p className="mt-2 text-xs text-orange-300">Enviando documento...</p> : null}
                 </div>
               )}
             </Card>
@@ -1413,6 +1366,208 @@ function DetailCard({ label, value }: { label: string; value: string }) {
       <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{label}</p>
       <p className="mt-2 text-sm text-white">{value}</p>
     </Card>
+  )
+}
+
+function InventoryStatusSection({
+  title,
+  description,
+  badgeLabel,
+  badgeValue,
+  tone,
+  quantityLabel,
+  groups,
+  expandedGroupKey,
+  onToggleGroup,
+  quantityForEntry,
+}: {
+  title: string
+  description: string
+  badgeLabel: string
+  badgeValue: number
+  tone: 'warning' | 'info' | 'success'
+  quantityLabel: string
+  groups: InventoryGroup[]
+  expandedGroupKey: string | null
+  onToggleGroup: React.Dispatch<React.SetStateAction<string | null>>
+  quantityForEntry: (entry: ReturnRequestWithDetails) => number
+}) {
+  if (groups.length === 0) return null
+
+  const toneStyles = {
+    warning: {
+      frame: 'border-amber-500/15 bg-amber-500/10',
+      frameText: 'text-amber-200/70',
+      iconBox: 'border-amber-400/12 bg-amber-500/10',
+      open: 'border-amber-400/30 bg-amber-500/12 text-amber-100',
+      quantityLabel: 'text-amber-200/70',
+      shadow: 'shadow-[0_18px_40px_rgba(245,158,11,0.08)]',
+      activeBorder: 'border-amber-400/30',
+      sourcePill: 'border-amber-500/15 bg-amber-500/8 text-amber-100',
+    },
+    info: {
+      frame: 'border-sky-500/15 bg-sky-500/10',
+      frameText: 'text-sky-200/70',
+      iconBox: 'border-sky-400/12 bg-sky-500/10',
+      open: 'border-sky-400/30 bg-sky-500/12 text-sky-100',
+      quantityLabel: 'text-sky-200/70',
+      shadow: 'shadow-[0_18px_40px_rgba(14,165,233,0.08)]',
+      activeBorder: 'border-sky-400/30',
+      sourcePill: 'border-sky-500/15 bg-sky-500/8 text-sky-100',
+    },
+    success: {
+      frame: 'border-emerald-500/15 bg-emerald-500/10',
+      frameText: 'text-emerald-200/70',
+      iconBox: 'border-emerald-400/12 bg-emerald-500/10',
+      open: 'border-emerald-400/30 bg-emerald-500/12 text-emerald-100',
+      quantityLabel: 'text-emerald-200/70',
+      shadow: 'shadow-[0_18px_40px_rgba(16,185,129,0.08)]',
+      activeBorder: 'border-emerald-400/30',
+      sourcePill: 'border-emerald-500/15 bg-emerald-500/8 text-emerald-100',
+    },
+  }[tone]
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <h3 className="text-xl font-semibold text-white">{title}</h3>
+          <p className="mt-1 text-sm text-gray-400">{description}</p>
+        </div>
+        <div className={cn('rounded-2xl border px-4 py-3 text-right', toneStyles.frame)}>
+          <p className={cn('text-xs uppercase tracking-[0.22em]', toneStyles.frameText)}>{badgeLabel}</p>
+          <p className="mt-1 text-2xl font-semibold text-white">{badgeValue}</p>
+        </div>
+      </div>
+
+      <div className="grid items-start gap-4 lg:grid-cols-2 xl:grid-cols-3">
+        {groups.map((group) => {
+          const groupKey = `${tone}-${group.key}`
+          const isExpanded = expandedGroupKey === groupKey
+
+          return (
+            <Card
+              key={groupKey}
+              variant="bordered"
+              className={cn(
+                'self-start overflow-hidden border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,22,0.98)_0%,_rgba(10,10,13,0.98)_100%)] transition-colors',
+                isExpanded && `${toneStyles.activeBorder} ${toneStyles.shadow}`,
+              )}
+            >
+              <button
+                type="button"
+                onClick={() => onToggleGroup((current) => current === groupKey ? null : groupKey)}
+                className="w-full text-left"
+              >
+                <div className="flex items-start gap-4">
+                  <div className={cn('flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl border', toneStyles.iconBox)}>
+                    <ItemVisual iconKey={group.stockItemIconKey} size={30} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="truncate text-base font-semibold text-white">{group.stockItemName}</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          {group.stockItemCode ?? '-'} • {group.entries.length} registro(s)
+                        </p>
+                      </div>
+                      <span className={cn(
+                        'rounded-full border px-2.5 py-1 text-[11px] font-medium transition-colors',
+                        isExpanded ? toneStyles.open : 'border-white/8 bg-white/4 text-gray-300',
+                      )}>
+                        {isExpanded ? 'Fechar' : 'Abrir'}
+                      </span>
+                    </div>
+
+                    <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                      <div>
+                        <p className={cn('text-[11px] uppercase tracking-[0.22em]', toneStyles.quantityLabel)}>{quantityLabel}</p>
+                        <p className="mt-1 text-2xl font-semibold text-white">
+                          {formatQuantity(group.totalQuantity, group.stockItemUnit)}
+                        </p>
+                      </div>
+                      <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-right">
+                        <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Ultima entrada</p>
+                        <p className="mt-1 text-sm text-gray-200">{formatDateTime(group.entries[0].created_at)}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </button>
+
+              {isExpanded && (
+                <div className="mt-4 space-y-3 border-t border-white/8 pt-4">
+                  {group.entries.map((entry) => {
+                    const entryQuantity = quantityForEntry(entry)
+                    return (
+                      <div
+                        key={entry.id}
+                        className="rounded-2xl border border-white/8 bg-white/4 p-3"
+                      >
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className={cn('inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs', toneStyles.sourcePill)}>
+                              {entry.source_type === 'collaborator' ? <UserIcon size={12} /> : <BuildingIcon size={12} />}
+                              <span>{sourceLabel(entry)}</span>
+                            </div>
+                            <p className="mt-2 text-sm font-medium text-white">
+                              {quantityLabel}: {formatQuantity(entryQuantity, entry.stock_item?.unit ?? 'un')}
+                            </p>
+                            <p className="mt-1 text-xs text-gray-500">{formatDateTime(entry.created_at)}</p>
+                          </div>
+
+                          <div className="flex flex-wrap gap-2">
+                            {entry.item_photo_url ? (
+                              <a
+                                href={entry.item_photo_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-gray-200 hover:bg-white/8"
+                              >
+                                <CameraIcon size={12} />
+                                Foto do item
+                              </a>
+                            ) : null}
+                            {entry.photo_url ? (
+                              <a
+                                href={entry.photo_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-gray-200 hover:bg-white/8"
+                              >
+                                <ClipboardIcon size={12} />
+                                Foto geral
+                              </a>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        {(entry.triage_notes || entry.notes || entry.source_details) && (
+                          <div className="mt-3 grid gap-3 md:grid-cols-3">
+                            <MiniInfo
+                              label="Motivo da triagem"
+                              text={entry.triage_notes ?? 'Sem motivo registrado.'}
+                            />
+                            <MiniInfo
+                              label="Observacao geral"
+                              text={entry.notes ?? 'Sem observacao geral.'}
+                            />
+                            <MiniInfo
+                              label="Como voltou"
+                              text={entry.source_details ?? 'Sem detalhe de retorno.'}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
+            </Card>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
