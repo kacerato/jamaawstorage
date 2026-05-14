@@ -2,6 +2,7 @@ import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { Tables, TablesInsert, TablesUpdate } from '../../types/database'
 import { DEFAULT_IMAGE_UPLOAD_OPTIONS, imageFileToDataUrl } from '../../lib/utils'
 import { Alert, Button, Input, Modal, Select } from '../../components/ui'
+import { AlertIcon, ClipboardIcon, PackageIcon, WarehouseIcon } from '../../components/icons'
 import { ItemVisual, itemLabelForKey, normalizeItemIconKey } from '../../components/items/ItemVisual'
 
 type StockItemRow = Tables<'stock_items'>
@@ -500,46 +501,86 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
           />
         </div>
 
-        <div className="mt-4 rounded-2xl border border-white/8 bg-[#0f1013] p-4">
-          <div className="flex items-center justify-between gap-3">
+        <div className="mt-4 overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,22,0.98)_0%,_rgba(12,13,16,0.98)_100%)] p-5">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div>
               <p className="text-sm font-medium text-white">Composicao do estoque</p>
               <p className="mt-1 text-xs text-gray-500">
                 Separe opcionalmente o total em itens novos, usados e com avaria.
               </p>
             </div>
-            <div className="rounded-2xl border border-white/8 bg-black/20 px-3 py-2 text-right">
-              <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Total</p>
-              <p className="mt-1 text-sm font-semibold text-white">{formData.current_quantity} {formData.unit}</p>
+            <div className="flex items-center gap-3 rounded-3xl border border-white/8 bg-black/20 px-4 py-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-orange-400/12 bg-orange-500/10">
+                <WarehouseIcon size={22} className="text-orange-200" />
+              </div>
+              <div>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Total em estoque</p>
+                <p className="mt-1 text-lg font-semibold text-white">{formData.current_quantity} {formData.unit}</p>
+              </div>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <Input
-              label="Novos"
-              type="number"
-              min={0}
-              value={String(formData.quantity_new)}
-              onChange={(event) => handleConditionQuantityChange('quantity_new', event.target.value)}
-            />
-            <Input
-              label="Usados"
-              type="number"
-              min={0}
-              value={String(formData.quantity_used)}
-              onChange={(event) => handleConditionQuantityChange('quantity_used', event.target.value)}
-            />
-            <Input
-              label="Com avaria"
-              type="number"
-              min={0}
-              value={String(formData.quantity_damaged)}
-              onChange={(event) => handleConditionQuantityChange('quantity_damaged', event.target.value)}
-            />
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+            {([
+              {
+                key: 'quantity_new',
+                label: 'Novos',
+                value: formData.quantity_new,
+                accent: 'border-emerald-500/18 bg-emerald-500/10',
+                iconWrap: 'border-emerald-400/15 bg-emerald-500/12',
+                icon: <PackageIcon size={20} className="text-emerald-200" />,
+                helper: 'Itens prontos como novos.',
+              },
+              {
+                key: 'quantity_used',
+                label: 'Usados',
+                value: formData.quantity_used,
+                accent: 'border-sky-500/18 bg-sky-500/10',
+                iconWrap: 'border-sky-400/15 bg-sky-500/12',
+                icon: <ClipboardIcon size={20} className="text-sky-200" />,
+                helper: 'Itens liberados para uso normal.',
+              },
+              {
+                key: 'quantity_damaged',
+                label: 'Com avaria',
+                value: formData.quantity_damaged,
+                accent: 'border-red-500/18 bg-red-500/10',
+                iconWrap: 'border-red-400/15 bg-red-500/12',
+                icon: <AlertIcon size={20} className="text-red-200" />,
+                helper: 'Itens separados para avaria.',
+              },
+            ] as const).map((section) => (
+              <div
+                key={section.key}
+                className={`rounded-[26px] border p-4 ${section.accent}`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${section.iconWrap}`}>
+                    {section.icon}
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">{section.label}</p>
+                    <p className="mt-1 text-2xl font-semibold text-white">{section.value}</p>
+                  </div>
+                </div>
+
+                <p className="mt-4 text-xs text-gray-400">{section.helper}</p>
+
+                <div className="mt-4">
+                  <Input
+                    label={`Quantidade de ${section.label.toLowerCase()}`}
+                    type="number"
+                    min={0}
+                    value={String(section.value)}
+                    onChange={(event) => handleConditionQuantityChange(section.key, event.target.value)}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
 
           {errors.quantity_breakdown && (
-            <p className="mt-3 text-sm text-red-400">{errors.quantity_breakdown}</p>
+            <p className="mt-4 text-sm text-red-400">{errors.quantity_breakdown}</p>
           )}
         </div>
       </div>

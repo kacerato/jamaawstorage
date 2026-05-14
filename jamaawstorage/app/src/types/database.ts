@@ -158,6 +158,7 @@ export interface Database {
           approved_quantity: number
           held_quantity: number
           item_condition: 'used' | 'damaged'
+          approved_condition: 'new' | 'used' | 'damaged' | null
           source_type: StockReturnSourceType
           source_person_id: string | null
           source_work_site_id: string | null
@@ -182,6 +183,7 @@ export interface Database {
           approved_quantity?: number
           held_quantity?: number
           item_condition?: 'used' | 'damaged'
+          approved_condition?: 'new' | 'used' | 'damaged' | null
           source_type: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
@@ -206,6 +208,7 @@ export interface Database {
           approved_quantity?: number
           held_quantity?: number
           item_condition?: 'used' | 'damaged'
+          approved_condition?: 'new' | 'used' | 'damaged' | null
           source_type?: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
@@ -726,6 +729,7 @@ export interface Database {
       p_approve_quantity: number
       p_hold_quantity: number
       p_triage_notes?: string | null
+      p_approved_condition?: 'new' | 'used' | 'damaged' | null
     }
     Returns: Database['public']['Tables']['stock_return_requests']['Row']
   }

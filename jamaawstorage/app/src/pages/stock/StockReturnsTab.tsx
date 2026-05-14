@@ -15,7 +15,7 @@ import {
   Select,
   Spinner,
 } from '../../components/ui'
-import { BuildingIcon, CameraIcon, ClipboardIcon, PackageIcon, UserIcon } from '../../components/icons'
+import { AlertIcon, BuildingIcon, CameraIcon, ClipboardIcon, PackageIcon, UserIcon, WarehouseIcon } from '../../components/icons'
 import { StockItemPicker } from '../../components/items/StockItemPicker'
 import { ItemVisual } from '../../components/items/ItemVisual'
 
@@ -43,7 +43,7 @@ type InventoryGroup = {
   stockItemCode: string | null
   stockItemUnit: string
   stockItemIconKey: string | null
-  itemCondition: 'used' | 'damaged' | 'mixed'
+  itemCondition: 'used' | 'damaged' | 'new' | 'mixed'
   totalQuantity: number
   entries: ReturnRequestWithDetails[]
 }
@@ -82,6 +82,8 @@ interface ReturnFormErrors {
 interface ProcessFormState {
   approve_quantity: string
   hold_quantity: string
+  approved_condition: 'new' | 'used' | 'damaged'
+  quick_action: 'return' | 'hold'
   triage_notes: string
 }
 
@@ -121,13 +123,15 @@ function statusVariant(status: ReturnStatus): 'warning' | 'info' | 'success' {
   return 'success'
 }
 
-function conditionLabel(condition: 'used' | 'damaged' | 'mixed'): string {
+function conditionLabel(condition: 'used' | 'damaged' | 'new' | 'mixed'): string {
+  if (condition === 'new') return 'Novo'
   if (condition === 'used') return 'Usado'
   if (condition === 'damaged') return 'Com avaria'
   return 'Misto'
 }
 
-function conditionVariant(condition: 'used' | 'damaged' | 'mixed'): 'info' | 'danger' | 'warning' {
+function conditionVariant(condition: 'used' | 'damaged' | 'new' | 'mixed'): 'success' | 'info' | 'danger' | 'warning' {
+  if (condition === 'new') return 'success'
   if (condition === 'used') return 'info'
   if (condition === 'damaged') return 'danger'
   return 'warning'
@@ -136,6 +140,16 @@ function conditionVariant(condition: 'used' | 'damaged' | 'mixed'): 'info' | 'da
 function conditionDescription(condition: 'used' | 'damaged'): string {
   if (condition === 'used') return 'Pronto para limpeza, revisao ou nova liberacao.'
   return 'Precisa avaliacao tecnica, reparo ou descarte.'
+}
+
+function stockConditionLabel(condition: 'new' | 'used' | 'damaged'): string {
+  if (condition === 'new') return 'Novo'
+  if (condition === 'used') return 'Usado'
+  return 'Com avaria'
+}
+
+function resolvedApprovedCondition(row: ReturnRequestWithDetails): 'new' | 'used' | 'damaged' | null {
+  return row.approved_condition ?? null
 }
 
 function sourceLabel(row: ReturnRequestWithDetails): string {
@@ -151,6 +165,7 @@ function sourceLabel(row: ReturnRequestWithDetails): string {
 function buildInventoryGroups(
   requests: ReturnRequestWithDetails[],
   quantitySelector: (row: ReturnRequestWithDetails) => number,
+  conditionSelector: (row: ReturnRequestWithDetails) => 'used' | 'damaged' | 'new',
 ): InventoryGroup[] {
   const groups = new Map<string, InventoryGroup>()
 
@@ -158,7 +173,8 @@ function buildInventoryGroups(
     const quantity = quantitySelector(row)
     if (quantity <= 0) return
 
-    const key = `${row.stock_item_id}:${row.item_condition}`
+    const groupCondition = conditionSelector(row)
+    const key = `${row.stock_item_id}:${groupCondition}`
     const existing = groups.get(key)
 
     if (existing) {
@@ -174,7 +190,7 @@ function buildInventoryGroups(
       stockItemCode: row.stock_item?.code ?? null,
       stockItemUnit: row.stock_item?.unit ?? 'un',
       stockItemIconKey: row.stock_item?.svg_icon_key ?? null,
-      itemCondition: row.item_condition,
+      itemCondition: groupCondition,
       totalQuantity: quantity,
       entries: [row],
     })
@@ -216,6 +232,8 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const [processForm, setProcessForm] = useState<ProcessFormState>({
     approve_quantity: '0',
     hold_quantity: '0',
+    approved_condition: 'used',
+    quick_action: 'return',
     triage_notes: '',
   })
   const [processError, setProcessError] = useState<string | null>(null)
@@ -327,17 +345,17 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const heldCount = requests.filter((row) => row.status === 'held').length
 
   const pendingInventoryGroups = useMemo(
-    () => buildInventoryGroups(filteredRequests, (row) => row.quantity - row.approved_quantity - row.held_quantity),
+    () => buildInventoryGroups(filteredRequests, (row) => row.quantity - row.approved_quantity - row.held_quantity, (row) => row.item_condition),
     [filteredRequests],
   )
 
   const heldInventoryGroups = useMemo(
-    () => buildInventoryGroups(filteredRequests, (row) => row.held_quantity),
+    () => buildInventoryGroups(filteredRequests, (row) => row.held_quantity, (row) => row.item_condition),
     [filteredRequests],
   )
 
   const approvedInventoryGroups = useMemo(
-    () => buildInventoryGroups(filteredRequests, (row) => row.approved_quantity),
+    () => buildInventoryGroups(filteredRequests, (row) => row.approved_quantity, (row) => resolvedApprovedCondition(row) ?? 'used'),
     [filteredRequests],
   )
 
@@ -654,6 +672,8 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     setProcessForm({
       approve_quantity: String(remaining),
       hold_quantity: '0',
+      approved_condition: request.approved_condition ?? (request.item_condition === 'damaged' ? 'damaged' : 'used'),
+      quick_action: 'return',
       triage_notes: request.triage_notes ?? '',
     })
     setProcessError(null)
@@ -672,15 +692,18 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       ...prev,
       approve_quantity: String(safeApprove),
       hold_quantity: String(safeHold),
+      quick_action: safeApprove > 0 ? 'return' : 'hold',
     }))
     setProcessError(null)
   }
 
-  const handleSingleUnitDecision = (mode: 'approve' | 'hold') => {
+  const handleSingleUnitDecision = (mode: 'approve' | 'hold', approvedCondition?: 'new' | 'used' | 'damaged') => {
     setProcessForm((prev) => ({
       ...prev,
       approve_quantity: mode === 'approve' ? '1' : '0',
       hold_quantity: mode === 'hold' ? '1' : '0',
+      approved_condition: approvedCondition ?? prev.approved_condition,
+      quick_action: mode === 'approve' ? 'return' : 'hold',
     }))
     setProcessError(null)
   }
@@ -702,6 +725,11 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       return
     }
 
+    if (approveQuantity > 0 && !['new', 'used', 'damaged'].includes(processForm.approved_condition)) {
+      setProcessError('Escolha como a quantidade aprovada volta para o estoque.')
+      return
+    }
+
     if (holdQuantity > 0 && !processForm.triage_notes.trim()) {
       setProcessError('Adicione uma observacao para o que vai continuar na triagem.')
       return
@@ -716,6 +744,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         p_approve_quantity: approveQuantity,
         p_hold_quantity: holdQuantity,
         p_triage_notes: processForm.triage_notes.trim() || null,
+        p_approved_condition: approveQuantity > 0 ? processForm.approved_condition : null,
       })
 
       if (rpcError) {
@@ -786,6 +815,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
           expandedGroupKey={expandedGroupKey}
           onToggleGroup={setExpandedGroupKey}
           quantityForEntry={(entry) => entry.quantity - entry.approved_quantity - entry.held_quantity}
+          conditionForEntry={(entry) => entry.item_condition}
         />
 
         <InventoryStatusSection
@@ -799,6 +829,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
           expandedGroupKey={expandedGroupKey}
           onToggleGroup={setExpandedGroupKey}
           quantityForEntry={(entry) => entry.held_quantity}
+          conditionForEntry={(entry) => entry.item_condition}
         />
 
         <InventoryStatusSection
@@ -812,6 +843,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
           expandedGroupKey={expandedGroupKey}
           onToggleGroup={setExpandedGroupKey}
           quantityForEntry={(entry) => entry.approved_quantity}
+          conditionForEntry={(entry) => resolvedApprovedCondition(entry) ?? 'used'}
         />
       </div>
 
@@ -888,10 +920,11 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
             <DetailCard label="Origem" value={sourceLabel(selectedRequest)} />
             <DetailCard label="Tipo de origem" value={selectedRequest.source_type === 'collaborator' ? 'Colaborador' : 'Obra'} />
-            <DetailCard label="Estado do item" value={conditionLabel(selectedRequest.item_condition)} />
+            <DetailCard label="Estado ao chegar" value={conditionLabel(selectedRequest.item_condition)} />
+            <DetailCard label="Estado aprovado" value={selectedRequest.approved_condition ? stockConditionLabel(selectedRequest.approved_condition) : 'Ainda nao definido'} />
             <DetailCard label="Registrado em" value={formatDateTime(selectedRequest.created_at)} />
             <DetailCard label="Distribuicao" value={`Volta ${selectedRequest.approved_quantity} • Mantido ${selectedRequest.held_quantity} • Total ${selectedRequest.quantity}`} />
             <DetailCard
@@ -1345,71 +1378,170 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
 
               return (
                 <>
-            <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
-              <p className="text-sm font-medium text-white">{selectedRequest.stock_item?.name ?? 'Item devolvido'}</p>
-              <p className="mt-1 text-xs text-gray-500">
-                Restante para decidir: {remaining}
-              </p>
-            </div>
+                  <div className="rounded-3xl border border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,22,0.98)_0%,_rgba(11,12,15,0.98)_100%)] p-4">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-sm font-medium text-white">{selectedRequest.stock_item?.name ?? 'Item devolvido'}</p>
+                        <p className="mt-1 text-xs text-gray-500">
+                          Restante para decidir: {formatQuantity(remaining, selectedRequest.stock_item?.unit ?? 'un')}
+                        </p>
+                      </div>
+                      <Badge variant={conditionVariant(selectedRequest.item_condition)} size="sm">
+                        Chegou como {conditionLabel(selectedRequest.item_condition)}
+                      </Badge>
+                    </div>
+                  </div>
 
-            {remaining === 1 ? (
-              <div className="grid gap-3">
-                <button
-                  type="button"
-                  onClick={() => handleSingleUnitDecision('approve')}
-                  className={cn(
-                    'rounded-2xl border p-4 text-left transition-colors',
-                    safeApproveQuantity === 1
-                      ? 'border-emerald-500/40 bg-emerald-500/10'
-                      : 'border-white/8 bg-white/3 hover:bg-white/5',
+                  {remaining > 1 && (
+                    <Input
+                      label="Quantidade que volta para o estoque"
+                      type="number"
+                      min="0"
+                      max={remaining}
+                      value={processForm.approve_quantity}
+                      onChange={(event) => handleProcessApproveQuantityChange(event.target.value)}
+                      helperText={`O restante (${safeHoldQuantity}) continuara automaticamente na triagem.`}
+                    />
                   )}
-                >
-                  <p className="text-sm font-medium text-white">Voltar a unidade para o estoque</p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    A unidade sai da triagem e volta para uso no almoxarifado.
-                  </p>
-                </button>
 
-                <button
-                  type="button"
-                  onClick={() => handleSingleUnitDecision('hold')}
-                  className={cn(
-                    'rounded-2xl border p-4 text-left transition-colors',
-                    safeHoldQuantity === 1
-                      ? 'border-sky-500/40 bg-sky-500/10'
-                      : 'border-white/8 bg-white/3 hover:bg-white/5',
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <Card variant="bordered" className="border-emerald-500/15 bg-emerald-500/8">
+                      <p className="text-xs uppercase tracking-[0.22em] text-emerald-200/70">Volta ao estoque</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{safeApproveQuantity}</p>
+                    </Card>
+                    <Card variant="bordered" className="border-sky-500/15 bg-sky-500/8">
+                      <p className="text-xs uppercase tracking-[0.22em] text-sky-200/70">Permanece na triagem</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{safeHoldQuantity}</p>
+                    </Card>
+                  </div>
+
+                  {remaining === 1 ? (
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-white">Escolha o destino dessa unidade</p>
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        {([
+                          {
+                            value: 'new',
+                            label: 'Voltar como novo',
+                            description: 'Entra no estoque como item novo.',
+                            icon: <PackageIcon size={18} className="text-emerald-200" />,
+                            active: safeApproveQuantity === 1 && processForm.approved_condition === 'new',
+                            classes: 'border-emerald-400/30 bg-emerald-500/10',
+                          },
+                          {
+                            value: 'used',
+                            label: 'Voltar como usado',
+                            description: 'Entra no estoque como item usado.',
+                            icon: <WarehouseIcon size={18} className="text-sky-200" />,
+                            active: safeApproveQuantity === 1 && processForm.approved_condition === 'used',
+                            classes: 'border-sky-400/30 bg-sky-500/10',
+                          },
+                          {
+                            value: 'damaged',
+                            label: 'Voltar com avaria',
+                            description: 'Entra no estoque separado como avaria.',
+                            icon: <AlertIcon size={18} className="text-red-200" />,
+                            active: safeApproveQuantity === 1 && processForm.approved_condition === 'damaged',
+                            classes: 'border-red-400/30 bg-red-500/10',
+                          },
+                        ] as const).map((option) => (
+                          <button
+                            key={option.value}
+                            type="button"
+                            onClick={() => handleSingleUnitDecision('approve', option.value)}
+                            className={cn(
+                              'rounded-2xl border p-4 text-left transition-colors',
+                              option.active ? option.classes : 'border-white/8 bg-white/3 hover:bg-white/5',
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
+                                {option.icon}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-white">{option.label}</p>
+                                <p className="mt-1 text-xs text-gray-400">{option.description}</p>
+                              </div>
+                            </div>
+                          </button>
+                        ))}
+
+                        <button
+                          type="button"
+                          onClick={() => handleSingleUnitDecision('hold')}
+                          className={cn(
+                            'rounded-2xl border p-4 text-left transition-colors sm:col-span-2',
+                            safeHoldQuantity === 1
+                              ? 'border-amber-400/30 bg-amber-500/10'
+                              : 'border-white/8 bg-white/3 hover:bg-white/5',
+                          )}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
+                              <ClipboardIcon size={18} className="text-amber-200" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-white">Manter na triagem</p>
+                              <p className="mt-1 text-xs text-gray-400">Continua fora do estoque aguardando nova avaliacao.</p>
+                            </div>
+                          </div>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium text-white">Se a quantidade voltar para o estoque, em qual estado ela entra?</p>
+                      <div className="grid gap-3 md:grid-cols-3">
+                        {([
+                          {
+                            value: 'new',
+                            label: 'Novo',
+                            description: 'Para itens revisados e prontos como novos.',
+                            icon: <PackageIcon size={18} className="text-emerald-200" />,
+                            classes: 'border-emerald-400/30 bg-emerald-500/10',
+                          },
+                          {
+                            value: 'used',
+                            label: 'Usado',
+                            description: 'Para itens liberados para uso normal.',
+                            icon: <WarehouseIcon size={18} className="text-sky-200" />,
+                            classes: 'border-sky-400/30 bg-sky-500/10',
+                          },
+                          {
+                            value: 'damaged',
+                            label: 'Com avaria',
+                            description: 'Para itens devolvidos ao estoque de avaria.',
+                            icon: <AlertIcon size={18} className="text-red-200" />,
+                            classes: 'border-red-400/30 bg-red-500/10',
+                          },
+                        ] as const).map((option) => {
+                          const active = processForm.approved_condition === option.value
+                          return (
+                            <button
+                              key={option.value}
+                              type="button"
+                              onClick={() => setProcessForm((prev) => ({ ...prev, approved_condition: option.value }))}
+                              disabled={safeApproveQuantity === 0}
+                              className={cn(
+                                'rounded-2xl border p-4 text-left transition-colors',
+                                safeApproveQuantity === 0
+                                  ? 'cursor-not-allowed border-white/8 bg-black/20 opacity-45'
+                                  : active
+                                    ? option.classes
+                                    : 'border-white/8 bg-white/3 hover:bg-white/5',
+                              )}
+                            >
+                              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
+                                {option.icon}
+                              </div>
+                              <p className="mt-3 text-sm font-medium text-white">{option.label}</p>
+                              <p className="mt-1 text-xs text-gray-400">{option.description}</p>
+                            </button>
+                          )
+                        })}
+                      </div>
+                    </div>
                   )}
-                >
-                  <p className="text-sm font-medium text-white">Manter a unidade na triagem</p>
-                  <p className="mt-1 text-xs text-gray-400">
-                    A unidade continua separada aguardando analise, reparo ou nova decisao.
-                  </p>
-                </button>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                <Input
-                  label="Quantidade que volta para o estoque"
-                  type="number"
-                  min="0"
-                  max={remaining}
-                  value={processForm.approve_quantity}
-                  onChange={(event) => handleProcessApproveQuantityChange(event.target.value)}
-                  helperText={`O restante (${safeHoldQuantity}) ficara automaticamente mantido na triagem.`}
-                />
-
-                <div className="grid gap-3 md:grid-cols-2">
-                  <Card variant="bordered" className="border-emerald-500/15 bg-emerald-500/8">
-                    <p className="text-xs uppercase tracking-[0.22em] text-emerald-200/70">Volta ao estoque</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{safeApproveQuantity}</p>
-                  </Card>
-                  <Card variant="bordered" className="border-sky-500/15 bg-sky-500/8">
-                    <p className="text-xs uppercase tracking-[0.22em] text-sky-200/70">Fica na triagem</p>
-                    <p className="mt-2 text-2xl font-semibold text-white">{safeHoldQuantity}</p>
-                  </Card>
-                </div>
-              </div>
-            )}
 
             {safeHoldQuantity > 0 && (
               <TextArea
@@ -1462,6 +1594,7 @@ function InventoryStatusSection({
   expandedGroupKey,
   onToggleGroup,
   quantityForEntry,
+  conditionForEntry,
 }: {
   title: string
   description: string
@@ -1473,6 +1606,7 @@ function InventoryStatusSection({
   expandedGroupKey: string | null
   onToggleGroup: React.Dispatch<React.SetStateAction<string | null>>
   quantityForEntry: (entry: ReturnRequestWithDetails) => number
+  conditionForEntry: (entry: ReturnRequestWithDetails) => 'used' | 'damaged' | 'new'
 }) {
   if (groups.length === 0) return null
 
@@ -1586,6 +1720,7 @@ function InventoryStatusSection({
                 <div className="mt-4 space-y-3 border-t border-white/8 pt-4">
                   {group.entries.map((entry) => {
                     const entryQuantity = quantityForEntry(entry)
+                    const entryCondition = conditionForEntry(entry)
                     return (
                       <div
                         key={entry.id}
@@ -1598,8 +1733,8 @@ function InventoryStatusSection({
                                 {entry.source_type === 'collaborator' ? <UserIcon size={12} /> : <BuildingIcon size={12} />}
                                 <span>{sourceLabel(entry)}</span>
                               </div>
-                              <Badge variant={conditionVariant(entry.item_condition)} size="sm">
-                                {conditionLabel(entry.item_condition)}
+                              <Badge variant={conditionVariant(entryCondition)} size="sm">
+                                {conditionLabel(entryCondition)}
                               </Badge>
                             </div>
                             <p className="mt-2 text-sm font-medium text-white">
