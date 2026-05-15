@@ -15,7 +15,7 @@ import {
   Select,
   Spinner,
 } from '../../components/ui'
-import { AlertIcon, BuildingIcon, CameraIcon, ClipboardIcon, PackageIcon, UserIcon, WarehouseIcon, NewConditionIcon, UsedConditionIcon, DamagedConditionIcon } from '../../components/icons'
+import { BuildingIcon, CameraIcon, ClipboardIcon, PackageIcon, UserIcon, NewConditionIcon, UsedConditionIcon, DamagedConditionIcon } from '../../components/icons'
 import { StockItemPicker } from '../../components/items/StockItemPicker'
 import { ItemVisual } from '../../components/items/ItemVisual'
 

@@ -265,7 +265,7 @@ function hasQuantityHint(value: string): boolean {
 function shouldIgnoreLine(line: string): boolean {
   const normalized = normalizeText(line)
   if (normalized.length < 4) return true
-  if (/^\d+[\/.-]\d+[\/.-]\d+$/.test(normalized)) return true
+  if (/^\d+[/.-]\d+[/.-]\d+$/.test(normalized)) return true
   if (/^\d+$/.test(normalized)) return true
   return IGNORE_PATTERNS.some((pattern) => pattern.test(line))
 }

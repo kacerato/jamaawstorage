@@ -1225,11 +1225,14 @@ function AbcCurveTab() {
     [abcData],
   )
 
-  const classificationBadge: Record<string, 'danger' | 'warning' | 'default'> = {
-    A: 'danger',
-    B: 'warning',
-    C: 'default',
-  }
+  const classificationBadge = useMemo<Record<string, 'danger' | 'warning' | 'default'>>(
+    () => ({
+      A: 'danger',
+      B: 'warning',
+      C: 'default',
+    }),
+    [],
+  )
 
   type AbcRowForTable = AbcItem & Record<string, unknown>
 
@@ -1295,7 +1298,7 @@ function AbcCurveTab() {
         },
       },
     ],
-    [],
+    [classificationBadge],
   )
 
   const handleExportCSV = () => {
@@ -1404,10 +1407,11 @@ function AbcCurveTab() {
                       borderRadius: '8px',
                       color: '#f9fafb',
                     }}
-                    formatter={((value: any) => [value, 'Quantidade'])}
-                    labelFormatter={((label: any, payload: any) => {
-                      if (payload?.[0]?.payload?.fullName) return payload[0].payload.fullName
-                      return label
+                    formatter={((value: unknown) => [String(value), 'Quantidade'])}
+                    labelFormatter={((label: unknown, payload: readonly { payload?: { fullName?: unknown } }[] | undefined) => {
+                      const fullName = payload?.[0]?.payload?.fullName
+                      if (typeof fullName === 'string') return fullName
+                      return String(label)
                     })}
                   />
                   <Bar dataKey="Quantidade" fill="#f97316" radius={[4, 4, 0, 0]} />
@@ -1957,10 +1961,11 @@ function LeaderConsumptionTab() {
                       borderRadius: '8px',
                       color: '#f9fafb',
                     }}
-                    formatter={((value: any) => [value, 'Quantidade'])}
-                    labelFormatter={((label: any, payload: any) => {
-                      if (payload?.[0]?.payload?.fullName) return payload[0].payload.fullName
-                      return label
+                    formatter={((value: unknown) => [String(value), 'Quantidade'])}
+                    labelFormatter={((label: unknown, payload: readonly { payload?: { fullName?: unknown } }[] | undefined) => {
+                      const fullName = payload?.[0]?.payload?.fullName
+                      if (typeof fullName === 'string') return fullName
+                      return String(label)
                     })}
                   />
                   <Bar dataKey="Quantidade" fill="#f97316" radius={[0, 4, 4, 0]} />

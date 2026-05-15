@@ -2,8 +2,9 @@ import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { Tables, TablesInsert, TablesUpdate } from '../../types/database'
 import { DEFAULT_IMAGE_UPLOAD_OPTIONS, imageFileToDataUrl } from '../../lib/utils'
 import { Alert, Button, Input, Modal, Select } from '../../components/ui'
-import { AlertIcon, ClipboardIcon, PackageIcon, WarehouseIcon, NewConditionIcon, UsedConditionIcon, DamagedConditionIcon } from '../../components/icons'
-import { ItemVisual, itemLabelForKey, normalizeItemIconKey } from '../../components/items/ItemVisual'
+import { WarehouseIcon, NewConditionIcon, UsedConditionIcon, DamagedConditionIcon } from '../../components/icons'
+import { ItemVisual } from '../../components/items/ItemVisual'
+import { itemLabelForKey, normalizeItemIconKey } from '../../components/items/itemVisualData'
 
 type StockItemRow = Tables<'stock_items'>
 type StockItemInsert = TablesInsert<'stock_items'>
@@ -220,7 +221,6 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
       : undefined
 
     const basePayload = {
-      code: isEditing ? sanitizeCode(formData.code) : '',
       name: formData.name.trim(),
       description: formData.description.trim() || null,
       category: formData.category || null,
@@ -236,6 +236,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
     if (isEditing) {
       await onSubmit({
         ...basePayload,
+        code: sanitizeCode(formData.code),
         stock_adjustment: signedAdjustment,
         adjustment_bucket: formData.adjustment_bucket,
         updated_at: new Date().toISOString(),

@@ -39,6 +39,25 @@ interface MovementWithDetails {
   quantity: number
 }
 
+type WithdrawalMovementEntry = {
+  quantity: number
+  withdrawal: {
+    id: string
+    code: string | null
+    status: string
+    created_at: string
+    requested_by: string | null
+  }
+}
+
+type ReturnMovementEntry = {
+  id: string
+  quantity: number
+  status: string
+  created_at: string
+  source_person_id: string | null
+}
+
 type ModalMode = 'detail' | 'create' | 'edit' | 'delete' | 'import'
 type StockRowRecord = StockItemWithLowStock & Record<string, unknown>
 
@@ -239,24 +258,9 @@ export function StockPage() {
           .limit(10)
       ])
 
-      const rawWiData = (withdrawalsRes.data as {
-        quantity: number
-        withdrawal: {
-          id: string
-          code: string | null
-          status: string
-          created_at: string
-          requested_by: string | null
-        } | null
-      }[]) ?? []
+      const rawWiData = (withdrawalsRes.data as (WithdrawalMovementEntry | { quantity: number; withdrawal: null })[]) ?? []
 
-      const rawRetData = (returnsRes.data as {
-        id: string
-        quantity: number
-        status: string
-        created_at: string
-        source_person_id: string | null
-      }[]) ?? []
+      const rawRetData = (returnsRes.data as ReturnMovementEntry[]) ?? []
 
       const requestedByIds = [
         ...rawWiData.map((entry) => entry.withdrawal?.requested_by),
@@ -275,25 +279,21 @@ export function StockPage() {
         )
       }
 
-      const typedMovements: MovementWithDetails[] = [
-        ...rawWiData
-          .filter((entry): entry is typeof entry & { withdrawal: NonNullable<typeof entry.withdrawal> } => Boolean(entry.withdrawal)),
-        ...rawRetData
-      ].map((entry: any) => {
-        if ('withdrawal' in entry) {
-          return {
-            id: entry.withdrawal.id,
-            code: entry.withdrawal.code,
-            type: 'withdrawal' as const,
-            status: entry.withdrawal.status,
-            created_at: entry.withdrawal.created_at,
-            requested_by_person: entry.withdrawal.requested_by
-              ? peopleMap[entry.withdrawal.requested_by] ?? null
-              : null,
-            quantity: entry.quantity,
-          }
-        }
-        return {
+      const withdrawalMovements: MovementWithDetails[] = rawWiData
+        .filter((entry): entry is WithdrawalMovementEntry => Boolean(entry.withdrawal))
+        .map((entry) => ({
+          id: entry.withdrawal.id,
+          code: entry.withdrawal.code,
+          type: 'withdrawal' as const,
+          status: entry.withdrawal.status,
+          created_at: entry.withdrawal.created_at,
+          requested_by_person: entry.withdrawal.requested_by
+            ? peopleMap[entry.withdrawal.requested_by] ?? null
+            : null,
+          quantity: entry.quantity,
+        }))
+
+      const returnMovements: MovementWithDetails[] = rawRetData.map((entry) => ({
           id: entry.id,
           code: null,
           type: 'return' as const,
@@ -303,8 +303,9 @@ export function StockPage() {
             ? peopleMap[entry.source_person_id] ?? null
             : null,
           quantity: entry.quantity,
-        }
-      })
+        }))
+
+      const typedMovements: MovementWithDetails[] = [...withdrawalMovements, ...returnMovements]
 
       typedMovements.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 

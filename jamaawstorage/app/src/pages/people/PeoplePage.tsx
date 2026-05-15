@@ -14,6 +14,14 @@ type PersonWithInventoryCount = Tables<'people'> & {
   low_stock_warnings: number
 }
 
+type InventoryCountRow = {
+  person_id: string
+  stock_items: {
+    minimum_quantity: number
+    current_quantity: number
+  } | null
+}
+
 type RoleFilter = 'all' | 'leader' | 'collaborator'
 type StatusFilter = 'active' | 'inactive'
 
@@ -111,7 +119,7 @@ export function PeoplePage() {
 
       // Buscar contagem de inventários separadamente (mais eficiente)
       const personIds = data.map(p => p.id)
-      let inventoryMap: Record<string, { count: number; low_stock: number }> = {}
+      const inventoryMap: Record<string, { count: number; low_stock: number }> = {}
 
       if (personIds.length > 0) {
         const { data: invData } = await supabase
@@ -120,7 +128,7 @@ export function PeoplePage() {
           .in('person_id', personIds)
 
         if (invData) {
-          for (const inv of invData as any[]) {
+          for (const inv of invData as unknown as InventoryCountRow[]) {
             const personId = inv.person_id
             if (!inventoryMap[personId]) {
               inventoryMap[personId] = { count: 0, low_stock: 0 }

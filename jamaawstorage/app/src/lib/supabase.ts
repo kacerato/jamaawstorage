@@ -21,10 +21,10 @@ const fetchWithTimeout: typeof fetch = async (input, init) => {
     })
   } catch (err) {
     if (err instanceof DOMException && err.name === 'AbortError') {
-      throw new Error('A requisição excedeu o tempo limite. Verifique sua conexão.')
+      throw new Error('A requisição excedeu o tempo limite. Verifique sua conexão.', { cause: err })
     }
 
-    throw err instanceof Error ? err : new Error('Erro desconhecido na requisição.')
+    throw err instanceof Error ? err : new Error('Erro desconhecido na requisição.', { cause: err })
   } finally {
     clearTimeout(timeoutId)
   }

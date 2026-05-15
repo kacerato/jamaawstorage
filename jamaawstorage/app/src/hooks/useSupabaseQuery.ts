@@ -46,24 +46,32 @@ export function useSupabaseQuery<T>(
     setError(null)
 
     try {
-      const result = await executeWithTimeout()
-      if (!mountedRef.current) return
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        try {
+          const result = await executeWithTimeout()
+          if (!mountedRef.current) return
 
-      if (result.error) {
-        setError(result.error)
-      } else {
-        setData(result.data)
+          retryRef.current = false
+          if (result.error) {
+            setError(result.error)
+          } else {
+            setData(result.data)
+          }
+          return
+        } catch (err) {
+          if (!mountedRef.current) return
+
+          if (attempt === 0 && !retryRef.current) {
+            retryRef.current = true
+            await new Promise((resolve) => setTimeout(resolve, 1500))
+            continue
+          }
+
+          retryRef.current = false
+          setError(toPostgrestError(err))
+          return
+        }
       }
-    } catch (err) {
-      if (!mountedRef.current) return
-
-      if (!retryRef.current) {
-        retryRef.current = true
-        setTimeout(() => void fetchData(), 1500)
-        return
-      }
-
-      setError(toPostgrestError(err))
     } finally {
       if (mountedRef.current) setLoading(false)
     }
