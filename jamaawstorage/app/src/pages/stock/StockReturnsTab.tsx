@@ -700,6 +700,20 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     setProcessError(null)
   }
 
+  const handleProcessDestinationChoice = (destination: 'return' | 'hold') => {
+    if (!selectedRequest) return
+
+    const remaining = Math.max(selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity, 0)
+    setProcessForm((prev) => ({
+      ...prev,
+      approve_quantity: destination === 'return' ? String(remaining) : '0',
+      hold_quantity: destination === 'hold' ? String(remaining) : '0',
+      quick_action: destination,
+      hold_condition: destination === 'hold' ? selectedRequest.item_condition : prev.hold_condition,
+    }))
+    setProcessError(null)
+  }
+
   const handleSingleUnitDecision = (
     mode: 'approve' | 'hold',
     condition?: 'new' | 'used' | 'damaged',
@@ -1419,15 +1433,46 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                   </div>
 
                   {remaining > 1 && (
-                    <Input
-                      label="Quantidade que volta para o estoque"
-                      type="number"
-                      min="0"
-                      max={remaining}
-                      value={processForm.approve_quantity}
-                      onChange={(event) => handleProcessApproveQuantityChange(event.target.value)}
-                      helperText={`O restante (${safeHoldQuantity}) continuara automaticamente na triagem.`}
-                    />
+                    <div className="space-y-3">
+                      <div className="grid gap-3 sm:grid-cols-2">
+                        <button
+                          type="button"
+                          onClick={() => handleProcessDestinationChoice('return')}
+                          className={cn(
+                            'rounded-2xl border p-4 text-left transition-colors',
+                            safeApproveQuantity === remaining
+                              ? 'border-emerald-400/35 bg-emerald-500/10'
+                              : 'border-white/8 bg-white/3 hover:bg-white/5',
+                          )}
+                        >
+                          <p className="text-sm font-medium text-white">Voltar tudo ao estoque</p>
+                          <p className="mt-1 text-xs text-gray-400">A quantidade inteira entra no estoque.</p>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleProcessDestinationChoice('hold')}
+                          className={cn(
+                            'rounded-2xl border p-4 text-left transition-colors',
+                            safeHoldQuantity === remaining
+                              ? 'border-amber-400/35 bg-amber-500/10'
+                              : 'border-white/8 bg-white/3 hover:bg-white/5',
+                          )}
+                        >
+                          <p className="text-sm font-medium text-white">Manter tudo em triagem</p>
+                          <p className="mt-1 text-xs text-gray-400">Nada volta ao estoque agora.</p>
+                        </button>
+                      </div>
+
+                      <Input
+                        label="Quantidade que volta para o estoque"
+                        type="number"
+                        min="0"
+                        max={remaining}
+                        value={processForm.approve_quantity}
+                        onChange={(event) => handleProcessApproveQuantityChange(event.target.value)}
+                        helperText={`O restante (${safeHoldQuantity}) continuara automaticamente na triagem.`}
+                      />
+                    </div>
                   )}
 
                   <div className="grid gap-3 md:grid-cols-2">
