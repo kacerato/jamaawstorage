@@ -83,6 +83,7 @@ interface ProcessFormState {
   approve_quantity: string
   hold_quantity: string
   approved_condition: 'new' | 'used' | 'damaged'
+  hold_condition: 'used' | 'damaged'
   quick_action: 'return' | 'hold'
   triage_notes: string
 }
@@ -233,6 +234,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     approve_quantity: '0',
     hold_quantity: '0',
     approved_condition: 'used',
+    hold_condition: 'used',
     quick_action: 'return',
     triage_notes: '',
   })
@@ -673,6 +675,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       approve_quantity: String(remaining),
       hold_quantity: '0',
       approved_condition: request.approved_condition ?? (request.item_condition === 'damaged' ? 'damaged' : 'used'),
+      hold_condition: request.item_condition,
       quick_action: 'return',
       triage_notes: request.triage_notes ?? '',
     })
@@ -697,12 +700,16 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     setProcessError(null)
   }
 
-  const handleSingleUnitDecision = (mode: 'approve' | 'hold', approvedCondition?: 'new' | 'used' | 'damaged') => {
+  const handleSingleUnitDecision = (
+    mode: 'approve' | 'hold',
+    condition?: 'new' | 'used' | 'damaged',
+  ) => {
     setProcessForm((prev) => ({
       ...prev,
       approve_quantity: mode === 'approve' ? '1' : '0',
       hold_quantity: mode === 'hold' ? '1' : '0',
-      approved_condition: approvedCondition ?? prev.approved_condition,
+      approved_condition: mode === 'approve' && condition ? condition : prev.approved_condition,
+      hold_condition: mode === 'hold' && (condition === 'used' || condition === 'damaged') ? condition : prev.hold_condition,
       quick_action: mode === 'approve' ? 'return' : 'hold',
     }))
     setProcessError(null)
@@ -730,6 +737,11 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       return
     }
 
+    if (holdQuantity > 0 && !['used', 'damaged'].includes(processForm.hold_condition)) {
+      setProcessError('Escolha se a quantidade em triagem fica como usada ou com avaria.')
+      return
+    }
+
     if (holdQuantity > 0 && !processForm.triage_notes.trim()) {
       setProcessError('Adicione uma observacao para o que vai continuar na triagem.')
       return
@@ -745,6 +757,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         p_hold_quantity: holdQuantity,
         p_triage_notes: processForm.triage_notes.trim() || null,
         p_approved_condition: approveQuantity > 0 ? processForm.approved_condition : null,
+        p_hold_condition: holdQuantity > 0 ? processForm.hold_condition : null,
       })
 
       if (rpcError) {
@@ -1479,26 +1492,44 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                           </button>
                         ))}
 
-                        <button
-                          type="button"
-                          onClick={() => handleSingleUnitDecision('hold')}
-                          className={cn(
-                            'rounded-2xl border p-4 text-left transition-colors sm:col-span-2',
-                            safeHoldQuantity === 1
-                              ? 'border-amber-400/30 bg-amber-500/10'
-                              : 'border-white/8 bg-white/3 hover:bg-white/5',
-                          )}
-                        >
-                          <div className="flex items-center gap-3">
-                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
-                              <ClipboardIcon size={18} className="text-amber-200" />
+                        {([
+                          {
+                            value: 'used',
+                            label: 'Manter como usado',
+                            description: 'Permanece em triagem como item usado.',
+                            icon: <UsedConditionIcon size={18} className="text-sky-200" />,
+                            classes: 'border-sky-400/30 bg-sky-500/10',
+                          },
+                          {
+                            value: 'damaged',
+                            label: 'Manter com avaria',
+                            description: 'Permanece em triagem como item avariado.',
+                            icon: <DamagedConditionIcon size={18} className="text-red-200" />,
+                            classes: 'border-red-400/30 bg-red-500/10',
+                          },
+                        ] as const).map((option) => (
+                          <button
+                            key={`hold-${option.value}`}
+                            type="button"
+                            onClick={() => handleSingleUnitDecision('hold', option.value)}
+                            className={cn(
+                              'rounded-2xl border p-4 text-left transition-colors',
+                              safeHoldQuantity === 1 && processForm.hold_condition === option.value
+                                ? option.classes
+                                : 'border-white/8 bg-white/3 hover:bg-white/5',
+                            )}
+                          >
+                            <div className="flex items-center gap-3">
+                              <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
+                                {option.icon}
+                              </div>
+                              <div>
+                                <p className="text-sm font-medium text-white">{option.label}</p>
+                                <p className="mt-1 text-xs text-gray-400">{option.description}</p>
+                              </div>
                             </div>
-                            <div>
-                              <p className="text-sm font-medium text-white">Manter na triagem</p>
-                              <p className="mt-1 text-xs text-gray-400">Continua fora do estoque aguardando nova avaliacao.</p>
-                            </div>
-                          </div>
-                        </button>
+                          </button>
+                        ))}
                       </div>
                     </div>
                   ) : (
@@ -1555,6 +1586,58 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                       </div>
                     </div>
                   )}
+
+            {safeHoldQuantity > 0 && remaining > 1 && (
+              <div className="space-y-3 rounded-3xl border border-amber-500/15 bg-amber-500/8 p-4">
+                <div>
+                  <p className="text-sm font-medium text-white">Como fica a quantidade em triagem?</p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Triagem nao volta como novo. Escolha apenas usado ou com avaria.
+                  </p>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {([
+                    {
+                      value: 'used',
+                      label: 'Usado',
+                      description: 'Aguardando limpeza, revisao ou nova avaliacao.',
+                      icon: <UsedConditionIcon size={18} className="text-sky-200" />,
+                      classes: 'border-sky-400/35 bg-sky-500/10',
+                    },
+                    {
+                      value: 'damaged',
+                      label: 'Com avaria',
+                      description: 'Aguardando reparo, descarte ou decisao tecnica.',
+                      icon: <DamagedConditionIcon size={18} className="text-red-200" />,
+                      classes: 'border-red-400/35 bg-red-500/10',
+                    },
+                  ] as const).map((option) => {
+                    const active = processForm.hold_condition === option.value
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setProcessForm((prev) => ({ ...prev, hold_condition: option.value }))}
+                        className={cn(
+                          'rounded-2xl border p-4 text-left transition-colors',
+                          active ? option.classes : 'border-white/8 bg-black/20 hover:bg-white/6',
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
+                            {option.icon}
+                          </div>
+                          <div>
+                            <p className="text-sm font-medium text-white">{option.label}</p>
+                            <p className="mt-1 text-xs text-gray-400">{option.description}</p>
+                          </div>
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
 
             {safeHoldQuantity > 0 && (
               <TextArea

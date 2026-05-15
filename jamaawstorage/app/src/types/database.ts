@@ -730,6 +730,7 @@ export interface Database {
       p_hold_quantity: number
       p_triage_notes?: string | null
       p_approved_condition?: 'new' | 'used' | 'damaged' | null
+      p_hold_condition?: 'used' | 'damaged' | null
     }
     Returns: Database['public']['Tables']['stock_return_requests']['Row']
   }
