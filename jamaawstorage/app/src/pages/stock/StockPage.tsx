@@ -383,9 +383,9 @@ export function StockPage() {
         p_minimum_quantity: data.minimum_quantity ?? selectedItem.minimum_quantity,
         p_svg_icon_key: data.svg_icon_key ?? null,
         p_stock_adjustment: data.stock_adjustment ?? 0,
-        p_quantity_new: data.quantity_new ?? selectedItem.quantity_new,
-        p_quantity_used: data.quantity_used ?? selectedItem.quantity_used,
-        p_quantity_damaged: data.quantity_damaged ?? selectedItem.quantity_damaged,
+        p_quantity_new: null,
+        p_quantity_used: null,
+        p_quantity_damaged: null,
         p_adjustment_bucket: (data as TablesUpdate<'stock_items'> & { adjustment_bucket?: 'new' | 'used' | 'damaged' }).adjustment_bucket ?? 'new',
       })
 

@@ -137,10 +137,10 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
     const next: FormErrors = {}
     if (!formData.name.trim()) next.name = 'Nome e obrigatorio'
     if (formData.current_quantity < 0) next.current_quantity = 'Deve ser maior ou igual a 0'
-    if (formData.quantity_new < 0 || formData.quantity_used < 0 || formData.quantity_damaged < 0) {
+    if (!isEditing && (formData.quantity_new < 0 || formData.quantity_used < 0 || formData.quantity_damaged < 0)) {
       next.quantity_breakdown = 'As quantidades por estado nao podem ser negativas'
     }
-    if (formData.quantity_new + formData.quantity_used + formData.quantity_damaged !== formData.current_quantity) {
+    if (!isEditing && formData.quantity_new + formData.quantity_used + formData.quantity_damaged !== formData.current_quantity) {
       next.quantity_breakdown = 'A soma de novo, usado e avaria deve bater com a quantidade total'
     }
     if (formData.minimum_quantity < 0) next.minimum_quantity = 'Deve ser maior ou igual a 0'
@@ -228,9 +228,6 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
       minimum_quantity: formData.minimum_quantity,
       ca_nr: formData.ca_nr.trim() || null,
       svg_icon_key: svgIconKey,
-      quantity_new: formData.quantity_new,
-      quantity_used: formData.quantity_used,
-      quantity_damaged: formData.quantity_damaged,
     }
 
     if (isEditing) {
@@ -238,7 +235,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
         ...basePayload,
         code: sanitizeCode(formData.code),
         stock_adjustment: signedAdjustment,
-        adjustment_bucket: formData.adjustment_bucket,
+        adjustment_bucket: adjustmentMode === 'add' ? formData.adjustment_bucket : undefined,
         updated_at: new Date().toISOString(),
       } as StockItemUpdate & { stock_adjustment?: number })
       return
@@ -246,6 +243,9 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
 
     await onSubmit({
       ...basePayload,
+      quantity_new: formData.quantity_new,
+      quantity_used: formData.quantity_used,
+      quantity_damaged: formData.quantity_damaged,
       current_quantity: formData.current_quantity,
     } as StockItemInsert)
   }
@@ -477,19 +477,21 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 helperText={
                   adjustmentMode === 'add'
                     ? 'Use para entrada de estoque no estado escolhido.'
-                    : 'Use para diminuir o estoque no estado escolhido.'
+                    : 'Use para diminuir a quantidade total. A baixa respeita Novo, Usado e Com avaria automaticamente.'
                 }
               />
-              <Select
-                label="Estado do ajuste"
-                value={formData.adjustment_bucket}
-                onChange={(event) => handleChange('adjustment_bucket', event.target.value as 'new' | 'used' | 'damaged')}
-                options={[
-                  { value: 'new', label: 'Novo' },
-                  { value: 'used', label: 'Usado' },
-                  { value: 'damaged', label: 'Com avaria' },
-                ]}
-              />
+              {adjustmentMode === 'add' && (
+                <Select
+                  label="Estado da entrada"
+                  value={formData.adjustment_bucket}
+                  onChange={(event) => handleChange('adjustment_bucket', event.target.value as 'new' | 'used' | 'damaged')}
+                  options={[
+                    { value: 'new', label: 'Novo' },
+                    { value: 'used', label: 'Usado' },
+                    { value: 'damaged', label: 'Com avaria' },
+                  ]}
+                />
+              )}
             </div>
           )}
           <Input
@@ -507,7 +509,9 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
             <div>
               <p className="text-sm font-medium text-white">Composicao do estoque</p>
               <p className="mt-1 text-xs text-gray-500">
-                Separe opcionalmente o total em itens novos, usados e com avaria.
+                {isEditing
+                  ? 'Leitura atual do estoque por estado. Use devolucao, retirada ou entrada para alterar quantidades.'
+                  : 'Separe opcionalmente o total em itens novos, usados e com avaria.'}
               </p>
             </div>
             <div className="flex items-center gap-3 rounded-3xl border border-white/8 bg-black/20 px-4 py-3">
@@ -568,13 +572,20 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 <p className="mt-4 text-xs text-gray-400">{section.helper}</p>
 
                 <div className="mt-4">
-                  <Input
-                    label={`Quantidade de ${section.label.toLowerCase()}`}
-                    type="number"
-                    min={0}
-                    value={String(section.value)}
-                    onChange={(event) => handleConditionQuantityChange(section.key, event.target.value)}
-                  />
+                  {isEditing ? (
+                    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                      <p className="text-[11px] uppercase tracking-[0.16em] text-gray-500">Quantidade atual</p>
+                      <p className="mt-1 text-sm font-medium text-white">{section.value} {formData.unit}</p>
+                    </div>
+                  ) : (
+                    <Input
+                      label={`Quantidade de ${section.label.toLowerCase()}`}
+                      type="number"
+                      min={0}
+                      value={String(section.value)}
+                      onChange={(event) => handleConditionQuantityChange(section.key, event.target.value)}
+                    />
+                  )}
                 </div>
               </div>
             ))}
