@@ -1,6 +1,7 @@
 BEGIN;
 
 DROP FUNCTION IF EXISTS public.process_stock_return_request(UUID, INTEGER, INTEGER, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.process_stock_return_request(UUID, INTEGER, INTEGER, TEXT);
 
 CREATE OR REPLACE FUNCTION public.process_stock_return_request(
   p_request_id UUID,

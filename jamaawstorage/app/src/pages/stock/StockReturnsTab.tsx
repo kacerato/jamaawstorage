@@ -683,19 +683,20 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     setShowProcessModal(true)
   }
 
-  const handleProcessApproveQuantityChange = (value: string) => {
+  const handleProcessQuantityChange = (destination: 'return' | 'hold', value: string) => {
     if (!selectedRequest) return
 
     const remaining = Math.max(selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity, 0)
     const parsed = Number.parseInt(value, 10)
-    const safeApprove = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), remaining) : 0
-    const safeHold = remaining - safeApprove
+    const safePrimaryQuantity = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), remaining) : 0
+    const nextApproveQuantity = destination === 'return' ? safePrimaryQuantity : remaining - safePrimaryQuantity
+    const nextHoldQuantity = destination === 'hold' ? safePrimaryQuantity : remaining - safePrimaryQuantity
 
     setProcessForm((prev) => ({
       ...prev,
-      approve_quantity: String(safeApprove),
-      hold_quantity: String(safeHold),
-      quick_action: safeApprove > 0 ? 'return' : 'hold',
+      approve_quantity: String(nextApproveQuantity),
+      hold_quantity: String(nextHoldQuantity),
+      quick_action: destination,
     }))
     setProcessError(null)
   }
@@ -1413,8 +1414,12 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             {(() => {
               const remaining = selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity
               const approveQuantity = Number.parseInt(processForm.approve_quantity, 10)
+              const holdQuantity = Number.parseInt(processForm.hold_quantity, 10)
               const safeApproveQuantity = Number.isFinite(approveQuantity) ? Math.min(Math.max(approveQuantity, 0), remaining) : 0
-              const safeHoldQuantity = remaining - safeApproveQuantity
+              const safeHoldQuantity = Number.isFinite(holdQuantity) ? Math.min(Math.max(holdQuantity, 0), remaining) : 0
+              const activeQuantityValue = processForm.quick_action === 'hold'
+                ? String(safeHoldQuantity)
+                : String(safeApproveQuantity)
 
               return (
                 <>
@@ -1472,9 +1477,13 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                         type="number"
                         min="0"
                         max={remaining}
-                        value={processForm.approve_quantity}
-                        onChange={(event) => handleProcessApproveQuantityChange(event.target.value)}
-                        helperText={`O restante (${safeHoldQuantity}) continuara automaticamente na triagem.`}
+                        value={activeQuantityValue}
+                        onChange={(event) => handleProcessQuantityChange(processForm.quick_action, event.target.value)}
+                        helperText={
+                          processForm.quick_action === 'hold'
+                            ? `O restante (${safeApproveQuantity}) voltara automaticamente ao estoque.`
+                            : `O restante (${safeHoldQuantity}) continuara automaticamente na triagem.`
+                        }
                       />
                     </div>
                   )}
@@ -1581,7 +1590,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                         ))}
                       </div>
                     </div>
-                  ) : (
+                  ) : safeApproveQuantity > 0 ? (
                     <div className="space-y-3">
                       <p className="text-sm font-medium text-white">Se a quantidade voltar para o estoque, em qual estado ela entra?</p>
                       <div className="grid gap-3 md:grid-cols-3">
@@ -1634,7 +1643,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                         })}
                       </div>
                     </div>
-                  )}
+                  ) : null}
 
             {safeHoldQuantity > 0 && remaining > 1 && (
               <div className="space-y-3 rounded-3xl border border-amber-500/15 bg-amber-500/8 p-4">
