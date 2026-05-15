@@ -560,7 +560,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
           </div>
 
           {isEditing && adjustmentMode === 'add' && (
-            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 p-4 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/8 bg-white/4 p-4 sm:gap-4">
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-white">Editar composicao manualmente</p>
                 <p className="mt-1 text-xs leading-5 text-gray-500">
@@ -578,7 +578,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                     resetCompositionToSavedItem()
                   }
                 }}
-                className={`relative h-7 w-12 shrink-0 rounded-full border transition-all duration-300 ease-in-out ${
+                className={`relative h-7 w-12 flex-shrink-0 rounded-full border transition-all duration-300 ease-in-out ${
                   manualCompositionMode
                     ? 'border-orange-400/50 bg-orange-500/30 shadow-[0_0_10px_rgba(249,115,22,0.25)]'
                     : 'border-white/10 bg-black/50'
