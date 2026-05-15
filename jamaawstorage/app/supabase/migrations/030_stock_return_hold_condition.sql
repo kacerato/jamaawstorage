@@ -61,8 +61,12 @@ BEGIN
     RAISE EXCEPTION 'A devolucao esta com distribuicao invalida.';
   END IF;
 
-  IF p_approve_quantity + p_hold_quantity <> remaining_quantity THEN
-    RAISE EXCEPTION 'Distribua exatamente a quantidade restante da devolucao. Restante atual: %.', remaining_quantity;
+  IF p_approve_quantity + p_hold_quantity <= 0 THEN
+    RAISE EXCEPTION 'Informe pelo menos uma quantidade para processar.';
+  END IF;
+
+  IF p_approve_quantity + p_hold_quantity > remaining_quantity THEN
+    RAISE EXCEPTION 'A quantidade processada nao pode passar do restante atual: %.', remaining_quantity;
   END IF;
 
   effective_approved_condition := COALESCE(NULLIF(trim(coalesce(p_approved_condition, '')), ''), target_request.approved_condition);
@@ -105,6 +109,7 @@ BEGIN
   END IF;
 
   next_status := CASE
+    WHEN target_request.approved_quantity + target_request.held_quantity + p_approve_quantity + p_hold_quantity < target_request.quantity THEN 'pending'
     WHEN target_request.approved_quantity + p_approve_quantity = target_request.quantity THEN 'approved'
     WHEN target_request.held_quantity + p_hold_quantity > 0 THEN 'held'
     ELSE 'pending'

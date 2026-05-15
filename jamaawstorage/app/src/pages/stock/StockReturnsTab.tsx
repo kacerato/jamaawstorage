@@ -689,8 +689,8 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     const remaining = Math.max(selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity, 0)
     const parsed = Number.parseInt(value, 10)
     const safePrimaryQuantity = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), remaining) : 0
-    const nextApproveQuantity = destination === 'return' ? safePrimaryQuantity : remaining - safePrimaryQuantity
-    const nextHoldQuantity = destination === 'hold' ? safePrimaryQuantity : remaining - safePrimaryQuantity
+    const nextApproveQuantity = destination === 'return' ? safePrimaryQuantity : 0
+    const nextHoldQuantity = destination === 'hold' ? safePrimaryQuantity : 0
 
     setProcessForm((prev) => ({
       ...prev,
@@ -742,8 +742,13 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       return
     }
 
-    if (approveQuantity + holdQuantity !== remaining) {
-      setProcessError(`Distribua exatamente a quantidade restante: ${remaining}.`)
+    if (approveQuantity + holdQuantity <= 0) {
+      setProcessError('Informe pelo menos uma quantidade para voltar ao estoque ou permanecer em triagem.')
+      return
+    }
+
+    if (approveQuantity + holdQuantity > remaining) {
+      setProcessError(`A soma nao pode passar da quantidade restante: ${remaining}.`)
       return
     }
 
@@ -1417,6 +1422,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
               const holdQuantity = Number.parseInt(processForm.hold_quantity, 10)
               const safeApproveQuantity = Number.isFinite(approveQuantity) ? Math.min(Math.max(approveQuantity, 0), remaining) : 0
               const safeHoldQuantity = Number.isFinite(holdQuantity) ? Math.min(Math.max(holdQuantity, 0), remaining) : 0
+              const safePendingQuantity = Math.max(remaining - safeApproveQuantity - safeHoldQuantity, 0)
               const activeQuantityValue = processForm.quick_action === 'hold'
                 ? String(safeHoldQuantity)
                 : String(safeApproveQuantity)
@@ -1481,14 +1487,14 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                         onChange={(event) => handleProcessQuantityChange(processForm.quick_action, event.target.value)}
                         helperText={
                           processForm.quick_action === 'hold'
-                            ? `O restante (${safeApproveQuantity}) voltara automaticamente ao estoque.`
-                            : `O restante (${safeHoldQuantity}) continuara automaticamente na triagem.`
+                            ? `O restante (${safePendingQuantity}) continuara pendente.`
+                            : `O restante (${safePendingQuantity}) continuara pendente.`
                         }
                       />
                     </div>
                   )}
 
-                  <div className="grid gap-3 md:grid-cols-2">
+                  <div className="grid gap-3 md:grid-cols-3">
                     <Card variant="bordered" className="border-emerald-500/15 bg-emerald-500/8">
                       <p className="text-xs uppercase tracking-[0.22em] text-emerald-200/70">Volta ao estoque</p>
                       <p className="mt-2 text-2xl font-semibold text-white">{safeApproveQuantity}</p>
@@ -1496,6 +1502,10 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                     <Card variant="bordered" className="border-sky-500/15 bg-sky-500/8">
                       <p className="text-xs uppercase tracking-[0.22em] text-sky-200/70">Permanece na triagem</p>
                       <p className="mt-2 text-2xl font-semibold text-white">{safeHoldQuantity}</p>
+                    </Card>
+                    <Card variant="bordered" className="border-amber-500/15 bg-amber-500/8">
+                      <p className="text-xs uppercase tracking-[0.22em] text-amber-200/70">Continua pendente</p>
+                      <p className="mt-2 text-2xl font-semibold text-white">{safePendingQuantity}</p>
                     </Card>
                   </div>
 
