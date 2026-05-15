@@ -51,6 +51,21 @@ interface WithdrawalGroup {
   items: WithdrawalItemEntry[]
 }
 
+interface WithdrawalComposition {
+  newQty: number
+  usedQty: number
+  damagedQty: number
+  missingQty: number
+}
+
+interface WithdrawalCompositionWarning {
+  entryId: string
+  itemName: string
+  unit: string
+  quantity: number
+  composition: WithdrawalComposition
+}
+
 interface SignatureAttachmentState {
   url: string | null
   name: string | null
@@ -87,6 +102,30 @@ function makeDestinationGroupKey(entry: Pick<WithdrawalItemEntry, 'destination_t
 
 function createEntryId(): string {
   return `withdrawal-entry-${crypto.randomUUID()}`
+}
+
+function numericQuantity(value: number | null | undefined): number {
+  return Math.max(0, Number(value ?? 0))
+}
+
+function buildWithdrawalComposition(stockItem: StockItemRow, quantity: number): WithdrawalComposition {
+  const requested = Math.max(0, Number(quantity) || 0)
+  const newQty = Math.min(requested, numericQuantity(stockItem.quantity_new))
+  const remainingAfterNew = requested - newQty
+  const usedQty = Math.min(remainingAfterNew, numericQuantity(stockItem.quantity_used))
+  const remainingAfterUsed = remainingAfterNew - usedQty
+  const damagedQty = Math.min(remainingAfterUsed, numericQuantity(stockItem.quantity_damaged))
+
+  return {
+    newQty,
+    usedQty,
+    damagedQty,
+    missingQty: Math.max(0, remainingAfterUsed - damagedQty),
+  }
+}
+
+function compositionNeedsConfirmation(composition: WithdrawalComposition): boolean {
+  return composition.usedQty > 0 || composition.damagedQty > 0
 }
 
 function encodeDestination(destinationType: WithdrawalDestinationType, collaboratorId: string | null, workSiteId: string | null): EncodedDestination {
@@ -135,6 +174,8 @@ export function NewWithdrawalPage() {
   const [items, setItems] = useState<WithdrawalItemEntry[]>([])
   const [showItemSelector, setShowItemSelector] = useState(false)
   const [showKitSelector, setShowKitSelector] = useState(false)
+  const [compositionWarnings, setCompositionWarnings] = useState<WithdrawalCompositionWarning[]>([])
+  const [showCompositionConfirm, setShowCompositionConfirm] = useState(false)
 
   const [notes, setNotes] = useState<string>('')
   const [photoUrl, setPhotoUrl] = useState<string | null>(null)
@@ -284,6 +325,7 @@ export function NewWithdrawalPage() {
     if (selectedEntryKeys.has(makeEntryDuplicateKey(entry))) return
 
     setItems((prev) => [...prev, entry])
+    setCompositionWarnings([])
     setStepErrors((prev) => {
       const next = { ...prev }
       delete next.items
@@ -309,6 +351,7 @@ export function NewWithdrawalPage() {
     }
 
     setItems((prev) => [...prev, ...newItems])
+    setCompositionWarnings([])
     setStepErrors((prev) => {
       const next = { ...prev }
       delete next.items
@@ -318,6 +361,7 @@ export function NewWithdrawalPage() {
   }
 
   const handleUpdateQuantity = (entryId: string, quantity: number) => {
+    setCompositionWarnings([])
     setItems((prev) =>
       prev.map((item) =>
         item.entry_id === entryId ? { ...item, quantity } : item,
@@ -327,6 +371,7 @@ export function NewWithdrawalPage() {
 
   const handleUpdateDestination = (entryId: string, encodedDestination: string) => {
     const nextDestination = decodeDestination(encodedDestination)
+    setCompositionWarnings([])
 
     setItems((prev) => {
       const current = prev.find((item) => item.entry_id === entryId)
@@ -358,6 +403,7 @@ export function NewWithdrawalPage() {
   }
 
   const handleRemoveItem = (entryId: string) => {
+    setCompositionWarnings([])
     setItems((prev) => prev.filter((item) => item.entry_id !== entryId))
   }
 
@@ -468,7 +514,7 @@ export function NewWithdrawalPage() {
     const selectedItemIds = Array.from(new Set(items.map((item) => item.stock_item_id)))
     const { data, error } = await supabase
       .from('stock_items')
-      .select('id, current_quantity, is_active')
+      .select('id, current_quantity, is_active, quantity_new, quantity_used, quantity_damaged')
       .in('id', selectedItemIds)
 
     if (error) {
@@ -476,7 +522,7 @@ export function NewWithdrawalPage() {
     }
 
     const stockMap = new Map(
-      ((data ?? []) as Pick<StockItemRow, 'id' | 'current_quantity' | 'is_active'>[]).map((row) => [row.id, row]),
+      ((data ?? []) as Pick<StockItemRow, 'id' | 'current_quantity' | 'is_active' | 'quantity_new' | 'quantity_used' | 'quantity_damaged'>[]).map((row) => [row.id, row]),
     )
 
     const nextItems = items.map((item) => {
@@ -489,6 +535,9 @@ export function NewWithdrawalPage() {
           ...item.stock_item,
           current_quantity: latest.current_quantity,
           is_active: latest.is_active,
+          quantity_new: latest.quantity_new,
+          quantity_used: latest.quantity_used,
+          quantity_damaged: latest.quantity_damaged,
         },
       }
     })
@@ -627,7 +676,7 @@ export function NewWithdrawalPage() {
     }
   }
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (options?: { skipCompositionConfirmation?: boolean }) => {
     if (!profile) return
 
     setSubmitting(true)
@@ -641,6 +690,35 @@ export function NewWithdrawalPage() {
         setSubmitError(
           `O estoque de "${overStock.stock_item.name}" mudou durante a retirada. Disponivel agora: ${overStock.stock_item.current_quantity} ${overStock.stock_item.unit}.`,
         )
+        setCurrentStep(1)
+        setSubmitting(false)
+        return
+      }
+
+      const nextCompositions = refreshedItems
+        .map((item): WithdrawalCompositionWarning => ({
+          entryId: item.entry_id,
+          itemName: item.stock_item.name,
+          unit: item.unit,
+          quantity: item.quantity,
+          composition: buildWithdrawalComposition(item.stock_item, item.quantity),
+        }))
+      const invalidComposition = nextCompositions.find((warning) => warning.composition.missingQty > 0)
+
+      if (invalidComposition) {
+        setSubmitError(
+          `O estoque por estado de "${invalidComposition.itemName}" nao fecha com a quantidade pedida. Faltam ${invalidComposition.composition.missingQty} ${invalidComposition.unit}.`,
+        )
+        setCurrentStep(1)
+        setSubmitting(false)
+        return
+      }
+
+      const nextCompositionWarnings = nextCompositions.filter((warning) => compositionNeedsConfirmation(warning.composition))
+
+      if (nextCompositionWarnings.length > 0 && !options?.skipCompositionConfirmation) {
+        setCompositionWarnings(nextCompositionWarnings)
+        setShowCompositionConfirm(true)
         setCurrentStep(1)
         setSubmitting(false)
         return
@@ -954,10 +1032,28 @@ export function NewWithdrawalPage() {
                   const entryKey = item.entry_id
                   const isOverStock = item.quantity > item.stock_item.current_quantity
                   const isLowStock = item.stock_item.minimum_quantity > 0 && item.stock_item.current_quantity <= item.stock_item.minimum_quantity
+                  const composition = buildWithdrawalComposition(item.stock_item, item.quantity)
+                  const willUseRestrictedStock = compositionNeedsConfirmation(composition)
 
                   return (
                     <tr key={entryKey} className="border-b border-gray-800">
-                      <td className="px-3 py-2 text-sm text-white">{item.stock_item.name}</td>
+                      <td className="px-3 py-2 text-sm text-white">
+                        <div className="flex flex-col gap-2">
+                          <span>{item.stock_item.name}</span>
+                          <div className="flex flex-wrap gap-1.5">
+                            <Badge variant="success" size="sm">Novo {numericQuantity(item.stock_item.quantity_new)}</Badge>
+                            <Badge variant="info" size="sm">Usado {numericQuantity(item.stock_item.quantity_used)}</Badge>
+                            <Badge variant="danger" size="sm">Avaria {numericQuantity(item.stock_item.quantity_damaged)}</Badge>
+                          </div>
+                          {willUseRestrictedStock && (
+                            <p className="text-xs text-amber-300">
+                              Esta retirada vai usar {composition.usedQty > 0 ? `${composition.usedQty} usado(s)` : ''}
+                              {composition.usedQty > 0 && composition.damagedQty > 0 ? ' e ' : ''}
+                              {composition.damagedQty > 0 ? `${composition.damagedQty} com avaria` : ''}.
+                            </p>
+                          )}
+                        </div>
+                      </td>
                       <td className="px-3 py-2 text-sm text-gray-400">
                         <select
                           value={encodeDestination(item.destination_type, item.collaborator_id, item.work_site_id)}
@@ -1054,6 +1150,75 @@ export function NewWithdrawalPage() {
         size="lg"
       >
         <KitSelector onSelect={handleAddKit} />
+      </Modal>
+
+      <Modal
+        isOpen={showCompositionConfirm}
+        onClose={() => {
+          setShowCompositionConfirm(false)
+          setSubmitting(false)
+        }}
+        title="Confirmar composicao da retirada"
+        size="lg"
+      >
+        <div className="flex flex-col gap-4">
+          <Alert variant="warning" title="A retirada usara itens que nao sao novos">
+            O sistema sempre prioriza Novo, depois Usado e por ultimo Com avaria. Confirme abaixo antes de continuar.
+          </Alert>
+
+          <div className="space-y-3">
+            {compositionWarnings.map((warning) => {
+              const onlyDamaged = warning.composition.newQty === 0
+                && warning.composition.usedQty === 0
+                && warning.composition.damagedQty > 0
+
+              return (
+                <Card key={warning.entryId} variant="bordered" className="border-white/8 bg-white/3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <p className="font-semibold text-white">{warning.itemName}</p>
+                      <p className="mt-1 text-sm text-gray-400">
+                        Solicitado: {warning.quantity} {warning.unit}
+                      </p>
+                    </div>
+                    {onlyDamaged && (
+                      <Badge variant="danger" size="md">
+                        Somente avariado
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    <Badge variant="success" size="md">Novo {warning.composition.newQty}</Badge>
+                    <Badge variant="info" size="md">Usado {warning.composition.usedQty}</Badge>
+                    <Badge variant="danger" size="md">Com avaria {warning.composition.damagedQty}</Badge>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+            <Button
+              variant="secondary"
+              onClick={() => {
+                setShowCompositionConfirm(false)
+                setSubmitting(false)
+              }}
+            >
+              Revisar itens
+            </Button>
+            <Button
+              variant="primary"
+              isLoading={submitting}
+              onClick={() => {
+                setShowCompositionConfirm(false)
+                void handleSubmit({ skipCompositionConfirmation: true })
+              }}
+            >
+              Prosseguir com retirada
+            </Button>
+          </div>
+        </div>
       </Modal>
     </div>
   )
@@ -1325,7 +1490,7 @@ export function NewWithdrawalPage() {
           size="lg"
           isLoading={submitting}
           disabled={uploadingPhoto || signatureDocument.uploading}
-          onClick={handleSubmit}
+          onClick={() => void handleSubmit()}
           leftIcon={<ClipboardIcon size={20} />}
         >
           Confirmar Retirada

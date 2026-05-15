@@ -149,6 +149,28 @@ function stockConditionLabel(condition: 'new' | 'used' | 'damaged'): string {
   return 'Com avaria'
 }
 
+function approvedStateLabel(row: ReturnRequestWithDetails): string {
+  if (row.approved_quantity > 0 && row.approved_condition) {
+    return stockConditionLabel(row.approved_condition)
+  }
+
+  if (row.held_quantity > 0 || row.status === 'held') {
+    return 'Mantido em triagem'
+  }
+
+  return 'Ainda nao definido'
+}
+
+function approvedByLabel(row: ReturnRequestWithDetails): string {
+  if (!row.approved_by_profile?.full_name) {
+    return row.approved_quantity > 0 || row.held_quantity > 0 || row.status !== 'pending'
+      ? 'Autorizador nao registrado'
+      : 'Ainda nao aprovado'
+  }
+
+  return `${row.approved_by_profile.full_name}${row.approved_at ? ` em ${formatDateTime(row.approved_at)}` : ''}`
+}
+
 function resolvedApprovedCondition(row: ReturnRequestWithDetails): 'new' | 'used' | 'damaged' | null {
   return row.approved_condition ?? null
 }
@@ -953,20 +975,16 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             </div>
           </div>
 
-          <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <DetailCard label="Origem" value={sourceLabel(selectedRequest)} />
             <DetailCard label="Tipo de origem" value={selectedRequest.source_type === 'collaborator' ? 'Colaborador' : 'Obra'} />
             <DetailCard label="Estado ao chegar" value={conditionLabel(selectedRequest.item_condition)} />
-            <DetailCard label="Estado aprovado" value={selectedRequest.approved_condition ? stockConditionLabel(selectedRequest.approved_condition) : 'Ainda nao definido'} />
+            <DetailCard label="Estado aprovado" value={approvedStateLabel(selectedRequest)} />
             <DetailCard label="Registrado em" value={formatDateTime(selectedRequest.created_at)} />
             <DetailCard label="Distribuicao" value={`Volta ${selectedRequest.approved_quantity} • Mantido ${selectedRequest.held_quantity} • Total ${selectedRequest.quantity}`} />
             <DetailCard
               label="Aprovado por"
-              value={
-                selectedRequest.approved_by_profile?.full_name
-                  ? `${selectedRequest.approved_by_profile.full_name}${selectedRequest.approved_at ? ` em ${formatDateTime(selectedRequest.approved_at)}` : ''}`
-                  : 'Ainda nao aprovado'
-              }
+              value={approvedByLabel(selectedRequest)}
             />
           </div>
 
@@ -1740,9 +1758,9 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
 
 function DetailCard({ label, value }: { label: string; value: string }) {
   return (
-    <Card variant="bordered" className="border-white/8 bg-white/3">
-      <p className="text-xs uppercase tracking-[0.22em] text-gray-500">{label}</p>
-      <p className="mt-2 text-sm text-white">{value}</p>
+    <Card variant="bordered" className="border-white/8 bg-white/3 px-3 py-3">
+      <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">{label}</p>
+      <p className="mt-1.5 text-sm leading-snug text-white">{value}</p>
     </Card>
   )
 }

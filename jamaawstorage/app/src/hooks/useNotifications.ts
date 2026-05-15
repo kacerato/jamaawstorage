@@ -2,7 +2,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../lib/supabase'
 import type { Tables } from '../types/database'
 
-type NotificationType = 'stock_critical' | 'stock_low' | 'withdrawal_pending' | 'item_added'
+type NotificationType =
+  | 'stock_critical'
+  | 'stock_low'
+  | 'stock_return_pending'
+  | 'stock_return_held'
+  | 'withdrawal_pending'
+  | 'withdrawal_completed'
+  | 'item_added'
 
 export interface NotificationItem {
   id: string
@@ -12,13 +19,17 @@ export interface NotificationItem {
   createdAt: string
   linkPath: string
   itemIconKey?: string | null
+  isUnread?: boolean
 }
 
 const priorityOrder: Record<NotificationType, number> = {
   stock_critical: 0,
-  withdrawal_pending: 1,
-  stock_low: 2,
-  item_added: 3,
+  stock_return_pending: 1,
+  stock_return_held: 2,
+  withdrawal_pending: 3,
+  stock_low: 4,
+  withdrawal_completed: 5,
+  item_added: 6,
 }
 
 const LAST_SEEN_STORAGE_KEY = 'jamaaw-notifications-last-seen-at'
@@ -26,8 +37,22 @@ const LAST_SEEN_STORAGE_KEY = 'jamaaw-notifications-last-seen-at'
 type PendingWithdrawalRow = {
   id: string
   code: string | null
+  status: 'pending' | 'approved' | 'rejected' | 'completed'
   created_at: string
+  updated_at: string
   requested_by_person: Pick<Tables<'people'>, 'full_name'> | null
+}
+
+type ReturnNotificationRow = {
+  id: string
+  quantity: number
+  approved_quantity: number
+  held_quantity: number
+  item_condition: 'used' | 'damaged'
+  status: 'pending' | 'held' | 'approved'
+  created_at: string
+  updated_at: string
+  stock_item: Pick<Tables<'stock_items'>, 'name' | 'code' | 'unit' | 'svg_icon_key'> | null
 }
 
 type RecentItemRow = Pick<Tables<'stock_items'>, 'id' | 'name' | 'code' | 'created_at' | 'svg_icon_key'>
@@ -53,28 +78,46 @@ export function useNotifications() {
     setLoading(true)
 
     try {
-      const [lowStockResult, pendingWithdrawalsResult, recentItemsResult] = await Promise.all([
+      const recentThreshold = new Date(Date.now() - 48 * 3600 * 1000).toISOString()
+      const [lowStockResult, returnRequestsResult, pendingWithdrawalsResult, recentWithdrawalsResult, recentItemsResult] = await Promise.all([
         supabase.rpc('check_low_stock'),
         supabase
+          .from('stock_return_requests')
+          .select('id, quantity, approved_quantity, held_quantity, item_condition, status, created_at, updated_at, stock_item:stock_items(name, code, unit, svg_icon_key)')
+          .in('status', ['pending', 'held'])
+          .order('updated_at', { ascending: false })
+          .limit(8),
+        supabase
           .from('withdrawals')
-          .select('id, code, created_at, requested_by_person:people!withdrawals_requested_by_fkey(full_name)')
+          .select('id, code, status, created_at, updated_at, requested_by_person:people!withdrawals_requested_by_fkey(full_name)')
           .eq('status', 'pending')
           .order('created_at', { ascending: false })
           .limit(5),
         supabase
+          .from('withdrawals')
+          .select('id, code, status, created_at, updated_at, requested_by_person:people!withdrawals_requested_by_fkey(full_name)')
+          .eq('status', 'completed')
+          .gte('created_at', recentThreshold)
+          .order('created_at', { ascending: false })
+          .limit(4),
+        supabase
           .from('stock_items')
           .select('id, name, code, created_at, svg_icon_key')
-          .gte('created_at', new Date(Date.now() - 48 * 3600 * 1000).toISOString())
+          .gte('created_at', recentThreshold)
           .order('created_at', { ascending: false })
           .limit(3),
       ])
 
       if (lowStockResult.error) throw lowStockResult.error
+      if (returnRequestsResult.error) throw returnRequestsResult.error
       if (pendingWithdrawalsResult.error) throw pendingWithdrawalsResult.error
+      if (recentWithdrawalsResult.error) throw recentWithdrawalsResult.error
       if (recentItemsResult.error) throw recentItemsResult.error
 
       const lowStockData = (lowStockResult.data ?? []) as Tables<'stock_items'>[]
+      const returnRequests = (returnRequestsResult.data ?? []) as ReturnNotificationRow[]
       const pendingWithdrawals = (pendingWithdrawalsResult.data ?? []) as PendingWithdrawalRow[]
+      const recentWithdrawals = (recentWithdrawalsResult.data ?? []) as PendingWithdrawalRow[]
       const recentItems = (recentItemsResult.data ?? []) as RecentItemRow[]
 
       setLowStockItems(lowStockData)
@@ -92,6 +135,24 @@ export function useNotifications() {
           linkPath: '/stock',
           itemIconKey: item.svg_icon_key,
         })),
+        ...returnRequests.map((request) => {
+          const remaining = Math.max(request.quantity - request.approved_quantity - request.held_quantity, 0)
+          const held = request.held_quantity
+          const itemName = request.stock_item?.name ?? 'Item devolvido'
+          const itemCode = request.stock_item?.code ? ` (${request.stock_item.code})` : ''
+          const unit = request.stock_item?.unit ?? 'un'
+          return {
+            id: `stock-return-${request.status}-${request.id}`,
+            type: request.status === 'held' ? 'stock_return_held' as const : 'stock_return_pending' as const,
+            title: request.status === 'held' ? 'Item em triagem' : 'Devolucao pendente',
+            description: request.status === 'held'
+              ? `${itemName}${itemCode}: ${held} ${unit} em triagem como ${request.item_condition === 'damaged' ? 'avaria' : 'usado'}`
+              : `${itemName}${itemCode}: ${remaining} ${unit} aguardando decisao`,
+            createdAt: request.updated_at,
+            linkPath: '/stock?tab=returns',
+            itemIconKey: request.stock_item?.svg_icon_key,
+          }
+        }),
         ...pendingWithdrawals.map((withdrawal) => ({
           id: `withdrawal-pending-${withdrawal.id}`,
           type: 'withdrawal_pending' as const,
@@ -99,6 +160,14 @@ export function useNotifications() {
           description: `Retirada pendente - ${withdrawal.requested_by_person?.full_name ?? 'N/A'}`,
           createdAt: withdrawal.created_at,
           linkPath: '/withdrawals',
+        })),
+        ...recentWithdrawals.map((withdrawal) => ({
+          id: `withdrawal-completed-${withdrawal.id}`,
+          type: 'withdrawal_completed' as const,
+          title: withdrawal.code ?? 'Retirada concluida',
+          description: `Retirada concluida - ${withdrawal.requested_by_person?.full_name ?? 'N/A'}`,
+          createdAt: withdrawal.created_at,
+          linkPath: `/withdrawals/${withdrawal.id}`,
         })),
         ...recentItems.map((item) => ({
           id: `item-added-${item.id}`,
@@ -117,7 +186,7 @@ export function useNotifications() {
         return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
       })
 
-      setNotifications(items)
+      setNotifications(items.slice(0, 20))
     } catch (error) {
       console.error('Error fetching notifications:', error)
       setNotifications([])
@@ -142,6 +211,15 @@ export function useNotifications() {
     [notifications, lastSeenAt]
   )
 
+  const visibleNotifications = useMemo(
+    () =>
+      notifications.map((item) => ({
+        ...item,
+        isUnread: !lastSeenAt || new Date(item.createdAt).getTime() > new Date(lastSeenAt).getTime(),
+      })),
+    [notifications, lastSeenAt]
+  )
+
   useEffect(() => {
     void refetch()
   }, [refetch])
@@ -155,6 +233,12 @@ export function useNotifications() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawals' }, () => {
         void refetch()
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawal_items' }, () => {
+        void refetch()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_return_requests' }, () => {
+        void refetch()
+      })
       .subscribe()
 
     return () => {
@@ -162,5 +246,5 @@ export function useNotifications() {
     }
   }, [refetch])
 
-  return { notifications, lowStockItems, loading, unreadCount, refetch, markAllAsRead }
+  return { notifications: visibleNotifications, lowStockItems, loading, unreadCount, refetch, markAllAsRead }
 }

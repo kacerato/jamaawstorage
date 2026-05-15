@@ -19,6 +19,10 @@ const itemSelectorCache: {
   items: [],
 }
 
+function quantity(value: number | null | undefined): number {
+  return Math.max(0, Number(value ?? 0))
+}
+
 export function ItemSelector({ onSelect, selectedIds }: ItemSelectorProps) {
   const [search, setSearch] = useState('')
   const debouncedSearch = useDebouncedValue(search, 180)
@@ -128,6 +132,11 @@ export function ItemSelector({ onSelect, selectedIds }: ItemSelectorProps) {
                 <p className="truncate text-xs text-gray-400">
                   {item.category ?? 'Sem categoria'}
                 </p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Badge variant="success" size="sm">Novo {quantity(item.quantity_new)}</Badge>
+                  <Badge variant="info" size="sm">Usado {quantity(item.quantity_used)}</Badge>
+                  <Badge variant="danger" size="sm">Avaria {quantity(item.quantity_damaged)}</Badge>
+                </div>
               </div>
               <div className="flex flex-shrink-0 items-center gap-2">
                 {isLowStock && (

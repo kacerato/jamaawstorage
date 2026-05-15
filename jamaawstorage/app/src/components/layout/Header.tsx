@@ -6,7 +6,7 @@ import { Badge } from '../ui'
 import { ProfileModal } from './ProfileModal'
 import type { NotificationItem } from '../../hooks/useNotifications'
 import { ItemVisual } from '../items/ItemVisual'
-import { AlertIcon, ClipboardIcon } from '../icons'
+import { AlertIcon, ClipboardIcon, WarehouseIcon } from '../icons'
 
 interface RouteTitle {
   path: string
@@ -78,8 +78,14 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
         return <AlertIcon size={14} className="text-red-200" />
       case 'stock_low':
         return <AlertIcon size={14} className="text-orange-100" />
+      case 'stock_return_pending':
+        return <WarehouseIcon size={14} className="text-sky-100" />
+      case 'stock_return_held':
+        return <ClipboardIcon size={14} className="text-amber-100" />
       case 'withdrawal_pending':
         return <ClipboardIcon size={14} className="text-amber-100" />
+      case 'withdrawal_completed':
+        return <ClipboardIcon size={14} className="text-emerald-100" />
       default:
         return null
     }
@@ -91,8 +97,14 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
         return 'Critico'
       case 'stock_low':
         return 'Alerta'
+      case 'stock_return_pending':
+        return 'Devolucao'
+      case 'stock_return_held':
+        return 'Triagem'
       case 'withdrawal_pending':
         return 'Pendente'
+      case 'withdrawal_completed':
+        return 'Retirada'
       case 'item_added':
         return 'Novo'
     }
@@ -104,8 +116,14 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
         return 'from-red-500/30 to-red-500/5 border-red-400/20 text-red-200'
       case 'stock_low':
         return 'from-orange-500/30 to-orange-500/5 border-orange-400/20 text-orange-100'
+      case 'stock_return_pending':
+        return 'from-sky-500/30 to-sky-500/5 border-sky-400/20 text-sky-100'
+      case 'stock_return_held':
+        return 'from-amber-500/30 to-amber-500/5 border-amber-400/20 text-amber-100'
       case 'withdrawal_pending':
         return 'from-amber-500/30 to-amber-500/5 border-amber-400/20 text-amber-100'
+      case 'withdrawal_completed':
+        return 'from-emerald-500/30 to-emerald-500/5 border-emerald-400/20 text-emerald-100'
       case 'item_added':
         return 'from-emerald-500/30 to-emerald-500/5 border-emerald-400/20 text-emerald-100'
     }
@@ -172,7 +190,9 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
                     <p className="mt-1.5 text-[13px] font-semibold text-white">{notification.title}</p>
                     <p className="mt-0.5 text-[11px] leading-4 text-white/72">{notification.description}</p>
                   </div>
-                  <span className="mt-1 h-2 w-2 rounded-full bg-white/75" />
+                  {notification.isUnread ? (
+                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-white/75" />
+                  ) : null}
                 </div>
               </button>
             </li>
