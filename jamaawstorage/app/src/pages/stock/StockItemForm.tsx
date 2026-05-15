@@ -560,39 +560,47 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
           </div>
 
           {isEditing && adjustmentMode === 'add' && (
-            <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/8 bg-white/4 p-4 sm:gap-4">
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-white">Editar composicao manualmente</p>
-                <p className="mt-1 text-xs leading-5 text-gray-500">
+            <button
+              type="button"
+              onClick={() => {
+                const nextManualMode = !manualCompositionMode
+                setManualCompositionMode(nextManualMode)
+                if (nextManualMode) {
+                  handleChange('stock_adjustment', 0)
+                } else {
+                  resetCompositionToSavedItem()
+                }
+              }}
+              className={`mt-4 flex w-full flex-col gap-3 rounded-2xl border p-4 text-left transition-all duration-200 sm:flex-row sm:items-center sm:justify-between ${
+                manualCompositionMode
+                  ? 'border-orange-400/35 bg-orange-500/10 shadow-[0_16px_38px_rgba(249,115,22,0.10)]'
+                  : 'border-white/8 bg-white/[0.035] hover:border-white/14 hover:bg-white/[0.055]'
+              }`}
+              role="switch"
+              aria-checked={manualCompositionMode}
+              aria-label="Editar composicao manualmente"
+            >
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-white">Editar composicao manualmente</span>
+                <span className="mt-1 block text-xs leading-5 text-gray-500">
                   Ao ligar, a quantidade do ajuste de entrada fica bloqueada.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const nextManualMode = !manualCompositionMode
-                  setManualCompositionMode(nextManualMode)
-                  if (nextManualMode) {
-                    handleChange('stock_adjustment', 0)
-                  } else {
-                    resetCompositionToSavedItem()
-                  }
-                }}
-                className={`relative h-7 w-12 flex-shrink-0 rounded-full border transition-all duration-300 ease-in-out ${
+                </span>
+              </span>
+              <span
+                className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-all duration-200 ${
                   manualCompositionMode
-                    ? 'border-orange-400/50 bg-orange-500/30 shadow-[0_0_10px_rgba(249,115,22,0.25)]'
-                    : 'border-white/10 bg-black/50'
+                    ? 'border-orange-300/60 bg-orange-500 shadow-[0_0_0_4px_rgba(249,115,22,0.12)]'
+                    : 'border-white/10 bg-black/45'
                 }`}
-                aria-pressed={manualCompositionMode}
-                aria-label="Editar composicao manualmente"
+                aria-hidden="true"
               >
                 <span
-                  className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out ${
-                    manualCompositionMode ? 'translate-x-[20px]' : 'translate-x-[2px]'
+                  className={`h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                    manualCompositionMode ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
-              </button>
-            </div>
+              </span>
+            </button>
           )}
 
           <div className="mt-5 grid gap-3 md:grid-cols-3">
