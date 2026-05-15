@@ -2,7 +2,7 @@ import { useRef, useState, type ChangeEvent, type FormEvent } from 'react'
 import type { Tables, TablesInsert, TablesUpdate } from '../../types/database'
 import { DEFAULT_IMAGE_UPLOAD_OPTIONS, imageFileToDataUrl } from '../../lib/utils'
 import { Alert, Button, Input, Modal, Select } from '../../components/ui'
-import { AlertIcon, ClipboardIcon, PackageIcon, WarehouseIcon } from '../../components/icons'
+import { AlertIcon, ClipboardIcon, PackageIcon, WarehouseIcon, NewConditionIcon, UsedConditionIcon, DamagedConditionIcon } from '../../components/icons'
 import { ItemVisual, itemLabelForKey, normalizeItemIconKey } from '../../components/items/ItemVisual'
 
 type StockItemRow = Tables<'stock_items'>
@@ -528,7 +528,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 value: formData.quantity_new,
                 accent: 'border-emerald-500/18 bg-emerald-500/10',
                 iconWrap: 'border-emerald-400/15 bg-emerald-500/12',
-                icon: <PackageIcon size={20} className="text-emerald-200" />,
+                icon: <NewConditionIcon size={20} className="text-emerald-200" />,
                 helper: 'Itens prontos como novos.',
               },
               {
@@ -537,7 +537,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 value: formData.quantity_used,
                 accent: 'border-sky-500/18 bg-sky-500/10',
                 iconWrap: 'border-sky-400/15 bg-sky-500/12',
-                icon: <ClipboardIcon size={20} className="text-sky-200" />,
+                icon: <UsedConditionIcon size={20} className="text-sky-200" />,
                 helper: 'Itens liberados para uso normal.',
               },
               {
@@ -546,7 +546,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 value: formData.quantity_damaged,
                 accent: 'border-red-500/18 bg-red-500/10',
                 iconWrap: 'border-red-400/15 bg-red-500/12',
-                icon: <AlertIcon size={20} className="text-red-200" />,
+                icon: <DamagedConditionIcon size={20} className="text-red-200" />,
                 helper: 'Itens separados para avaria.',
               },
             ] as const).map((section) => (

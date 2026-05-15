@@ -29,9 +29,10 @@ interface StockItemWithLowStock extends StockItemRow {
   is_low_stock: boolean
 }
 
-interface WithdrawalWithDetails {
+interface MovementWithDetails {
   id: string
   code: string | null
+  type: 'withdrawal' | 'return'
   status: string
   created_at: string
   requested_by_person: { full_name: string } | null
@@ -138,7 +139,7 @@ export function StockPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
 
-  const [itemWithdrawals, setItemWithdrawals] = useState<WithdrawalWithDetails[]>([])
+  const [itemWithdrawals, setItemWithdrawals] = useState<MovementWithDetails[]>([])
   const [detailLoading, setDetailLoading] = useState(false)
 
   const fetchItems = useCallback(async (page = 0) => {
@@ -214,23 +215,31 @@ export function StockPage() {
   const fetchItemDetails = useCallback(async (itemId: string) => {
     setDetailLoading(true)
     try {
-      const { data: withdrawalItemsData } = await supabase
-        .from('withdrawal_items')
-        .select(`
-          quantity,
-          withdrawal:withdrawals(
-            id,
-            code,
-            status,
-            created_at,
-            requested_by
-          )
-        `)
-        .eq('stock_item_id', itemId)
-        .order('created_at', { ascending: false })
-        .limit(10)
+      const [withdrawalsRes, returnsRes] = await Promise.all([
+        supabase
+          .from('withdrawal_items')
+          .select(`
+            quantity,
+            withdrawal:withdrawals(
+              id,
+              code,
+              status,
+              created_at,
+              requested_by
+            )
+          `)
+          .eq('stock_item_id', itemId)
+          .order('created_at', { ascending: false })
+          .limit(10),
+        supabase
+          .from('stock_return_requests')
+          .select('id, quantity, status, created_at, source_person_id')
+          .eq('stock_item_id', itemId)
+          .order('created_at', { ascending: false })
+          .limit(10)
+      ])
 
-      const rawWiData = (withdrawalItemsData as {
+      const rawWiData = (withdrawalsRes.data as {
         quantity: number
         withdrawal: {
           id: string
@@ -241,9 +250,18 @@ export function StockPage() {
         } | null
       }[]) ?? []
 
-      const requestedByIds = rawWiData
-        .map((entry) => entry.withdrawal?.requested_by)
-        .filter((value): value is string => Boolean(value))
+      const rawRetData = (returnsRes.data as {
+        id: string
+        quantity: number
+        status: string
+        created_at: string
+        source_person_id: string | null
+      }[]) ?? []
+
+      const requestedByIds = [
+        ...rawWiData.map((entry) => entry.withdrawal?.requested_by),
+        ...rawRetData.map((entry) => entry.source_person_id)
+      ].filter((value): value is string => Boolean(value))
 
       let peopleMap: Record<string, { full_name: string }> = {}
       if (requestedByIds.length > 0) {
@@ -257,20 +275,40 @@ export function StockPage() {
         )
       }
 
-      const typedWithdrawals: WithdrawalWithDetails[] = rawWiData
-        .filter((entry): entry is typeof entry & { withdrawal: NonNullable<typeof entry.withdrawal> } => Boolean(entry.withdrawal))
-        .map((entry) => ({
-          id: entry.withdrawal.id,
-          code: entry.withdrawal.code,
-          status: entry.withdrawal.status,
-          created_at: entry.withdrawal.created_at,
-          requested_by_person: entry.withdrawal.requested_by
-            ? peopleMap[entry.withdrawal.requested_by] ?? null
+      const typedMovements: MovementWithDetails[] = [
+        ...rawWiData
+          .filter((entry): entry is typeof entry & { withdrawal: NonNullable<typeof entry.withdrawal> } => Boolean(entry.withdrawal)),
+        ...rawRetData
+      ].map((entry: any) => {
+        if ('withdrawal' in entry) {
+          return {
+            id: entry.withdrawal.id,
+            code: entry.withdrawal.code,
+            type: 'withdrawal' as const,
+            status: entry.withdrawal.status,
+            created_at: entry.withdrawal.created_at,
+            requested_by_person: entry.withdrawal.requested_by
+              ? peopleMap[entry.withdrawal.requested_by] ?? null
+              : null,
+            quantity: entry.quantity,
+          }
+        }
+        return {
+          id: entry.id,
+          code: null,
+          type: 'return' as const,
+          status: entry.status,
+          created_at: entry.created_at,
+          requested_by_person: entry.source_person_id
+            ? peopleMap[entry.source_person_id] ?? null
             : null,
           quantity: entry.quantity,
-        }))
+        }
+      })
 
-      setItemWithdrawals(typedWithdrawals)
+      typedMovements.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+      setItemWithdrawals(typedMovements.slice(0, 10))
     } catch (err) {
       console.error('Error fetching item details:', err)
     } finally {
@@ -876,7 +914,7 @@ export function StockPage() {
 
               <div className="rounded-2xl border border-white/8 bg-[#111215] p-5">
                 <h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-gray-400">
-                  Histórico de retiradas
+                  Histórico de movimentações
                 </h4>
 
                 {detailLoading ? (
@@ -884,14 +922,14 @@ export function StockPage() {
                     <Spinner size="md" />
                   </div>
                 ) : itemWithdrawals.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhuma retirada registrada para este item</p>
+                  <p className="text-sm text-gray-500">Nenhuma movimentação registrada para este item</p>
                 ) : (
                   <div className="overflow-hidden rounded-2xl border border-white/8">
                     <table className="w-full">
                       <thead>
                         <tr className="bg-white/5">
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Código</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Solicitante</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Código / Tipo</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Pessoa / Solicitante</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Qtd</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Status</th>
                         </tr>
@@ -899,7 +937,13 @@ export function StockPage() {
                       <tbody>
                         {itemWithdrawals.map((withdrawal) => (
                           <tr key={withdrawal.id} className="border-t border-white/8">
-                            <td className="px-3 py-2 text-sm text-white">{withdrawal.code ?? '-'}</td>
+                            <td className="px-3 py-2 text-sm text-white">
+                              {withdrawal.type === 'return' ? (
+                                <Badge variant="success" size="sm">Devolução</Badge>
+                              ) : (
+                                withdrawal.code ?? '-'
+                              )}
+                            </td>
                             <td className="px-3 py-2 text-sm text-gray-300">{withdrawal.requested_by_person?.full_name ?? '-'}</td>
                             <td className="px-3 py-2 text-sm text-gray-300">{withdrawal.quantity}</td>
                             <td className="px-3 py-2 text-sm">
@@ -958,3 +1002,4 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
     </div>
   )
 }
+

@@ -15,7 +15,7 @@ import {
   Select,
   Spinner,
 } from '../../components/ui'
-import { AlertIcon, BuildingIcon, CameraIcon, ClipboardIcon, PackageIcon, UserIcon, WarehouseIcon } from '../../components/icons'
+import { AlertIcon, BuildingIcon, CameraIcon, ClipboardIcon, PackageIcon, UserIcon, WarehouseIcon, NewConditionIcon, UsedConditionIcon, DamagedConditionIcon } from '../../components/icons'
 import { StockItemPicker } from '../../components/items/StockItemPicker'
 import { ItemVisual } from '../../components/items/ItemVisual'
 
@@ -1424,7 +1424,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                             value: 'new',
                             label: 'Voltar como novo',
                             description: 'Entra no estoque como item novo.',
-                            icon: <PackageIcon size={18} className="text-emerald-200" />,
+                            icon: <NewConditionIcon size={18} className="text-emerald-200" />,
                             active: safeApproveQuantity === 1 && processForm.approved_condition === 'new',
                             classes: 'border-emerald-400/30 bg-emerald-500/10',
                           },
@@ -1432,7 +1432,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                             value: 'used',
                             label: 'Voltar como usado',
                             description: 'Entra no estoque como item usado.',
-                            icon: <WarehouseIcon size={18} className="text-sky-200" />,
+                            icon: <UsedConditionIcon size={18} className="text-sky-200" />,
                             active: safeApproveQuantity === 1 && processForm.approved_condition === 'used',
                             classes: 'border-sky-400/30 bg-sky-500/10',
                           },
@@ -1440,7 +1440,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                             value: 'damaged',
                             label: 'Voltar com avaria',
                             description: 'Entra no estoque separado como avaria.',
-                            icon: <AlertIcon size={18} className="text-red-200" />,
+                            icon: <DamagedConditionIcon size={18} className="text-red-200" />,
                             active: safeApproveQuantity === 1 && processForm.approved_condition === 'damaged',
                             classes: 'border-red-400/30 bg-red-500/10',
                           },
@@ -1497,21 +1497,21 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                             value: 'new',
                             label: 'Novo',
                             description: 'Para itens revisados e prontos como novos.',
-                            icon: <PackageIcon size={18} className="text-emerald-200" />,
+                            icon: <NewConditionIcon size={18} className="text-emerald-200" />,
                             classes: 'border-emerald-400/30 bg-emerald-500/10',
                           },
                           {
                             value: 'used',
                             label: 'Usado',
                             description: 'Para itens liberados para uso normal.',
-                            icon: <WarehouseIcon size={18} className="text-sky-200" />,
+                            icon: <UsedConditionIcon size={18} className="text-sky-200" />,
                             classes: 'border-sky-400/30 bg-sky-500/10',
                           },
                           {
                             value: 'damaged',
                             label: 'Com avaria',
                             description: 'Para itens devolvidos ao estoque de avaria.',
-                            icon: <AlertIcon size={18} className="text-red-200" />,
+                            icon: <DamagedConditionIcon size={18} className="text-red-200" />,
                             classes: 'border-red-400/30 bg-red-500/10',
                           },
                         ] as const).map((option) => {
