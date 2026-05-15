@@ -560,8 +560,8 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
           </div>
 
           {isEditing && adjustmentMode === 'add' && (
-            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 p-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0 flex-1">
                 <p className="text-sm font-medium text-white">Editar composicao manualmente</p>
                 <p className="mt-1 text-xs leading-5 text-gray-500">
                   Ao ligar, a quantidade do ajuste de entrada fica bloqueada.
@@ -578,17 +578,17 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                     resetCompositionToSavedItem()
                   }
                 }}
-                className={`relative h-8 w-14 rounded-full border transition-colors ${
+                className={`relative h-7 w-12 shrink-0 rounded-full border transition-all duration-300 ease-in-out ${
                   manualCompositionMode
-                    ? 'border-orange-400/40 bg-orange-500/30'
-                    : 'border-white/10 bg-black/30'
+                    ? 'border-orange-400/50 bg-orange-500/30 shadow-[0_0_10px_rgba(249,115,22,0.25)]'
+                    : 'border-white/10 bg-black/50'
                 }`}
                 aria-pressed={manualCompositionMode}
                 aria-label="Editar composicao manualmente"
               >
                 <span
-                  className={`absolute top-1 h-6 w-6 rounded-full bg-white transition-transform ${
-                    manualCompositionMode ? 'translate-x-6' : 'translate-x-1'
+                  className={`absolute top-0.5 h-6 w-6 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out ${
+                    manualCompositionMode ? 'translate-x-[20px]' : 'translate-x-[2px]'
                   }`}
                 />
               </button>
