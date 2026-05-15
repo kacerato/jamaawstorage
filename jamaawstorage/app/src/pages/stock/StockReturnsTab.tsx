@@ -1078,20 +1078,41 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                           </div>
 
                           <div className="mt-3 rounded-2xl border border-white/8 bg-white/4 p-3">
-                            <div className="grid gap-3 md:grid-cols-[96px_minmax(0,1fr)]">
-                              <Input
-                                label="Qtd"
-                                type="number"
-                                min="1"
-                                value={draft.quantity}
-                                onChange={(event) => handleDraftQuantityChange(stockItem.id, event.target.value)}
-                              />
+                            <div className="grid gap-3">
+                              <div className="grid grid-cols-[minmax(92px,120px)_minmax(0,1fr)] gap-3">
+                                <Input
+                                  label="Qtd"
+                                  type="number"
+                                  min="1"
+                                  value={draft.quantity}
+                                  onChange={(event) => handleDraftQuantityChange(stockItem.id, event.target.value)}
+                                />
+
+                                <div className="flex min-w-0 items-end">
+                                  <Badge variant="default" size="sm" className="mb-1">
+                                    {stockItem.unit}
+                                  </Badge>
+                                </div>
+                              </div>
+
                               <div className="space-y-2">
-                                <p className="text-[11px] uppercase tracking-[0.2em] text-gray-500">Estado do item</p>
-                                <div className="grid grid-cols-2 gap-2">
+                                <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Estado do item</p>
+                                <div className="grid gap-2">
                                   {([
-                                    { value: 'used', label: 'Usado', hint: 'Voltou em condicao de uso.' },
-                                    { value: 'damaged', label: 'Com avaria', hint: 'Voltou precisando avaliacao.' },
+                                    {
+                                      value: 'used',
+                                      label: 'Usado',
+                                      icon: <UsedConditionIcon size={18} className="text-sky-200" />,
+                                      activeClass: 'border-sky-400/45 bg-sky-500/12 text-sky-100',
+                                      iconClass: 'border-sky-400/20 bg-sky-500/12',
+                                    },
+                                    {
+                                      value: 'damaged',
+                                      label: 'Com avaria',
+                                      icon: <DamagedConditionIcon size={18} className="text-red-200" />,
+                                      activeClass: 'border-red-400/45 bg-red-500/12 text-red-100',
+                                      iconClass: 'border-red-400/20 bg-red-500/12',
+                                    },
                                   ] as const).map((option) => {
                                     const isActive = draft.item_condition === option.value
                                     return (
@@ -1100,39 +1121,31 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                                         type="button"
                                         onClick={() => handleDraftConditionChange(stockItem.id, option.value)}
                                         className={cn(
-                                          'rounded-2xl border p-3 text-left transition-colors',
+                                          'flex min-h-[52px] w-full items-center gap-3 rounded-2xl border px-3 py-2.5 text-left text-sm font-medium transition-colors',
                                           isActive
-                                            ? option.value === 'used'
-                                              ? 'border-sky-400/40 bg-sky-500/12'
-                                              : 'border-red-400/35 bg-red-500/10'
-                                            : 'border-white/8 bg-black/20 hover:bg-white/6',
+                                            ? option.activeClass
+                                            : 'border-white/8 bg-black/20 text-gray-300 hover:bg-white/6 hover:text-white',
                                         )}
                                       >
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="text-sm font-medium text-white">{option.label}</span>
-                                          <Badge
-                                            variant={option.value === 'used' ? 'info' : 'danger'}
-                                            size="sm"
-                                            className="shrink-0"
-                                          >
-                                            {option.value === 'used' ? 'Uso' : 'Avaria'}
-                                          </Badge>
-                                        </div>
-                                        <p className="mt-1 text-xs text-gray-400">{option.hint}</p>
+                                        <span className={cn('flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border', option.iconClass)}>
+                                          {option.icon}
+                                        </span>
+                                        <span className="min-w-0 flex-1 leading-5">{option.label}</span>
+                                        <span
+                                          className={cn(
+                                            'h-2.5 w-2.5 shrink-0 rounded-full border',
+                                            isActive ? 'border-current bg-current' : 'border-white/20',
+                                          )}
+                                        />
                                       </button>
                                     )
                                   })}
                                 </div>
                               </div>
                             </div>
-                            <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
-                              <p className="text-xs text-gray-500">
-                                {conditionDescription(draft.item_condition)}
-                              </p>
-                              <Badge variant="default" size="sm">
-                                {stockItem.unit}
-                              </Badge>
-                            </div>
+                            <p className="mt-3 rounded-xl border border-white/8 bg-black/18 px-3 py-2 text-xs leading-5 text-gray-400">
+                              {conditionDescription(draft.item_condition)}
+                            </p>
                           </div>
                           <div className="mt-2 flex items-center justify-between gap-3">
                             <label className="cursor-pointer text-xs font-medium text-orange-300 hover:text-orange-200">
