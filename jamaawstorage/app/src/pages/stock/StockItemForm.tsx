@@ -128,6 +128,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
     item?.svg_icon_key?.startsWith('data:image/') ? item.svg_icon_key : null
   )
   const [adjustmentMode, setAdjustmentMode] = useState<'add' | 'remove'>('add')
+  const [manualCompositionMode, setManualCompositionMode] = useState(false)
   const [showIconLibrary, setShowIconLibrary] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
   const [errors, setErrors] = useState<FormErrors>({})
@@ -137,10 +138,11 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
     const next: FormErrors = {}
     if (!formData.name.trim()) next.name = 'Nome e obrigatorio'
     if (formData.current_quantity < 0) next.current_quantity = 'Deve ser maior ou igual a 0'
-    if (!isEditing && (formData.quantity_new < 0 || formData.quantity_used < 0 || formData.quantity_damaged < 0)) {
+    const canEditComposition = !isEditing || manualCompositionMode
+    if (canEditComposition && (formData.quantity_new < 0 || formData.quantity_used < 0 || formData.quantity_damaged < 0)) {
       next.quantity_breakdown = 'As quantidades por estado nao podem ser negativas'
     }
-    if (!isEditing && formData.quantity_new + formData.quantity_used + formData.quantity_damaged !== formData.current_quantity) {
+    if (canEditComposition && formData.quantity_new + formData.quantity_used + formData.quantity_damaged !== formData.current_quantity) {
       next.quantity_breakdown = 'A soma de novo, usado e avaria deve bater com a quantidade total'
     }
     if (formData.minimum_quantity < 0) next.minimum_quantity = 'Deve ser maior ou igual a 0'
@@ -171,6 +173,24 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
         current_quantity: next.quantity_new + next.quantity_used + next.quantity_damaged,
       }
     })
+    setErrors((prev) => {
+      const next = { ...prev }
+      delete next.quantity_breakdown
+      delete next.current_quantity
+      return next
+    })
+  }
+
+  const resetCompositionToSavedItem = () => {
+    if (!item) return
+
+    setFormData((prev) => ({
+      ...prev,
+      current_quantity: item.current_quantity,
+      quantity_new: item.quantity_new,
+      quantity_used: item.quantity_used,
+      quantity_damaged: item.quantity_damaged,
+    }))
     setErrors((prev) => {
       const next = { ...prev }
       delete next.quantity_breakdown
@@ -213,7 +233,7 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
     event.preventDefault()
     if (!validate()) return
 
-    const absoluteAdjustment = Math.abs(formData.stock_adjustment)
+    const absoluteAdjustment = manualCompositionMode ? 0 : Math.abs(formData.stock_adjustment)
     const signedAdjustment = isEditing
       ? adjustmentMode === 'remove'
         ? -absoluteAdjustment
@@ -235,6 +255,9 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
         ...basePayload,
         code: sanitizeCode(formData.code),
         stock_adjustment: signedAdjustment,
+        quantity_new: manualCompositionMode ? formData.quantity_new : undefined,
+        quantity_used: manualCompositionMode ? formData.quantity_used : undefined,
+        quantity_damaged: manualCompositionMode ? formData.quantity_damaged : undefined,
         adjustment_bucket: adjustmentMode === 'add' ? formData.adjustment_bucket : undefined,
         updated_at: new Date().toISOString(),
       } as StockItemUpdate & { stock_adjustment?: number })
@@ -445,7 +468,9 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 <div className="grid w-full max-w-[220px] grid-cols-2 rounded-xl border border-white/8 bg-[#0f1013] p-1 sm:justify-self-end">
                   <button
                     type="button"
-                    onClick={() => setAdjustmentMode('add')}
+                    onClick={() => {
+                      setAdjustmentMode('add')
+                    }}
                     className={`flex min-h-[34px] items-center justify-center rounded-lg px-3 py-1.5 text-center text-xs font-medium transition-colors ${
                       adjustmentMode === 'add'
                         ? 'bg-emerald-500/18 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.16)]'
@@ -456,7 +481,11 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                   </button>
                   <button
                     type="button"
-                    onClick={() => setAdjustmentMode('remove')}
+                    onClick={() => {
+                      setAdjustmentMode('remove')
+                      setManualCompositionMode(false)
+                      resetCompositionToSavedItem()
+                    }}
                     className={`flex min-h-[34px] items-center justify-center rounded-lg px-3 py-1.5 text-center text-xs font-medium transition-colors ${
                       adjustmentMode === 'remove'
                         ? 'bg-red-500/18 text-red-300 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.16)]'
@@ -474,8 +503,11 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 min={0}
                 value={String(Math.abs(formData.stock_adjustment))}
                 onChange={(event) => handleChange('stock_adjustment', parseInt(event.target.value, 10) || 0)}
+                disabled={manualCompositionMode}
                 helperText={
-                  adjustmentMode === 'add'
+                  manualCompositionMode
+                    ? 'Desativado enquanto a composicao manual estiver ligada.'
+                    : adjustmentMode === 'add'
                     ? 'Use para entrada de estoque no estado escolhido.'
                     : 'Use para diminuir a quantidade total. A baixa respeita Novo, Usado e Com avaria automaticamente.'
                 }
@@ -506,15 +538,17 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
 
         <div className="mt-4 overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,22,0.98)_0%,_rgba(12,13,16,0.98)_100%)] p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-            <div>
+            <div className="min-w-0">
               <p className="text-sm font-medium text-white">Composicao do estoque</p>
-              <p className="mt-1 text-xs text-gray-500">
+              <p className="mt-1 max-w-md text-xs leading-5 text-gray-500">
                 {isEditing
-                  ? 'Leitura atual do estoque por estado. Use devolucao, retirada ou entrada para alterar quantidades.'
+                  ? manualCompositionMode
+                    ? 'Ajuste direto dos estados. A entrada simples fica bloqueada enquanto este modo estiver ativo.'
+                    : 'Leitura atual por estado. Para reclassificar manualmente, ative o interruptor em entrada.'
                   : 'Separe opcionalmente o total em itens novos, usados e com avaria.'}
               </p>
             </div>
-            <div className="flex items-center gap-3 rounded-3xl border border-white/8 bg-black/20 px-4 py-3">
+            <div className="flex shrink-0 items-center gap-3 rounded-3xl border border-white/8 bg-black/20 px-4 py-3">
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-orange-400/12 bg-orange-500/10">
                 <WarehouseIcon size={22} className="text-orange-200" />
               </div>
@@ -525,7 +559,43 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
             </div>
           </div>
 
-          <div className="mt-5 grid gap-3 lg:grid-cols-3">
+          {isEditing && adjustmentMode === 'add' && (
+            <div className="mt-4 flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-medium text-white">Editar composicao manualmente</p>
+                <p className="mt-1 text-xs leading-5 text-gray-500">
+                  Ao ligar, a quantidade do ajuste de entrada fica bloqueada.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  const nextManualMode = !manualCompositionMode
+                  setManualCompositionMode(nextManualMode)
+                  if (nextManualMode) {
+                    handleChange('stock_adjustment', 0)
+                  } else {
+                    resetCompositionToSavedItem()
+                  }
+                }}
+                className={`relative h-8 w-14 rounded-full border transition-colors ${
+                  manualCompositionMode
+                    ? 'border-orange-400/40 bg-orange-500/30'
+                    : 'border-white/10 bg-black/30'
+                }`}
+                aria-pressed={manualCompositionMode}
+                aria-label="Editar composicao manualmente"
+              >
+                <span
+                  className={`absolute top-1 h-6 w-6 rounded-full bg-white transition-transform ${
+                    manualCompositionMode ? 'translate-x-6' : 'translate-x-1'
+                  }`}
+                />
+              </button>
+            </div>
+          )}
+
+          <div className="mt-5 grid gap-3 md:grid-cols-3">
             {([
               {
                 key: 'quantity_new',
@@ -557,24 +627,24 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
             ] as const).map((section) => (
               <div
                 key={section.key}
-                className={`rounded-[26px] border p-4 ${section.accent}`}
+                className={`rounded-2xl border p-3 ${section.accent}`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-2xl border ${section.iconWrap}`}>
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${section.iconWrap}`}>
                     {section.icon}
                   </div>
-                  <div className="text-right">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">{section.label}</p>
-                    <p className="mt-1 text-2xl font-semibold text-white">{section.value}</p>
+                  <div className="min-w-0 text-right">
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-gray-500">{section.label}</p>
+                    <p className="mt-1 text-xl font-semibold text-white">{section.value}</p>
                   </div>
                 </div>
 
-                <p className="mt-4 text-xs text-gray-400">{section.helper}</p>
+                <p className="mt-3 min-h-[34px] text-xs leading-4 text-gray-400">{section.helper}</p>
 
-                <div className="mt-4">
-                  {isEditing ? (
+                <div className="mt-3">
+                  {isEditing && !manualCompositionMode ? (
                     <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-                      <p className="text-[11px] uppercase tracking-[0.16em] text-gray-500">Quantidade atual</p>
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-gray-500">Quantidade atual</p>
                       <p className="mt-1 text-sm font-medium text-white">{section.value} {formData.unit}</p>
                     </div>
                   ) : (

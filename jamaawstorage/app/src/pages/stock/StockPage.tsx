@@ -370,6 +370,10 @@ export function StockPage() {
   const handleEditSubmit = async (data: TablesUpdate<'stock_items'> & { stock_adjustment?: number }) => {
     if (!selectedItem) return
 
+    const updatesComposition = data.quantity_new !== undefined
+      || data.quantity_used !== undefined
+      || data.quantity_damaged !== undefined
+
     setIsSubmitting(true)
     setSubmitError(null)
     try {
@@ -383,9 +387,9 @@ export function StockPage() {
         p_minimum_quantity: data.minimum_quantity ?? selectedItem.minimum_quantity,
         p_svg_icon_key: data.svg_icon_key ?? null,
         p_stock_adjustment: data.stock_adjustment ?? 0,
-        p_quantity_new: null,
-        p_quantity_used: null,
-        p_quantity_damaged: null,
+        p_quantity_new: updatesComposition ? data.quantity_new ?? 0 : null,
+        p_quantity_used: updatesComposition ? data.quantity_used ?? 0 : null,
+        p_quantity_damaged: updatesComposition ? data.quantity_damaged ?? 0 : null,
         p_adjustment_bucket: (data as TablesUpdate<'stock_items'> & { adjustment_bucket?: 'new' | 'used' | 'damaged' }).adjustment_bucket ?? 'new',
       })
 
