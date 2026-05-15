@@ -1464,7 +1464,11 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                       </div>
 
                       <Input
-                        label="Quantidade que volta para o estoque"
+                        label={
+                          processForm.quick_action === 'hold'
+                            ? 'Quantidade que vai para triagem'
+                            : 'Quantidade que volta para o estoque'
+                        }
                         type="number"
                         min="0"
                         max={remaining}
