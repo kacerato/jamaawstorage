@@ -50,19 +50,21 @@ async function runVisionAnalysis(apiKey, imageInput, eventType, ocrText) {
         {
           role: 'system',
           content: [
-            'Analyze vehicle evidence photos for a fleet log.',
-            'Return JSON only, no markdown.',
-            'Estimate odometer_km, fuel_level_percent, fuel_liters, fuel_amount, station_name, confidence, and summary when visible.',
-            'Use null for fields that are not visible or uncertain.',
-            'fuel_level_percent must be 0 to 100.',
-            'The first registered vehicle model is Shineray TLux T30 2025.',
+            'Analise fotos de evidencia de uso de veiculo para um controle de frota.',
+            'Responda obrigatoriamente em portugues do Brasil.',
+            'Retorne apenas JSON valido, sem markdown.',
+            'Estime odometer_km, fuel_level_percent, fuel_liters, fuel_amount, station_name, confidence e summary quando estiverem visiveis.',
+            'Use null para campos que nao estiverem visiveis ou confiaveis.',
+            'fuel_level_percent deve ser de 0 a 100.',
+            'summary deve ser uma frase curta em portugues brasileiro, objetiva, citando o que foi possivel confirmar na imagem.',
+            'O primeiro veiculo cadastrado e um Shineray TLux T30 2025.',
           ].join('\n'),
         },
         {
           role: 'user',
           content: [
             { type: 'image_url', image_url: { url: imageInput } },
-            { type: 'text', text: `Event type: ${eventType}. OCR text: ${ocrText.slice(0, 6000)}` },
+            { type: 'text', text: `Tipo de registro: ${eventType}. Texto OCR bruto: ${ocrText.slice(0, 6000)}. Responda em portugues do Brasil.` },
           ],
         },
       ],
