@@ -16,7 +16,7 @@ function parseJsonContent(content) {
   }
 }
 
-async function runGlmOcr(apiKey, dataUrl) {
+async function runGlmOcr(apiKey, imageInput) {
   const response = await fetch(`${ZAI_API_URL}/layout_parsing`, {
     method: 'POST',
     headers: {
@@ -25,7 +25,7 @@ async function runGlmOcr(apiKey, dataUrl) {
     },
     body: JSON.stringify({
       model: 'glm-ocr',
-      file: dataUrl,
+      file: imageInput,
     }),
   })
 
@@ -37,7 +37,7 @@ async function runGlmOcr(apiKey, dataUrl) {
   return JSON.stringify(payload?.data ?? payload)
 }
 
-async function runVisionAnalysis(apiKey, dataUrl, eventType, ocrText) {
+async function runVisionAnalysis(apiKey, imageInput, eventType, ocrText) {
   const response = await fetch(`${ZAI_API_URL}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -61,8 +61,8 @@ async function runVisionAnalysis(apiKey, dataUrl, eventType, ocrText) {
         {
           role: 'user',
           content: [
+            { type: 'image_url', image_url: { url: imageInput } },
             { type: 'text', text: `Event type: ${eventType}. OCR text: ${ocrText.slice(0, 6000)}` },
-            { type: 'image_url', image_url: { url: dataUrl } },
           ],
         },
       ],
@@ -101,16 +101,18 @@ export default async function handler(req, res) {
   }
 
   const dataUrl = typeof body?.dataUrl === 'string' ? body.dataUrl : ''
+  const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl : ''
   const eventType = typeof body?.eventType === 'string' ? body.eventType : 'pickup'
+  const imageInput = imageUrl || dataUrl
 
-  if (!dataUrl.startsWith('data:image/')) {
-    sendJson(res, 400, { error: 'Envie uma imagem em base64 data URL.' })
+  if (!imageInput || (!imageInput.startsWith('http') && !imageInput.startsWith('data:image/'))) {
+    sendJson(res, 400, { error: 'Envie uma URL publica da imagem ou uma imagem em base64 data URL.' })
     return
   }
 
   try {
-    const ocrText = await runGlmOcr(apiKey, dataUrl)
-    const analysis = await runVisionAnalysis(apiKey, dataUrl, eventType, ocrText)
+    const ocrText = await runGlmOcr(apiKey, imageInput)
+    const analysis = await runVisionAnalysis(apiKey, imageInput, eventType, ocrText)
 
     sendJson(res, 200, {
       ocrText,

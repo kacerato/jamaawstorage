@@ -117,15 +117,6 @@ function eventLabel(type: VehicleEventType): string {
   return 'Abastecimento'
 }
 
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(String(reader.result ?? ''))
-    reader.onerror = () => reject(new Error('Nao foi possivel ler a imagem.'))
-    reader.readAsDataURL(file)
-  })
-}
-
 function numericOrNull(value: string): number | null {
   const parsed = Number.parseFloat(value.replace(',', '.'))
   return Number.isFinite(parsed) ? parsed : null
@@ -276,22 +267,20 @@ export function VehiclesPage() {
     setAnalyzingImage(true)
     setError(null)
     try {
-      const dataUrl = await fileToDataUrl(file)
-      const [storageUrl, analysisResponse] = await Promise.all([
-        uploadImageToStorage({
-          file,
-          scope: 'vehicles/logs',
-          entityId: selectedVehicle.id,
-          options: DEFAULT_IMAGE_UPLOAD_OPTIONS,
-        }),
-        fetch('/api/vehicle-image-analysis', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ dataUrl, eventType: logForm.event_type }),
-        }),
-      ])
+      const storageUrl = await uploadImageToStorage({
+        file,
+        scope: 'vehicles/logs',
+        entityId: selectedVehicle.id,
+        options: DEFAULT_IMAGE_UPLOAD_OPTIONS,
+      })
+      const analysisResponse = await fetch('/api/vehicle-image-analysis', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ imageUrl: storageUrl, eventType: logForm.event_type }),
+      })
       const analysis = await analysisResponse.json().catch(() => null)
       if (!analysisResponse.ok) {
+        setLogForm((prev) => ({ ...prev, photo_url: storageUrl }))
         throw new Error(analysis?.error || 'Nao foi possivel analisar a imagem.')
       }
 
@@ -308,7 +297,9 @@ export function VehiclesPage() {
         ai_confidence: analysis.confidence ?? null,
       }))
     } catch (uploadError) {
-      setError(uploadError instanceof Error ? uploadError.message : 'Nao foi possivel processar a foto do registro.')
+      setError(uploadError instanceof Error
+        ? `${uploadError.message} A foto ficou anexada; revise os campos e salve manualmente se necessario.`
+        : 'Nao foi possivel processar a foto do registro. A foto ficou anexada; revise os campos e salve manualmente se necessario.')
     } finally {
       setAnalyzingImage(false)
       event.target.value = ''
