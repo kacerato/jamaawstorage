@@ -72,6 +72,8 @@ interface LogFormState {
   odometer_km: string
   fuel_level_percent: string
   fuel_level_range: FuelLevelRange | ''
+  fuel_bars_filled: string
+  fuel_bars_total: string
   fuel_liters: string
   fuel_amount: string
   station_name: string
@@ -108,6 +110,8 @@ const initialLogForm: LogFormState = {
   odometer_km: '',
   fuel_level_percent: '',
   fuel_level_range: '',
+  fuel_bars_filled: '',
+  fuel_bars_total: '',
   fuel_liters: '',
   fuel_amount: '',
   station_name: '',
@@ -314,6 +318,8 @@ export function VehiclesPage() {
         odometer_km: analysis.odometerKm != null ? String(analysis.odometerKm) : prev.odometer_km,
         fuel_level_percent: analysis.fuelLevelPercent != null ? String(analysis.fuelLevelPercent) : prev.fuel_level_percent,
         fuel_level_range: analysis.fuelLevelRange ?? prev.fuel_level_range,
+        fuel_bars_filled: analysis.fuelBarsFilled != null ? String(analysis.fuelBarsFilled) : prev.fuel_bars_filled,
+        fuel_bars_total: analysis.fuelBarsTotal != null ? String(analysis.fuelBarsTotal) : prev.fuel_bars_total,
         fuel_liters: analysis.fuelLiters != null ? String(analysis.fuelLiters) : prev.fuel_liters,
         fuel_amount: analysis.fuelAmount != null ? String(analysis.fuelAmount) : prev.fuel_amount,
         station_name: analysis.stationName ?? prev.station_name,
@@ -567,6 +573,10 @@ export function VehiclesPage() {
                 <Input label="Kilometragem" value={logForm.odometer_km} onChange={(event) => setLogForm((prev) => ({ ...prev, odometer_km: event.target.value }))} />
                 <Input label="Combustivel %" value={logForm.fuel_level_percent} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_level_percent: event.target.value }))} />
               </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input label="Barras preenchidas" value={logForm.fuel_bars_filled} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_bars_filled: event.target.value }))} />
+                <Input label="Total de barras" value={logForm.fuel_bars_total} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_bars_total: event.target.value }))} />
+              </div>
               <Select
                 label="Faixa do combustivel"
                 value={logForm.fuel_level_range}
@@ -609,6 +619,9 @@ export function VehiclesPage() {
             <div className="grid gap-3 md:grid-cols-3">
               <MiniMetric label="Km lida" value={logForm.odometer_km || '-'} />
               <MiniMetric label="Combustivel" value={logForm.fuel_level_percent ? `${logForm.fuel_level_percent}% (${fuelRangeLabel(logForm.fuel_level_range)})` : fuelRangeLabel(logForm.fuel_level_range)} />
+              <MiniMetric label="Barras" value={logForm.fuel_bars_filled && logForm.fuel_bars_total ? `${logForm.fuel_bars_filled}/${logForm.fuel_bars_total}` : '-'} />
+            </div>
+            <div className="mt-3">
               <MiniMetric label="Confianca IA" value={logForm.ai_confidence != null ? `${Math.round(logForm.ai_confidence * 100)}%` : '-'} />
             </div>
             {analyzingImage ? <p className="mt-2 text-xs text-orange-300">Analisando imagem...</p> : null}

@@ -35,15 +35,35 @@ function normalizeFuelRange(value) {
   return null
 }
 
+function fuelPercentFromBars(filledBars, totalBars) {
+  const filled = clampNumber(filledBars, 0, 99)
+  const total = clampNumber(totalBars, 1, 99)
+  if (filled == null || total == null) return null
+  return Math.round((filled / total) * 100)
+}
+
+function fuelRangeFromPercent(percent) {
+  const value = clampNumber(percent, 0, 100)
+  if (value == null) return null
+  if (value <= 12) return 'reserva'
+  if (value < 40) return 'baixo'
+  if (value < 65) return 'meio'
+  if (value < 90) return 'alto'
+  return 'cheio'
+}
+
 function normalizeAnalysis(analysis) {
-  const fuelLevelPercent = clampNumber(analysis?.fuel_level_percent, 0, 100)
+  const barBasedPercent = fuelPercentFromBars(analysis?.fuel_bars_filled, analysis?.fuel_bars_total)
+  const fuelLevelPercent = barBasedPercent ?? clampNumber(analysis?.fuel_level_percent, 0, 100)
   const confidence = normalizeConfidence(analysis?.confidence)
   const needsReview = Boolean(analysis?.needs_review) || confidence == null || confidence < 0.88 || fuelLevelPercent == null
 
   return {
     odometerKm: clampNumber(analysis?.odometer_km, 0, 9999999),
     fuelLevelPercent,
-    fuelLevelRange: normalizeFuelRange(analysis?.fuel_level_range),
+    fuelLevelRange: fuelRangeFromPercent(fuelLevelPercent) ?? normalizeFuelRange(analysis?.fuel_level_range),
+    fuelBarsFilled: clampNumber(analysis?.fuel_bars_filled, 0, 99),
+    fuelBarsTotal: clampNumber(analysis?.fuel_bars_total, 1, 99),
     fuelLiters: clampNumber(analysis?.fuel_liters, 0, 9999),
     fuelAmount: clampNumber(analysis?.fuel_amount, 0, 999999),
     stationName: typeof analysis?.station_name === 'string' ? analysis.station_name.trim() || null : null,
@@ -94,14 +114,18 @@ async function runVisionAnalysis(apiKey, imageInput, eventType, ocrText) {
             'Use null para campos que nao estiverem visiveis ou confiaveis.',
             'fuel_level_percent deve ser de 0 a 100.',
             'fuel_level_range deve ser reserva, baixo, meio, alto ou cheio.',
-            'Interprete o combustivel primeiro por faixa visual: reserva ~= 5, baixo ~= 20, meio ~= 50, alto ~= 75, cheio ~= 100. Depois ajuste a porcentagem conforme ponteiro, barras ou display.',
+            'REGRA CRITICA PARA O SHINERAY TLUX T30 2025: o combustivel aparece como uma barra digital entre E e F com 8 pontos/barras no total.',
+            'Conte quantas barras claras/preenchidas aparecem entre E e F.',
+            'Calcule fuel_level_percent = round((fuel_bars_filled / fuel_bars_total) * 100).',
+            'Exemplo obrigatorio: se houver 4 barras preenchidas de 8, retorne fuel_bars_filled=4, fuel_bars_total=8, fuel_level_percent=50 e fuel_level_range="meio". Nao chame isso de baixo.',
+            'So use estimativa por faixa visual quando nao for possivel contar barras.',
             'Para saida e chegada, priorize painel: odometro e marcador de combustivel. Para abastecimento, tambem leia bomba/cupom se aparecer.',
             'Marque needs_review como true se a foto estiver inclinada, cortada, com reflexo, painel ilegivel, ou se combustivel tiver baixa confianca.',
             'confidence deve ser decimal de 0 a 1 considerando principalmente combustivel e odometro.',
             'summary deve ser uma frase curta em portugues brasileiro, objetiva, citando o que foi possivel confirmar na imagem.',
             'O primeiro veiculo cadastrado e um Shineray TLux T30 2025.',
             'Formato obrigatorio:',
-            '{"odometer_km":number|null,"fuel_level_percent":number|null,"fuel_level_range":"reserva|baixo|meio|alto|cheio"|null,"fuel_liters":number|null,"fuel_amount":number|null,"station_name":string|null,"confidence":number,"needs_review":boolean,"summary":string}',
+            '{"odometer_km":number|null,"fuel_level_percent":number|null,"fuel_level_range":"reserva|baixo|meio|alto|cheio"|null,"fuel_bars_filled":number|null,"fuel_bars_total":number|null,"fuel_liters":number|null,"fuel_amount":number|null,"station_name":string|null,"confidence":number,"needs_review":boolean,"summary":string}',
           ].join('\n'),
         },
         {
@@ -142,11 +166,14 @@ async function runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, fi
             'Responda apenas JSON valido em portugues do Brasil.',
             'Ignore tudo exceto o marcador de combustivel do painel, bomba ou comprovante.',
             'Procure ponteiro, barras digitais, letras E/F, reserva, escala de tanque e icones de combustivel.',
+            'No Shineray TLux T30 2025, o marcador de combustivel digital tem 8 barras/pontos entre E e F.',
+            'Conte as barras preenchidas. A porcentagem deve ser round((barras preenchidas / 8) * 100).',
+            'Se vir 4 barras preenchidas de 8, retorne exatamente 50%, fuel_level_range="meio" e summary dizendo que ha 4 de 8 barras.',
             'Classifique fuel_level_range como reserva, baixo, meio, alto ou cheio.',
-            'Converta a faixa para fuel_level_percent com estimativa conservadora.',
+            'Nunca classifique 4 de 8 barras como baixo.',
             'Use needs_review true se o marcador nao estiver nitido.',
             'confidence deve ser decimal de 0 a 1.',
-            'Formato: {"fuel_level_percent":number|null,"fuel_level_range":"reserva|baixo|meio|alto|cheio"|null,"confidence":number,"needs_review":boolean,"summary":string}',
+            'Formato: {"fuel_level_percent":number|null,"fuel_level_range":"reserva|baixo|meio|alto|cheio"|null,"fuel_bars_filled":number|null,"fuel_bars_total":number|null,"confidence":number,"needs_review":boolean,"summary":string}',
           ].join('\n'),
         },
         {
@@ -221,6 +248,8 @@ export default async function handler(req, res) {
           ...initialAnalysis,
           fuel_level_percent: focusedFuel.fuel_level_percent,
           fuel_level_range: focusedFuel.fuel_level_range,
+          fuel_bars_filled: focusedFuel.fuel_bars_filled,
+          fuel_bars_total: focusedFuel.fuel_bars_total,
           confidence: focusedFuel.confidence,
           needs_review: focusedFuel.needs_review,
           summary: focusedFuel.summary || initialAnalysis.summary,
@@ -241,6 +270,8 @@ export default async function handler(req, res) {
       odometerKm: analysis.odometerKm,
       fuelLevelPercent: analysis.fuelLevelPercent,
       fuelLevelRange: analysis.fuelLevelRange,
+      fuelBarsFilled: analysis.fuelBarsFilled,
+      fuelBarsTotal: analysis.fuelBarsTotal,
       fuelLiters: analysis.fuelLiters,
       fuelAmount: analysis.fuelAmount,
       stationName: analysis.stationName,
