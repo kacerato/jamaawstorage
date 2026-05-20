@@ -88,6 +88,14 @@ interface ProcessFormState {
   triage_notes: string
 }
 
+function processableQuantity(row: ReturnRequestWithDetails): number {
+  if (row.status === 'held') {
+    return Math.max(row.held_quantity, 0)
+  }
+
+  return Math.max(row.quantity - row.approved_quantity - row.held_quantity, 0)
+}
+
 const STATUS_OPTIONS = [
   { value: 'all', label: 'Todos' },
   { value: 'pending', label: 'Pendentes' },
@@ -691,7 +699,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   }
 
   const openProcessModal = (request: ReturnRequestWithDetails) => {
-    const remaining = Math.max(request.quantity - request.approved_quantity - request.held_quantity, 0)
+    const remaining = processableQuantity(request)
     setSelectedRequest(request)
     setProcessForm({
       approve_quantity: String(remaining),
@@ -708,7 +716,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const handleProcessQuantityChange = (destination: 'return' | 'hold', value: string) => {
     if (!selectedRequest) return
 
-    const remaining = Math.max(selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity, 0)
+    const remaining = processableQuantity(selectedRequest)
     const parsed = Number.parseInt(value, 10)
     const safePrimaryQuantity = Number.isFinite(parsed) ? Math.min(Math.max(parsed, 0), remaining) : 0
     const nextApproveQuantity = destination === 'return' ? safePrimaryQuantity : 0
@@ -726,7 +734,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const handleProcessDestinationChoice = (destination: 'return' | 'hold') => {
     if (!selectedRequest) return
 
-    const remaining = Math.max(selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity, 0)
+    const remaining = processableQuantity(selectedRequest)
     setProcessForm((prev) => ({
       ...prev,
       approve_quantity: destination === 'return' ? String(remaining) : '0',
@@ -757,7 +765,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
 
     const approveQuantity = Number.parseInt(processForm.approve_quantity, 10)
     const holdQuantity = Number.parseInt(processForm.hold_quantity, 10)
-    const remaining = selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity
+    const remaining = processableQuantity(selectedRequest)
 
     if (!Number.isFinite(approveQuantity) || approveQuantity < 0 || !Number.isFinite(holdQuantity) || holdQuantity < 0) {
       setProcessError('Informe quantidades validas para devolucao e triagem.')
@@ -793,14 +801,17 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
     setProcessError(null)
     setError(null)
     try {
-      const { error: rpcError } = await supabase.rpc('process_stock_return_request', {
+      const rpcPayload = {
         p_request_id: selectedRequest.id,
         p_approve_quantity: approveQuantity,
         p_hold_quantity: holdQuantity,
         p_triage_notes: processForm.triage_notes.trim() || null,
         p_approved_condition: approveQuantity > 0 ? processForm.approved_condition : null,
         p_hold_condition: holdQuantity > 0 ? processForm.hold_condition : null,
-      })
+      }
+      const { error: rpcError } = selectedRequest.status === 'held'
+        ? await supabase.rpc('process_held_stock_return_request', rpcPayload)
+        : await supabase.rpc('process_stock_return_request', rpcPayload)
 
       if (rpcError) {
         throw new Error(rpcError.message)
@@ -810,6 +821,38 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       await fetchRequests()
     } catch (processRpcError) {
       setProcessError(processRpcError instanceof Error ? processRpcError.message : 'Nao foi possivel processar a devolucao.')
+    } finally {
+      setUpdatingRequestId(null)
+    }
+  }
+
+  const handleDeleteRequest = async (request: ReturnRequestWithDetails) => {
+    const canDelete = request.status !== 'approved' && request.approved_quantity === 0
+    if (!canDelete) {
+      setError('Somente registros pendentes ou mantidos em triagem sem quantidade aprovada podem ser excluidos.')
+      return
+    }
+
+    const confirmed = window.confirm(`Excluir o registro de devolucao de ${request.stock_item?.name ?? 'item'}? Essa acao remove apenas a entrada de triagem e nao altera estoque aprovado.`)
+    if (!confirmed) return
+
+    setUpdatingRequestId(request.id)
+    setError(null)
+    try {
+      const { error: rpcError } = await supabase.rpc('delete_stock_return_request', {
+        p_request_id: request.id,
+      })
+
+      if (rpcError) {
+        throw new Error(rpcError.message)
+      }
+
+      if (selectedRequest?.id === request.id) {
+        setSelectedRequest(null)
+      }
+      await fetchRequests()
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Nao foi possivel excluir a devolucao.')
     } finally {
       setUpdatingRequestId(null)
     }
@@ -964,12 +1007,21 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {selectedRequest.approved_quantity + selectedRequest.held_quantity < selectedRequest.quantity && (
+              {processableQuantity(selectedRequest) > 0 && selectedRequest.status !== 'approved' && (
                 <Button
                   onClick={() => openProcessModal(selectedRequest)}
                   disabled={updatingRequestId === selectedRequest.id}
                 >
                   Processar quantidades
+                </Button>
+              )}
+              {selectedRequest.status !== 'approved' && selectedRequest.approved_quantity === 0 && (
+                <Button
+                  variant="danger"
+                  onClick={() => void handleDeleteRequest(selectedRequest)}
+                  isLoading={updatingRequestId === selectedRequest.id}
+                >
+                  Excluir da triagem
                 </Button>
               )}
             </div>
@@ -1435,7 +1487,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         {selectedRequest ? (
           <div className="space-y-4">
             {(() => {
-              const remaining = selectedRequest.quantity - selectedRequest.approved_quantity - selectedRequest.held_quantity
+              const remaining = processableQuantity(selectedRequest)
               const approveQuantity = Number.parseInt(processForm.approve_quantity, 10)
               const holdQuantity = Number.parseInt(processForm.hold_quantity, 10)
               const safeApproveQuantity = Number.isFinite(approveQuantity) ? Math.min(Math.max(approveQuantity, 0), remaining) : 0
@@ -1504,8 +1556,8 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                         value={activeQuantityValue}
                         onChange={(event) => handleProcessQuantityChange(processForm.quick_action, event.target.value)}
                         helperText={
-                          processForm.quick_action === 'hold'
-                            ? `O restante (${safePendingQuantity}) continuara pendente.`
+                          selectedRequest.status === 'held'
+                            ? `O restante (${safePendingQuantity}) continuara em triagem.`
                             : `O restante (${safePendingQuantity}) continuara pendente.`
                         }
                       />
@@ -1522,7 +1574,9 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                       <p className="mt-2 text-2xl font-semibold text-white">{safeHoldQuantity}</p>
                     </Card>
                     <Card variant="bordered" className="border-amber-500/15 bg-amber-500/8">
-                      <p className="text-xs uppercase tracking-[0.22em] text-amber-200/70">Continua pendente</p>
+                      <p className="text-xs uppercase tracking-[0.22em] text-amber-200/70">
+                        {selectedRequest.status === 'held' ? 'Segue em triagem' : 'Continua pendente'}
+                      </p>
                       <p className="mt-2 text-2xl font-semibold text-white">{safePendingQuantity}</p>
                     </Card>
                   </div>
