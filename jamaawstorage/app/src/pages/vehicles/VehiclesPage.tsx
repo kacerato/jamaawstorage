@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import { Camera, Car, FileText, Fuel, Gauge, Plus, UserRound, Warehouse } from 'lucide-react'
+import { Camera, Car, FileText, Fuel, Gauge, Pencil, Plus, Trash2, UserRound, Warehouse } from 'lucide-react'
 import type { Tables } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { uploadFileToStorage, uploadImageToStorage } from '../../lib/storage'
@@ -38,6 +38,8 @@ interface VehicleLogRow {
   odometer_km: number | null
   fuel_level_percent: number | null
   fuel_level_range: FuelLevelRange | null
+  fuel_bars_filled: number | null
+  fuel_bars_total: number | null
   fuel_liters: number | null
   fuel_amount: number | null
   station_name: string | null
@@ -87,6 +89,8 @@ interface LogFormState {
 interface UntypedQueryBuilder {
   select: (query?: string) => UntypedQueryBuilder
   insert: (payload: unknown) => PromiseLike<{ error: { message: string } | null }>
+  update: (payload: unknown) => { eq: (column: string, value: unknown) => PromiseLike<{ error: { message: string } | null }> }
+  delete: () => { eq: (column: string, value: unknown) => PromiseLike<{ error: { message: string } | null }> }
   order: (column: string, options?: unknown) => PromiseLike<unknown>
   eq: (column: string, value: unknown) => UntypedQueryBuilder
 }
@@ -165,6 +169,8 @@ export function VehiclesPage() {
   const [analyzingImage, setAnalyzingImage] = useState(false)
   const [showVehicleModal, setShowVehicleModal] = useState(false)
   const [showLogModal, setShowLogModal] = useState(false)
+  const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
+  const [editingLogId, setEditingLogId] = useState<string | null>(null)
   const [vehicleForm, setVehicleForm] = useState<VehicleFormState>(initialVehicleForm)
   const [logForm, setLogForm] = useState<LogFormState>(initialLogForm)
   const [error, setError] = useState<string | null>(null)
@@ -218,6 +224,69 @@ export function VehiclesPage() {
     value: person.id,
     label: person.employee_id ? `${person.full_name} (${person.employee_id})` : person.full_name,
   }))
+
+  const openCreateVehicleModal = () => {
+    setEditingVehicleId(null)
+    setVehicleForm(initialVehicleForm)
+    setShowVehicleModal(true)
+  }
+
+  const openEditVehicleModal = (vehicle: VehicleRow) => {
+    setEditingVehicleId(vehicle.id)
+    setVehicleForm({
+      code: vehicle.code,
+      plate: vehicle.plate ?? '',
+      model: vehicle.model,
+      color: vehicle.color ?? '',
+      year: vehicle.year != null ? String(vehicle.year) : '',
+      responsible_person_id: vehicle.responsible_person_id ?? '',
+      photo_url: vehicle.photo_url,
+      document_url: vehicle.document_url,
+      document_name: vehicle.document_name,
+      notes: vehicle.notes ?? '',
+    })
+    setShowVehicleModal(true)
+  }
+
+  const closeVehicleModal = () => {
+    setShowVehicleModal(false)
+    setEditingVehicleId(null)
+    setVehicleForm(initialVehicleForm)
+  }
+
+  const openCreateLogModal = () => {
+    setEditingLogId(null)
+    setLogForm(initialLogForm)
+    setShowLogModal(true)
+  }
+
+  const openEditLogModal = (log: VehicleLogRow) => {
+    setEditingLogId(log.id)
+    setLogForm({
+      event_type: log.event_type,
+      photo_url: log.photo_url,
+      odometer_km: log.odometer_km != null ? String(log.odometer_km) : '',
+      fuel_level_percent: log.fuel_level_percent != null ? String(log.fuel_level_percent) : '',
+      fuel_level_range: log.fuel_level_range ?? '',
+      fuel_bars_filled: log.fuel_bars_filled != null ? String(log.fuel_bars_filled) : '',
+      fuel_bars_total: log.fuel_bars_total != null ? String(log.fuel_bars_total) : '',
+      fuel_liters: log.fuel_liters != null ? String(log.fuel_liters) : '',
+      fuel_amount: log.fuel_amount != null ? String(log.fuel_amount) : '',
+      station_name: log.station_name ?? '',
+      notes: log.notes ?? '',
+      ocr_text: log.ocr_text,
+      ai_summary: log.ai_summary,
+      ai_confidence: log.ai_confidence,
+      needs_review: log.needs_review,
+    })
+    setShowLogModal(true)
+  }
+
+  const closeLogModal = () => {
+    setShowLogModal(false)
+    setEditingLogId(null)
+    setLogForm(initialLogForm)
+  }
 
   const handleVehiclePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -275,14 +344,34 @@ export function VehiclesPage() {
         document_name: vehicleForm.document_name,
         notes: vehicleForm.notes.trim() || null,
       }
-      const result = await (db.from('vehicles').insert(payload) as PromiseLike<{ error: { message: string } | null }>)
+      const result = editingVehicleId
+        ? await db.from('vehicles').update(payload).eq('id', editingVehicleId)
+        : await (db.from('vehicles').insert(payload) as PromiseLike<{ error: { message: string } | null }>)
       if (result.error) throw new Error(result.error.message)
 
-      setShowVehicleModal(false)
-      setVehicleForm(initialVehicleForm)
+      closeVehicleModal()
       await load()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Nao foi possivel cadastrar o veiculo.')
+      setError(saveError instanceof Error ? saveError.message : 'Nao foi possivel salvar o veiculo.')
+    } finally {
+      setSavingVehicle(false)
+    }
+  }
+
+  const handleDeleteVehicle = async (vehicle: VehicleRow) => {
+    const confirmed = window.confirm(`Excluir o carro ${vehicle.code}? Isso tambem remove o historico de registros desse carro.`)
+    if (!confirmed) return
+
+    setSavingVehicle(true)
+    setError(null)
+    try {
+      const result = await db.from('vehicles').delete().eq('id', vehicle.id)
+      if (result.error) throw new Error(result.error.message)
+
+      setSelectedVehicleId((current) => current === vehicle.id ? null : current)
+      await load()
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Nao foi possivel excluir o carro.')
     } finally {
       setSavingVehicle(false)
     }
@@ -355,6 +444,8 @@ export function VehiclesPage() {
         odometer_km: numericOrNull(logForm.odometer_km),
         fuel_level_percent: integerOrNull(logForm.fuel_level_percent),
         fuel_level_range: logForm.fuel_level_range || null,
+        fuel_bars_filled: integerOrNull(logForm.fuel_bars_filled),
+        fuel_bars_total: integerOrNull(logForm.fuel_bars_total),
         fuel_liters: numericOrNull(logForm.fuel_liters),
         fuel_amount: numericOrNull(logForm.fuel_amount),
         station_name: logForm.station_name.trim() || null,
@@ -365,14 +456,33 @@ export function VehiclesPage() {
         needs_review: logForm.needs_review,
         notes: logForm.notes.trim() || null,
       }
-      const result = await (db.from('vehicle_usage_logs').insert(payload) as PromiseLike<{ error: { message: string } | null }>)
+      const result = editingLogId
+        ? await db.from('vehicle_usage_logs').update(payload).eq('id', editingLogId)
+        : await (db.from('vehicle_usage_logs').insert(payload) as PromiseLike<{ error: { message: string } | null }>)
       if (result.error) throw new Error(result.error.message)
 
-      setShowLogModal(false)
-      setLogForm(initialLogForm)
+      closeLogModal()
       await load()
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : 'Nao foi possivel salvar o registro do carro.')
+    } finally {
+      setSavingLog(false)
+    }
+  }
+
+  const handleDeleteLog = async (log: VehicleLogRow) => {
+    const confirmed = window.confirm(`Excluir o registro de ${eventLabel(log.event_type)} de ${formatDateTime(log.occurred_at)}?`)
+    if (!confirmed) return
+
+    setSavingLog(true)
+    setError(null)
+    try {
+      const result = await db.from('vehicle_usage_logs').delete().eq('id', log.id)
+      if (result.error) throw new Error(result.error.message)
+
+      await load()
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Nao foi possivel excluir o registro.')
     } finally {
       setSavingLog(false)
     }
@@ -394,10 +504,10 @@ export function VehiclesPage() {
           <p className="mt-1 text-sm text-gray-400">Cadastro, responsavel, kilometragem, combustivel e abastecimentos com evidencia por foto.</p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button onClick={() => setShowVehicleModal(true)} leftIcon={<Plus size={16} />}>
+          <Button onClick={openCreateVehicleModal} leftIcon={<Plus size={16} />}>
             Cadastrar carro
           </Button>
-          <Button onClick={() => setShowLogModal(true)} disabled={!selectedVehicle} leftIcon={<Camera size={16} />}>
+          <Button onClick={openCreateLogModal} disabled={!selectedVehicle} leftIcon={<Camera size={16} />}>
             Registrar uso
           </Button>
         </div>
@@ -410,7 +520,7 @@ export function VehiclesPage() {
           icon={<Car size={48} />}
           title="Nenhum carro cadastrado"
           description="Cadastre o Shineray TLux T30 2025 e defina a pessoa responsavel pelo controle."
-          action={{ label: 'Cadastrar carro', onClick: () => setShowVehicleModal(true) }}
+          action={{ label: 'Cadastrar carro', onClick: openCreateVehicleModal }}
         />
       ) : (
         <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
@@ -453,12 +563,20 @@ export function VehiclesPage() {
                   <h2 className="mt-3 text-2xl font-semibold text-white">{selectedVehicle.model}</h2>
                   <p className="mt-1 text-sm text-gray-400">{selectedVehicle.plate ?? 'Sem placa'} • {selectedVehicle.color ?? 'Cor nao informada'}</p>
                 </div>
-                {selectedVehicle.document_url ? (
-                  <a href={selectedVehicle.document_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-orange-200 hover:bg-white/5">
-                    <FileText size={16} />
-                    Documento
-                  </a>
-                ) : null}
+                <div className="flex flex-wrap gap-2">
+                  {selectedVehicle.document_url ? (
+                    <a href={selectedVehicle.document_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-orange-200 hover:bg-white/5">
+                      <FileText size={16} />
+                      Documento
+                    </a>
+                  ) : null}
+                  <Button variant="secondary" onClick={() => openEditVehicleModal(selectedVehicle)} leftIcon={<Pencil size={16} />}>
+                    Editar carro
+                  </Button>
+                  <Button variant="danger" onClick={() => void handleDeleteVehicle(selectedVehicle)} leftIcon={<Trash2 size={16} />}>
+                    Excluir
+                  </Button>
+                </div>
               </div>
 
               <div className="mt-6 grid gap-3 md:grid-cols-3">
@@ -476,14 +594,25 @@ export function VehiclesPage() {
                     <div key={log.id} className="grid gap-4 rounded-2xl border border-white/8 bg-white/4 p-4 md:grid-cols-[92px_minmax(0,1fr)]">
                       {log.photo_url ? <img src={log.photo_url} alt={eventLabel(log.event_type)} className="h-24 w-full rounded-xl object-cover md:w-24" /> : <div className="flex h-24 items-center justify-center rounded-xl bg-black/30"><Camera size={24} /></div>}
                       <div>
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={log.event_type === 'fuel' ? 'warning' : 'info'}>{eventLabel(log.event_type)}</Badge>
-                          {log.needs_review ? <Badge variant="warning">Revisar leitura</Badge> : null}
-                          <span className="text-xs text-gray-500">{formatDateTime(log.occurred_at)}</span>
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant={log.event_type === 'fuel' ? 'warning' : 'info'}>{eventLabel(log.event_type)}</Badge>
+                            {log.needs_review ? <Badge variant="warning">Revisar leitura</Badge> : null}
+                            <span className="text-xs text-gray-500">{formatDateTime(log.occurred_at)}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-2">
+                            <Button size="sm" variant="secondary" onClick={() => openEditLogModal(log)} leftIcon={<Pencil size={14} />}>
+                              Editar
+                            </Button>
+                            <Button size="sm" variant="danger" onClick={() => void handleDeleteLog(log)} leftIcon={<Trash2 size={14} />}>
+                              Excluir
+                            </Button>
+                          </div>
                         </div>
                         <p className="mt-2 text-sm text-gray-300">
                           Km: {log.odometer_km ?? '-'} • Combustivel: {log.fuel_level_percent != null ? `${log.fuel_level_percent}%` : '-'}
                           {log.fuel_level_range ? ` (${fuelRangeLabel(log.fuel_level_range)})` : ''}
+                          {log.fuel_bars_filled != null && log.fuel_bars_total != null ? ` • ${log.fuel_bars_filled}/${log.fuel_bars_total} barras` : ''}
                           {log.fuel_liters ? ` • ${log.fuel_liters} L` : ''}
                         </p>
                         {log.ai_summary ? <p className="mt-2 text-sm text-gray-400">{log.ai_summary}</p> : null}
@@ -497,7 +626,7 @@ export function VehiclesPage() {
         </div>
       )}
 
-      <Modal isOpen={showVehicleModal} onClose={() => setShowVehicleModal(false)} title="Cadastrar carro" size="xl">
+      <Modal isOpen={showVehicleModal} onClose={closeVehicleModal} title={editingVehicleId ? 'Editar carro' : 'Cadastrar carro'} size="xl">
         <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
           <div className="rounded-[28px] border border-white/10 bg-black/30 p-4">
             <div className="aspect-[3/4] overflow-hidden rounded-3xl border border-white/10 bg-[#16171a]">
@@ -521,14 +650,16 @@ export function VehiclesPage() {
               {vehicleForm.document_name ? <p className="mt-2 text-xs text-orange-200">{vehicleForm.document_name}</p> : null}
             </div>
             <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
-              <Button variant="secondary" onClick={() => setShowVehicleModal(false)}>Cancelar</Button>
-              <Button onClick={() => void handleSaveVehicle()} isLoading={savingVehicle}>Salvar carro</Button>
+              <Button variant="secondary" onClick={closeVehicleModal}>Cancelar</Button>
+              <Button onClick={() => void handleSaveVehicle()} isLoading={savingVehicle}>
+                {editingVehicleId ? 'Salvar alteracoes' : 'Salvar carro'}
+              </Button>
             </div>
           </div>
         </div>
       </Modal>
 
-      <Modal isOpen={showLogModal && Boolean(selectedVehicle)} onClose={() => setShowLogModal(false)} title="Registrar uso do carro" size="xl">
+      <Modal isOpen={showLogModal && Boolean(selectedVehicle)} onClose={closeLogModal} title={editingLogId ? 'Editar registro do carro' : 'Registrar uso do carro'} size="xl">
         <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-3">
             {([
@@ -634,8 +765,10 @@ export function VehiclesPage() {
           </div>
           <Input label="Observacoes" value={logForm.notes} onChange={(event) => setLogForm((prev) => ({ ...prev, notes: event.target.value }))} />
           <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
-            <Button variant="secondary" onClick={() => setShowLogModal(false)}>Cancelar</Button>
-            <Button onClick={() => void handleSaveLog()} isLoading={savingLog} disabled={analyzingImage}>Salvar registro</Button>
+            <Button variant="secondary" onClick={closeLogModal}>Cancelar</Button>
+            <Button onClick={() => void handleSaveLog()} isLoading={savingLog} disabled={analyzingImage}>
+              {editingLogId ? 'Salvar alteracoes' : 'Salvar registro'}
+            </Button>
           </div>
         </div>
       </Modal>
