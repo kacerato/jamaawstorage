@@ -8,6 +8,7 @@ import { Alert, Badge, Button, Card, EmptyState, Input, Modal, Select, Spinner }
 
 type PersonRow = Tables<'people'>
 type VehicleEventType = 'pickup' | 'return' | 'fuel'
+type FuelLevelRange = 'reserva' | 'baixo' | 'meio' | 'alto' | 'cheio'
 
 interface VehicleRow {
   id: string
@@ -36,6 +37,7 @@ interface VehicleLogRow {
   occurred_at: string
   odometer_km: number | null
   fuel_level_percent: number | null
+  fuel_level_range: FuelLevelRange | null
   fuel_liters: number | null
   fuel_amount: number | null
   station_name: string | null
@@ -43,6 +45,7 @@ interface VehicleLogRow {
   ocr_text: string | null
   ai_summary: string | null
   ai_confidence: number | null
+  needs_review: boolean
   notes: string | null
   created_by: string | null
   created_at: string
@@ -68,6 +71,7 @@ interface LogFormState {
   photo_url: string | null
   odometer_km: string
   fuel_level_percent: string
+  fuel_level_range: FuelLevelRange | ''
   fuel_liters: string
   fuel_amount: string
   station_name: string
@@ -75,6 +79,7 @@ interface LogFormState {
   ocr_text: string | null
   ai_summary: string | null
   ai_confidence: number | null
+  needs_review: boolean
 }
 
 interface UntypedQueryBuilder {
@@ -102,6 +107,7 @@ const initialLogForm: LogFormState = {
   photo_url: null,
   odometer_km: '',
   fuel_level_percent: '',
+  fuel_level_range: '',
   fuel_liters: '',
   fuel_amount: '',
   station_name: '',
@@ -109,6 +115,7 @@ const initialLogForm: LogFormState = {
   ocr_text: null,
   ai_summary: null,
   ai_confidence: null,
+  needs_review: false,
 }
 
 function eventLabel(type: VehicleEventType): string {
@@ -121,6 +128,15 @@ function eventDescription(type: VehicleEventType): string {
   if (type === 'pickup') return 'Foto antes de sair do galpao, com km e combustivel visiveis.'
   if (type === 'return') return 'Foto ao chegar no galpao, repetindo km e combustivel.'
   return 'Foto do painel, bomba ou comprovante para registrar abastecimento.'
+}
+
+function fuelRangeLabel(range: FuelLevelRange | '' | null): string {
+  if (range === 'reserva') return 'Reserva'
+  if (range === 'baixo') return 'Baixo'
+  if (range === 'meio') return 'Meio tanque'
+  if (range === 'alto') return 'Alto'
+  if (range === 'cheio') return 'Cheio'
+  return '-'
 }
 
 function numericOrNull(value: string): number | null {
@@ -297,12 +313,14 @@ export function VehiclesPage() {
         photo_url: storageUrl,
         odometer_km: analysis.odometerKm != null ? String(analysis.odometerKm) : prev.odometer_km,
         fuel_level_percent: analysis.fuelLevelPercent != null ? String(analysis.fuelLevelPercent) : prev.fuel_level_percent,
+        fuel_level_range: analysis.fuelLevelRange ?? prev.fuel_level_range,
         fuel_liters: analysis.fuelLiters != null ? String(analysis.fuelLiters) : prev.fuel_liters,
         fuel_amount: analysis.fuelAmount != null ? String(analysis.fuelAmount) : prev.fuel_amount,
         station_name: analysis.stationName ?? prev.station_name,
         ocr_text: analysis.ocrText ?? null,
         ai_summary: analysis.summary ?? null,
         ai_confidence: analysis.confidence ?? null,
+        needs_review: Boolean(analysis.needsReview),
       }))
     } catch (uploadError) {
       setError(uploadError instanceof Error
@@ -330,6 +348,7 @@ export function VehiclesPage() {
         event_type: logForm.event_type,
         odometer_km: numericOrNull(logForm.odometer_km),
         fuel_level_percent: integerOrNull(logForm.fuel_level_percent),
+        fuel_level_range: logForm.fuel_level_range || null,
         fuel_liters: numericOrNull(logForm.fuel_liters),
         fuel_amount: numericOrNull(logForm.fuel_amount),
         station_name: logForm.station_name.trim() || null,
@@ -337,6 +356,7 @@ export function VehiclesPage() {
         ocr_text: logForm.ocr_text,
         ai_summary: logForm.ai_summary,
         ai_confidence: logForm.ai_confidence,
+        needs_review: logForm.needs_review,
         notes: logForm.notes.trim() || null,
       }
       const result = await (db.from('vehicle_usage_logs').insert(payload) as PromiseLike<{ error: { message: string } | null }>)
@@ -452,10 +472,12 @@ export function VehiclesPage() {
                       <div>
                         <div className="flex flex-wrap items-center gap-2">
                           <Badge variant={log.event_type === 'fuel' ? 'warning' : 'info'}>{eventLabel(log.event_type)}</Badge>
+                          {log.needs_review ? <Badge variant="warning">Revisar leitura</Badge> : null}
                           <span className="text-xs text-gray-500">{formatDateTime(log.occurred_at)}</span>
                         </div>
                         <p className="mt-2 text-sm text-gray-300">
                           Km: {log.odometer_km ?? '-'} • Combustivel: {log.fuel_level_percent != null ? `${log.fuel_level_percent}%` : '-'}
+                          {log.fuel_level_range ? ` (${fuelRangeLabel(log.fuel_level_range)})` : ''}
                           {log.fuel_liters ? ` • ${log.fuel_liters} L` : ''}
                         </p>
                         {log.ai_summary ? <p className="mt-2 text-sm text-gray-400">{log.ai_summary}</p> : null}
@@ -545,6 +567,19 @@ export function VehiclesPage() {
                 <Input label="Kilometragem" value={logForm.odometer_km} onChange={(event) => setLogForm((prev) => ({ ...prev, odometer_km: event.target.value }))} />
                 <Input label="Combustivel %" value={logForm.fuel_level_percent} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_level_percent: event.target.value }))} />
               </div>
+              <Select
+                label="Faixa do combustivel"
+                value={logForm.fuel_level_range}
+                onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_level_range: event.target.value as FuelLevelRange | '' }))}
+                placeholder="Selecione se precisar corrigir"
+                options={[
+                  { value: 'reserva', label: 'Reserva' },
+                  { value: 'baixo', label: 'Baixo' },
+                  { value: 'meio', label: 'Meio tanque' },
+                  { value: 'alto', label: 'Alto' },
+                  { value: 'cheio', label: 'Cheio' },
+                ]}
+              />
               {isFuelLog ? (
                 <div className="grid gap-3 md:grid-cols-3">
                   <Input label="Litros abastecidos" value={logForm.fuel_liters} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_liters: event.target.value }))} />
@@ -573,10 +608,15 @@ export function VehiclesPage() {
           <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
             <div className="grid gap-3 md:grid-cols-3">
               <MiniMetric label="Km lida" value={logForm.odometer_km || '-'} />
-              <MiniMetric label="Combustivel" value={logForm.fuel_level_percent ? `${logForm.fuel_level_percent}%` : '-'} />
-              <MiniMetric label="Confianca OCR" value={logForm.ai_confidence != null ? `${Math.round(logForm.ai_confidence * 100)}%` : '-'} />
+              <MiniMetric label="Combustivel" value={logForm.fuel_level_percent ? `${logForm.fuel_level_percent}% (${fuelRangeLabel(logForm.fuel_level_range)})` : fuelRangeLabel(logForm.fuel_level_range)} />
+              <MiniMetric label="Confianca IA" value={logForm.ai_confidence != null ? `${Math.round(logForm.ai_confidence * 100)}%` : '-'} />
             </div>
             {analyzingImage ? <p className="mt-2 text-xs text-orange-300">Analisando imagem...</p> : null}
+            {logForm.needs_review ? (
+              <Alert variant="warning" className="mt-3">
+                A leitura do combustivel precisa de conferencia manual antes de salvar.
+              </Alert>
+            ) : null}
             {logForm.ai_summary ? <Alert variant="info" className="mt-3">{logForm.ai_summary}</Alert> : null}
           </div>
           <Input label="Observacoes" value={logForm.notes} onChange={(event) => setLogForm((prev) => ({ ...prev, notes: event.target.value }))} />
