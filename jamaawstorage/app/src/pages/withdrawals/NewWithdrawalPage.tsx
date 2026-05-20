@@ -73,6 +73,12 @@ interface SignatureAttachmentState {
   uploading: boolean
 }
 
+interface PhotoAttachment {
+  id: string
+  url: string
+  previewUrl: string
+}
+
 const DEFAULT_WORKSITE_NAME = 'obra jamaaw'
 const SIGNATURE_ATTACHMENT_ACCEPT = '.png,.jpg,.jpeg,.webp,.pdf'
 
@@ -178,8 +184,7 @@ export function NewWithdrawalPage() {
   const [showCompositionConfirm, setShowCompositionConfirm] = useState(false)
 
   const [notes, setNotes] = useState<string>('')
-  const [photoUrl, setPhotoUrl] = useState<string | null>(null)
-  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
+  const [photoAttachments, setPhotoAttachments] = useState<PhotoAttachment[]>([])
   const [photoError, setPhotoError] = useState<string | null>(null)
   const [uploadingPhoto, setUploadingPhoto] = useState(false)
   const [supervisorSignature, setSupervisorSignature] = useState<string>('')
@@ -407,26 +412,47 @@ export function NewWithdrawalPage() {
     setItems((prev) => prev.filter((item) => item.entry_id !== entryId))
   }
 
-  const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file || !profile) return
+  const handlePhotoFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList).filter((file) => file.type.startsWith('image/'))
+    if (files.length === 0 || !profile) return
 
     try {
       setPhotoError(null)
       setUploadingPhoto(true)
-      const result = await uploadImageToStorage({
-        file,
-        scope: 'withdrawals',
-        entityId: profile.id,
-        options: DEFAULT_IMAGE_UPLOAD_OPTIONS,
-      })
-      setPhotoPreview(result)
-      setPhotoUrl(result)
+      const uploadedPhotos = await Promise.all(
+        files.map(async (file) => {
+          const result = await uploadImageToStorage({
+            file,
+            scope: 'withdrawals',
+            entityId: profile.id,
+            options: DEFAULT_IMAGE_UPLOAD_OPTIONS,
+          })
+
+          return {
+            id: crypto.randomUUID(),
+            url: result,
+            previewUrl: result,
+          }
+        }),
+      )
+
+      setPhotoAttachments((prev) => [...prev, ...uploadedPhotos])
     } catch (error) {
-      setPhotoError(error instanceof Error ? error.message : 'Nao foi possivel enviar a foto.')
+      setPhotoError(error instanceof Error ? error.message : 'Nao foi possivel enviar as fotos.')
     } finally {
       setUploadingPhoto(false)
     }
+  }
+
+  const handlePhotoChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (!event.target.files || event.target.files.length === 0) return
+    await handlePhotoFiles(event.target.files)
+    event.target.value = ''
+  }
+
+  const removePhotoAttachment = (photoId: string) => {
+    setPhotoAttachments((prev) => prev.filter((photo) => photo.id !== photoId))
+    setPhotoError(null)
   }
 
   const handleSignatureDocumentChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -737,6 +763,8 @@ export function NewWithdrawalPage() {
       }
 
       const createdIds: string[] = []
+      const photoUrls = photoAttachments.map((photo) => photo.url)
+      const mainPhotoUrl = photoUrls[0] ?? null
 
       for (const group of groups) {
         const { data: withdrawalId, error: withdrawalError } = await supabase.rpc('create_completed_withdrawal', {
@@ -746,7 +774,7 @@ export function NewWithdrawalPage() {
           p_work_site_id: group.destination_type === 'work_site' ? group.work_site_id : null,
           p_authorized_by: profile.id,
           p_notes: notes || null,
-          p_photo_url: photoUrl,
+          p_photo_url: mainPhotoUrl,
           p_supervisor_signature: supervisorSignatureUrl,
           p_requester_signature: requesterSignatureUrl,
           p_witness_signature: null,
@@ -770,6 +798,7 @@ export function NewWithdrawalPage() {
         const { error: attachmentUpdateError } = await supabase
           .from('withdrawals')
           .update({
+            photo_urls: photoUrls,
             supervisor_signature_attachment_url: signatureDocument.url,
             supervisor_signature_attachment_name: signatureDocument.name,
             requester_signature_attachment_url: signatureDocument.url,
@@ -1244,57 +1273,61 @@ export function NewWithdrawalPage() {
             <CameraIcon size={16} className="mr-1 inline-block" />
             Registro fotografico ou comprovante
           </label>
-          {photoPreview ? (
-            <div className="relative inline-block">
-              <img
-                src={photoPreview}
-                alt="Registro fotografico"
-                className="max-h-48 rounded-lg border border-gray-700"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  setPhotoPreview(null)
-                  setPhotoUrl(null)
-                  setPhotoError(null)
-                }}
-                className="absolute right-2 top-2 rounded-full bg-red-600 p-1 text-white transition-colors hover:bg-red-700"
-              >
-                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
-              </button>
-            </div>
-          ) : (
-            <div 
-              onDragOver={(e) => { e.preventDefault(); setDragActivePhoto(true) }}
-              onDragLeave={(e) => { e.preventDefault(); setDragActivePhoto(false) }}
-              onDrop={async (e) => {
-                e.preventDefault()
-                setDragActivePhoto(false)
-                const file = e.dataTransfer.files?.[0]
-                if (file) {
-                  const synthEvent = { target: { files: [file], value: '' } } as unknown as React.ChangeEvent<HTMLInputElement>
-                  await handlePhotoChange(synthEvent)
-                }
-              }}
-              className={cn(
-                "rounded-lg border-2 border-dashed p-4 transition-colors",
-                dragActivePhoto ? "border-orange-500 bg-orange-500/10" : "border-gray-700 bg-gray-900/50"
-              )}
-            >
-              <input
-                type="file"
-                accept="image/*"
-                capture="environment"
-                onChange={handlePhotoChange}
-                disabled={uploadingPhoto}
-                className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
-              />
-              <p className="mt-2 text-xs text-gray-500">
-                Solte um arquivo aqui ou clique acima. JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB
-              </p>
-              {uploadingPhoto && <p className="mt-2 text-xs text-orange-300">Enviando imagem...</p>}
+          <div 
+            onDragOver={(e) => { e.preventDefault(); setDragActivePhoto(true) }}
+            onDragLeave={(e) => { e.preventDefault(); setDragActivePhoto(false) }}
+            onDrop={async (e) => {
+              e.preventDefault()
+              setDragActivePhoto(false)
+              if (e.dataTransfer.files?.length) {
+                await handlePhotoFiles(e.dataTransfer.files)
+              }
+            }}
+            className={cn(
+              "rounded-lg border-2 border-dashed p-4 transition-colors",
+              dragActivePhoto ? "border-orange-500 bg-orange-500/10" : "border-gray-700 bg-gray-900/50"
+            )}
+          >
+            <input
+              type="file"
+              accept="image/*"
+              capture="environment"
+              multiple
+              onChange={handlePhotoChange}
+              disabled={uploadingPhoto}
+              className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
+            />
+            <p className="mt-2 text-xs text-gray-500">
+              Solte uma ou varias imagens aqui ou clique acima. JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB por foto
+            </p>
+            {uploadingPhoto && <p className="mt-2 text-xs text-orange-300">Enviando imagem...</p>}
+          </div>
+          {photoAttachments.length > 0 && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {photoAttachments.map((photo, index) => (
+                <div key={photo.id} className="relative overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
+                  <img
+                    src={photo.previewUrl}
+                    alt={`Registro fotografico ${index + 1}`}
+                    className="h-32 w-full object-cover"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removePhotoAttachment(photo.id)}
+                    className="absolute right-2 top-2 rounded-full bg-red-600 p-1 text-white transition-colors hover:bg-red-700"
+                    aria-label={`Remover registro fotografico ${index + 1}`}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
+                      <path d="M3 3L11 11M11 3L3 11" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
+                  </button>
+                  {index === 0 && (
+                    <span className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
+                      Principal
+                    </span>
+                  )}
+                </div>
+              ))}
             </div>
           )}
           {photoError && <p className="text-xs text-red-400">{photoError}</p>}
@@ -1448,18 +1481,23 @@ export function NewWithdrawalPage() {
         </Card>
       ))}
 
-      {(notes || photoPreview || supervisorSignature || requesterSignature || signatureDocument.url) && (
+      {(notes || photoAttachments.length > 0 || supervisorSignature || requesterSignature || signatureDocument.url) && (
         <Card variant="bordered" padding="lg">
           <h3 className="mb-4 text-lg font-semibold text-white">Anexos e assinaturas</h3>
 
           {notes && <p className="mb-4 text-sm text-gray-300">{notes}</p>}
 
-          {photoPreview && (
-            <img
-              src={photoPreview}
-              alt="Registro fotografico"
-              className="mb-4 max-h-48 rounded-lg border border-gray-700"
-            />
+          {photoAttachments.length > 0 && (
+            <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+              {photoAttachments.map((photo, index) => (
+                <img
+                  key={photo.id}
+                  src={photo.previewUrl}
+                  alt={`Registro fotografico ${index + 1}`}
+                  className="h-32 w-full rounded-lg border border-gray-700 object-cover"
+                />
+              ))}
+            </div>
           )}
 
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">

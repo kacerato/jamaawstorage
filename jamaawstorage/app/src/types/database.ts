@@ -383,6 +383,7 @@ export interface Database {
       status: 'pending' | 'approved' | 'rejected' | 'completed'
       notes: string | null
       photo_url: string | null
+      photo_urls: string[]
       supervisor_signature: string | null
       supervisor_signature_attachment_url: string | null
       supervisor_signature_attachment_name: string | null
@@ -405,6 +406,7 @@ export interface Database {
       status?: 'pending' | 'approved' | 'rejected' | 'completed'
       notes?: string | null
       photo_url?: string | null
+      photo_urls?: string[]
       supervisor_signature?: string | null
       supervisor_signature_attachment_url?: string | null
       supervisor_signature_attachment_name?: string | null
@@ -427,6 +429,7 @@ export interface Database {
       status?: 'pending' | 'approved' | 'rejected' | 'completed'
       notes?: string | null
       photo_url?: string | null
+      photo_urls?: string[]
       supervisor_signature?: string | null
       supervisor_signature_attachment_url?: string | null
       supervisor_signature_attachment_name?: string | null

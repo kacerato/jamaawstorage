@@ -172,6 +172,7 @@ export function PersonDetailPage() {
     status: raw.status as 'pending' | 'approved' | 'rejected' | 'completed',
     notes: raw.notes,
     photo_url: raw.photo_url,
+    photo_urls: raw.photo_urls ?? [],
     supervisor_signature: raw.supervisor_signature,
     supervisor_signature_attachment_url: raw.supervisor_signature_attachment_url,
     supervisor_signature_attachment_name: raw.supervisor_signature_attachment_name,
@@ -1034,6 +1035,7 @@ interface RawWithdrawalRow {
   status: string
   notes: string | null
   photo_url: string | null
+  photo_urls?: string[]
   supervisor_signature: string | null
   supervisor_signature_attachment_url: string | null
   supervisor_signature_attachment_name: string | null

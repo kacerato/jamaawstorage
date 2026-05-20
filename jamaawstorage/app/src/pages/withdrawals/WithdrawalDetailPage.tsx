@@ -148,6 +148,7 @@ export function WithdrawalDetailPage() {
   const hasRequesterSignature = !!withdrawal.requester_signature
   const bothSignaturesPresent = hasSupervisorSignature && hasRequesterSignature
   const sharedSignatureAttachment = resolveSharedSignatureAttachment(withdrawal)
+  const photoUrls = getWithdrawalPhotoUrls(withdrawal)
 
   const destinationLabel =
     withdrawal.destination_type === 'collaborator'
@@ -292,12 +293,24 @@ export function WithdrawalDetailPage() {
           <CameraIcon size={18} className="mr-2 inline-block" />
           Registro Fotografico
         </h3>
-        {withdrawal.photo_url ? (
-          <img
-            src={withdrawal.photo_url}
-            alt="Registro fotografico"
-            className="max-h-64 rounded-lg border border-gray-700"
-          />
+        {photoUrls.length > 0 ? (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+            {photoUrls.map((photoUrl, index) => (
+              <a
+                key={`${photoUrl}-${index}`}
+                href={photoUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="group overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
+              >
+                <img
+                  src={photoUrl}
+                  alt={`Registro fotografico ${index + 1}`}
+                  className="h-40 w-full object-cover transition-transform group-hover:scale-105"
+                />
+              </a>
+            ))}
+          </div>
         ) : (
           <p className="text-sm text-gray-400">Sem registro fotografico</p>
         )}
@@ -409,6 +422,15 @@ function resolveSharedSignatureAttachment(withdrawal: WithdrawalRow): { url: str
     url: withdrawal.supervisor_signature_attachment_url ?? withdrawal.requester_signature_attachment_url ?? null,
     name: withdrawal.supervisor_signature_attachment_name ?? withdrawal.requester_signature_attachment_name ?? null,
   }
+}
+
+function getWithdrawalPhotoUrls(withdrawal: WithdrawalRow): string[] {
+  const urls = [
+    ...(withdrawal.photo_urls ?? []),
+    withdrawal.photo_url,
+  ].filter((url): url is string => !!url)
+
+  return Array.from(new Set(urls))
 }
 
 function isImageUrl(url: string | null | undefined): boolean {
