@@ -10,6 +10,7 @@ import { ReportsPage } from './pages/reports'
 import { AuditPage } from './pages/audit'
 import { SupervisorsPage } from './pages/supervisors'
 import { ProfilePage } from './pages/profile'
+import { VehiclesPage } from './pages/vehicles'
 
 function App() {
   return (
@@ -31,9 +32,10 @@ function App() {
             <Route path="/kits" element={<Navigate to="/stock?tab=kits" replace />} />
             <Route path="/worksites" element={<Navigate to="/withdrawals/new" replace />} />
             <Route path="/reports" element={<ReportsPage />} />
-<Route path="/audit" element={<AuditPage />} />
-          <Route path="/supervisors" element={<SupervisorsPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/vehicles" element={<VehiclesPage />} />
+            <Route path="/audit" element={<AuditPage />} />
+            <Route path="/supervisors" element={<SupervisorsPage />} />
+            <Route path="/profile" element={<ProfilePage />} />
       </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

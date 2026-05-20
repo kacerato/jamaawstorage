@@ -5,6 +5,8 @@ import tailwindcss from '@tailwindcss/vite'
 import kimiStockImportHandler from './api/kimi-stock-import.js'
 // @ts-expect-error Local serverless handler has no TS types.
 import telegramWithdrawalNotifyHandler from './api/telegram-withdrawal-notify.js'
+// @ts-expect-error Local serverless handler has no TS types.
+import vehicleImageAnalysisHandler from './api/vehicle-image-analysis.js'
 
 type LocalApiRequest = NodeJS.ReadableStream & { method?: string; body?: string }
 type LocalApiResponse = NodeJS.WritableStream & {
@@ -85,6 +87,12 @@ function localApiPlugin() {
           res as Parameters<typeof telegramWithdrawalNotifyHandler>[1],
         )
       })
+      attachLocalApiHandler(server, '/api/vehicle-image-analysis', async (req, res) => {
+        await vehicleImageAnalysisHandler(
+          req as Parameters<typeof vehicleImageAnalysisHandler>[0],
+          res as Parameters<typeof vehicleImageAnalysisHandler>[1],
+        )
+      })
     },
   }
 }
@@ -96,6 +104,7 @@ export default defineConfig(({ mode }) => {
     'TELEGRAM_BOT_TOKEN',
     'TELEGRAM_CHAT_ID',
     'TELEGRAM_CHANNEL_URL',
+    'ZAI_API_KEY',
   ] as const
 
   for (const key of forwardedEnvKeys) {

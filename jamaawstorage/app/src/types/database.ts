@@ -737,6 +737,23 @@ export interface Database {
     }
     Returns: Database['public']['Tables']['stock_return_requests']['Row']
   }
+  process_held_stock_return_request: {
+    Args: {
+      p_request_id: string
+      p_approve_quantity: number
+      p_hold_quantity: number
+      p_triage_notes?: string | null
+      p_approved_condition?: 'new' | 'used' | 'damaged' | null
+      p_hold_condition?: 'used' | 'damaged' | null
+    }
+    Returns: Database['public']['Tables']['stock_return_requests']['Row']
+  }
+  delete_stock_return_request: {
+    Args: {
+      p_request_id: string
+    }
+    Returns: void
+  }
   create_completed_withdrawal: {
     Args: {
       p_requested_by: string
