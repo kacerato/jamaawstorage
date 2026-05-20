@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import { Camera, Car, FileText, Fuel, Gauge, Plus, UserRound } from 'lucide-react'
+import { Camera, Car, FileText, Fuel, Gauge, Plus, UserRound, Warehouse } from 'lucide-react'
 import type { Tables } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { uploadFileToStorage, uploadImageToStorage } from '../../lib/storage'
@@ -117,6 +117,12 @@ function eventLabel(type: VehicleEventType): string {
   return 'Abastecimento'
 }
 
+function eventDescription(type: VehicleEventType): string {
+  if (type === 'pickup') return 'Foto antes de sair do galpao, com km e combustivel visiveis.'
+  if (type === 'return') return 'Foto ao chegar no galpao, repetindo km e combustivel.'
+  return 'Foto do painel, bomba ou comprovante para registrar abastecimento.'
+}
+
 function numericOrNull(value: string): number | null {
   const parsed = Number.parseFloat(value.replace(',', '.'))
   return Number.isFinite(parsed) ? parsed : null
@@ -128,7 +134,7 @@ function integerOrNull(value: string): number | null {
 }
 
 export function VehiclesPage() {
-  const db = supabase as unknown as { from: (table: string) => UntypedQueryBuilder }
+  const db = useMemo(() => supabase as unknown as { from: (table: string) => UntypedQueryBuilder }, [])
   const [vehicles, setVehicles] = useState<VehicleRow[]>([])
   const [logs, setLogs] = useState<VehicleLogRow[]>([])
   const [people, setPeople] = useState<PersonRow[]>([])
@@ -152,6 +158,8 @@ export function VehiclesPage() {
     () => logs.filter((log) => log.vehicle_id === selectedVehicle?.id),
     [logs, selectedVehicle?.id],
   )
+
+  const isFuelLog = logForm.event_type === 'fuel'
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -495,16 +503,79 @@ export function VehiclesPage() {
       <Modal isOpen={showLogModal && Boolean(selectedVehicle)} onClose={() => setShowLogModal(false)} title="Registrar uso do carro" size="xl">
         <div className="space-y-4">
           <div className="grid gap-3 md:grid-cols-3">
-            <Select label="Tipo" value={logForm.event_type} onChange={(event) => setLogForm((prev) => ({ ...prev, event_type: event.target.value as VehicleEventType }))} options={[{ value: 'pickup', label: 'Saida do galpao' }, { value: 'return', label: 'Chegada ao galpao' }, { value: 'fuel', label: 'Abastecimento' }]} />
-            <Input label="Kilometragem" value={logForm.odometer_km} onChange={(event) => setLogForm((prev) => ({ ...prev, odometer_km: event.target.value }))} />
-            <Input label="Combustivel %" value={logForm.fuel_level_percent} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_level_percent: event.target.value }))} />
-            <Input label="Litros abastecidos" value={logForm.fuel_liters} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_liters: event.target.value }))} />
-            <Input label="Valor abastecido" value={logForm.fuel_amount} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_amount: event.target.value }))} />
-            <Input label="Posto" value={logForm.station_name} onChange={(event) => setLogForm((prev) => ({ ...prev, station_name: event.target.value }))} />
+            {([
+              { value: 'pickup', title: 'Saida', detail: 'Antes de sair', icon: <Car size={18} /> },
+              { value: 'return', title: 'Chegada', detail: 'Volta ao galpao', icon: <Warehouse size={18} /> },
+              { value: 'fuel', title: 'Abastecimento', detail: 'Combustivel e cupom', icon: <Fuel size={18} /> },
+            ] as const).map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                onClick={() => setLogForm((prev) => ({
+                  ...prev,
+                  event_type: option.value,
+                  fuel_liters: option.value === 'fuel' ? prev.fuel_liters : '',
+                  fuel_amount: option.value === 'fuel' ? prev.fuel_amount : '',
+                  station_name: option.value === 'fuel' ? prev.station_name : '',
+                }))}
+                className={`rounded-2xl border p-4 text-left transition-colors ${
+                  logForm.event_type === option.value
+                    ? 'border-orange-400/35 bg-orange-500/12 text-orange-100'
+                    : 'border-white/8 bg-white/3 text-gray-300 hover:bg-white/6'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="rounded-xl border border-white/10 bg-black/20 p-2">{option.icon}</div>
+                  <div>
+                    <p className="text-sm font-medium text-white">{option.title}</p>
+                    <p className="mt-1 text-xs text-gray-400">{option.detail}</p>
+                  </div>
+                </div>
+              </button>
+            ))}
           </div>
-          <div className="rounded-2xl border border-dashed border-white/12 bg-black/20 p-4">
-            <input type="file" accept="image/*" onChange={(event) => void handleLogPhoto(event)} disabled={analyzingImage} className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white" />
-            <p className="mt-2 text-xs text-gray-500">A foto passa por GLM-OCR e depois por analise visual para tentar preencher km e combustivel.</p>
+
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+            <div className="space-y-4 rounded-3xl border border-white/8 bg-white/3 p-4">
+              <div>
+                <p className="text-sm font-medium text-white">{eventLabel(logForm.event_type)}</p>
+                <p className="mt-1 text-xs text-gray-400">{eventDescription(logForm.event_type)}</p>
+              </div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <Input label="Kilometragem" value={logForm.odometer_km} onChange={(event) => setLogForm((prev) => ({ ...prev, odometer_km: event.target.value }))} />
+                <Input label="Combustivel %" value={logForm.fuel_level_percent} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_level_percent: event.target.value }))} />
+              </div>
+              {isFuelLog ? (
+                <div className="grid gap-3 md:grid-cols-3">
+                  <Input label="Litros abastecidos" value={logForm.fuel_liters} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_liters: event.target.value }))} />
+                  <Input label="Valor abastecido" value={logForm.fuel_amount} onChange={(event) => setLogForm((prev) => ({ ...prev, fuel_amount: event.target.value }))} />
+                  <Input label="Posto" value={logForm.station_name} onChange={(event) => setLogForm((prev) => ({ ...prev, station_name: event.target.value }))} />
+                </div>
+              ) : null}
+            </div>
+
+            <div className="rounded-3xl border border-dashed border-white/12 bg-black/20 p-4">
+              <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-[#15161a]">
+                {logForm.photo_url ? (
+                  <img src={logForm.photo_url} alt="Evidencia do registro" className="h-full w-full object-cover" />
+                ) : (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-500">
+                    <Camera size={34} />
+                    <span className="text-xs">Foto da evidencia</span>
+                  </div>
+                )}
+              </div>
+              <input type="file" accept="image/*" onChange={(event) => void handleLogPhoto(event)} disabled={analyzingImage} className="mt-4 block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white" />
+              <p className="mt-2 text-xs text-gray-500">A foto passa por GLM-OCR e analise visual para preencher km e combustivel.</p>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="grid gap-3 md:grid-cols-3">
+              <MiniMetric label="Km lida" value={logForm.odometer_km || '-'} />
+              <MiniMetric label="Combustivel" value={logForm.fuel_level_percent ? `${logForm.fuel_level_percent}%` : '-'} />
+              <MiniMetric label="Confianca OCR" value={logForm.ai_confidence != null ? `${Math.round(logForm.ai_confidence * 100)}%` : '-'} />
+            </div>
             {analyzingImage ? <p className="mt-2 text-xs text-orange-300">Analisando imagem...</p> : null}
             {logForm.ai_summary ? <Alert variant="info" className="mt-3">{logForm.ai_summary}</Alert> : null}
           </div>
