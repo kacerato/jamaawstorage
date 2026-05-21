@@ -1082,7 +1082,13 @@ function InventoryQuantityInfo({
   const withdrawalTotal = traces.reduce((sum, trace) => sum + trace.quantity, 0)
   const manualOrAdjustedQuantity = inventory.quantity - withdrawalTotal
   const buttonRef = useRef<HTMLButtonElement | null>(null)
-  const [cardPosition, setCardPosition] = useState({ top: 0, left: 0 })
+  const [cardPosition, setCardPosition] = useState({
+    top: 0,
+    bottom: undefined as number | undefined,
+    left: 0,
+    maxHeight: 360,
+    placement: 'below' as 'above' | 'below',
+  })
 
   const updateCardPosition = useCallback(() => {
     const button = buttonRef.current
@@ -1091,10 +1097,19 @@ function InventoryQuantityInfo({
     const rect = button.getBoundingClientRect()
     const cardWidth = Math.min(520, window.innerWidth - 48)
     const left = Math.min(Math.max(rect.left, 16), window.innerWidth - cardWidth - 16)
+    const gap = 10
+    const viewportPadding = 12
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
+    const spaceAbove = rect.top - viewportPadding
+    const shouldOpenAbove = spaceBelow < 360 && spaceAbove > spaceBelow
+    const availableSpace = shouldOpenAbove ? spaceAbove : spaceBelow
 
     setCardPosition({
-      top: rect.bottom + 10,
+      top: shouldOpenAbove ? 0 : rect.bottom + gap,
+      bottom: shouldOpenAbove ? window.innerHeight - rect.top + gap : undefined,
       left,
+      maxHeight: Math.max(180, Math.min(560, availableSpace - gap)),
+      placement: shouldOpenAbove ? 'above' : 'below',
     })
   }, [])
 
@@ -1114,12 +1129,14 @@ function InventoryQuantityInfo({
   const infoCard = isOpen
     ? createPortal(
       <div
-        className="fixed z-[9999] w-[min(520px,calc(100vw-48px))] overflow-hidden rounded-2xl border border-orange-400/25 bg-[#101114] opacity-100 shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-300"
+        className="fixed z-[9999] flex w-[min(520px,calc(100vw-48px))] flex-col overflow-hidden rounded-2xl border border-orange-400/25 bg-[#101114] opacity-100 shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-300"
         style={{
-          top: cardPosition.top,
+          top: cardPosition.placement === 'below' ? cardPosition.top : undefined,
+          bottom: cardPosition.placement === 'above' ? cardPosition.bottom : undefined,
           left: cardPosition.left,
+          maxHeight: cardPosition.maxHeight,
           transform: 'translateY(0) scale(1)',
-          transformOrigin: 'top left',
+          transformOrigin: cardPosition.placement === 'above' ? 'bottom left' : 'top left',
         }}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
@@ -1157,7 +1174,7 @@ function InventoryQuantityInfo({
           ) : null}
         </div>
 
-        <div className="max-h-72 overflow-y-auto p-3">
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {traces.length === 0 ? (
             <div className="rounded-xl border border-white/8 bg-white/3 p-3 text-xs text-gray-400">
               Nao ha retirada registrada para este item neste colaborador. Este saldo provavelmente veio de adicao manual, kit ou ajuste direto de inventario.
