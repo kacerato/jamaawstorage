@@ -1110,10 +1110,10 @@ function InventoryQuantityInfo({
 
       <div
         className={cn(
-          'mt-3 overflow-hidden rounded-2xl border bg-[#101114] shadow-[0_24px_70px_rgba(0,0,0,0.45)] transition-all duration-300',
+          'absolute left-0 top-full z-40 mt-2 w-[min(520px,calc(100vw-48px))] overflow-hidden rounded-2xl border bg-[#101114] shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-300',
           isOpen
-            ? 'max-h-[520px] border-orange-400/25 opacity-100'
-            : 'max-h-0 border-transparent opacity-0',
+            ? 'pointer-events-auto max-h-[520px] border-orange-400/25 opacity-100'
+            : 'pointer-events-none max-h-0 border-transparent opacity-0',
         )}
         style={{
           transform: isOpen ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.94)',
