@@ -209,22 +209,6 @@ export function EditWithdrawalPage() {
     [requesters],
   )
 
-  const collaboratorOptions = useMemo(
-    () => collaborators.map((collaborator) => ({
-      value: collaborator.id,
-      label: `${collaborator.full_name}${collaborator.employee_id ? ` (${collaborator.employee_id})` : ''}`,
-    })),
-    [collaborators],
-  )
-
-  const workSiteOptions = useMemo(
-    () => workSites.map((workSite) => ({
-      value: workSite.id,
-      label: workSite.name,
-    })),
-    [workSites],
-  )
-
   const totalUnits = useMemo(
     () => items.reduce((sum, item) => sum + item.quantity, 0),
     [items],
@@ -283,16 +267,6 @@ export function EditWithdrawalPage() {
   const validateForm = (itemsSource: EditableWithdrawalItem[]): boolean => {
     if (!requestedBy) {
       setSaveError('Selecione quem solicitou a retirada.')
-      return false
-    }
-
-    if (destinationType === 'collaborator' && !collaboratorId) {
-      setSaveError('Selecione o colaborador da retirada.')
-      return false
-    }
-
-    if (destinationType === 'work_site' && !workSiteId) {
-      setSaveError('Selecione a obra da retirada.')
       return false
     }
 
@@ -569,10 +543,10 @@ export function EditWithdrawalPage() {
           <Card variant="bordered" padding="lg">
             <div className="mb-4 flex items-center gap-2">
               <UserIcon size={18} className="text-orange-300" />
-              <h3 className="text-lg font-semibold text-white">Solicitacao e Destino</h3>
+              <h3 className="text-lg font-semibold text-white">Solicitacao</h3>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4">
               <Select
                 label="Solicitante"
                 value={requestedBy}
@@ -581,53 +555,7 @@ export function EditWithdrawalPage() {
                 placeholder="Selecione quem solicitou"
               />
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-sm font-medium text-gray-300">Destino</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setDestinationType('collaborator')}
-                    className={`rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
-                      destinationType === 'collaborator'
-                        ? 'border-orange-500 bg-orange-500/10 text-orange-300'
-                        : 'border-white/8 bg-white/4 text-gray-400 hover:bg-white/6'
-                    }`}
-                  >
-                    Colaborador
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDestinationType('work_site')}
-                    className={`rounded-xl border px-4 py-3 text-sm font-medium transition-colors ${
-                      destinationType === 'work_site'
-                        ? 'border-orange-500 bg-orange-500/10 text-orange-300'
-                        : 'border-white/8 bg-white/4 text-gray-400 hover:bg-white/6'
-                    }`}
-                  >
-                    Obra
-                  </button>
-                </div>
-              </div>
-
-              {destinationType === 'collaborator' ? (
-                <Select
-                  label="Colaborador"
-                  value={collaboratorId}
-                  onChange={(event) => setCollaboratorId(event.target.value)}
-                  options={collaboratorOptions}
-                  placeholder="Selecione o colaborador"
-                />
-              ) : (
-                <Select
-                  label="Obra"
-                  value={workSiteId}
-                  onChange={(event) => setWorkSiteId(event.target.value)}
-                  options={workSiteOptions}
-                  placeholder="Selecione a obra"
-                />
-              )}
-
-              <div className="md:col-span-2">
+              <div>
                 <label className="text-sm font-medium text-gray-300">Observacoes</label>
                 <textarea
                   value={notes}
@@ -639,7 +567,7 @@ export function EditWithdrawalPage() {
               </div>
             </div>
             <Alert variant="info" className="mt-4">
-              Este destino serve como padrao para novos itens. O destino real pode ser ajustado individualmente na tabela abaixo.
+              O destino da retirada agora fica em cada item. Use Ajustar em cada linha para trocar entre colaborador e obra.
             </Alert>
           </Card>
 
