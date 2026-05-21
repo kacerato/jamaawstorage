@@ -150,12 +150,7 @@ export function WithdrawalDetailPage() {
   const sharedSignatureAttachment = resolveSharedSignatureAttachment(withdrawal)
   const photoUrls = getWithdrawalPhotoUrls(withdrawal)
 
-  const destinationLabel =
-    withdrawal.destination_type === 'collaborator'
-      ? withdrawal.collaborator
-        ? `${withdrawal.collaborator.full_name} - Inventario pessoal`
-        : 'Colaborador nao informado'
-      : 'obra jamaaw'
+  const destinationLabel = withdrawalDestinationsSummary(withdrawal)
 
   return (
     <div className="flex flex-col gap-6">
@@ -227,7 +222,7 @@ export function WithdrawalDetailPage() {
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Destino</p>
+            <p className="text-xs font-medium text-gray-400">Destinos dos itens</p>
             <p className="text-sm text-white">{destinationLabel}</p>
           </div>
           <div>
@@ -450,6 +445,25 @@ function withdrawalItemDestinationLabel(
   }
 
   return item.work_site?.name ?? withdrawal.work_site?.name ?? 'Obra'
+}
+
+function withdrawalDestinationsSummary(withdrawal: WithdrawalRow): string {
+  const itemDestinations = withdrawal.withdrawal_items?.map((item) =>
+    withdrawalItemDestinationLabel(item, withdrawal),
+  ) ?? []
+  const uniqueDestinations = Array.from(new Set(itemDestinations.filter(Boolean)))
+
+  if (uniqueDestinations.length === 0) {
+    if (withdrawal.destination_type === 'collaborator') {
+      return withdrawal.collaborator
+        ? `${withdrawal.collaborator.full_name} - Inventario pessoal`
+        : 'Colaborador nao informado'
+    }
+
+    return withdrawal.work_site?.name ?? 'Obra'
+  }
+
+  return uniqueDestinations.join(' / ')
 }
 
 function isImageUrl(url: string | null | undefined): boolean {
