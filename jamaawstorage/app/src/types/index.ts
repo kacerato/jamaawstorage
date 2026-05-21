@@ -11,6 +11,8 @@ export interface PersonWithInventory extends Tables<'people'> {
 export interface WithdrawalWithDetails extends Tables<'withdrawals'> {
   withdrawal_items: (Tables<'withdrawal_items'> & {
     stock_items: Tables<'stock_items'>
+    collaborator?: Pick<Tables<'people'>, 'id' | 'full_name' | 'employee_id'> | null
+    work_site?: Pick<Tables<'work_sites'>, 'id' | 'name'> | null
   })[]
   requested_by_person: Tables<'people'> | null
   collaborator?: Tables<'people'> | null

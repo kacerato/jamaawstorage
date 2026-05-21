@@ -190,6 +190,9 @@ export function PersonDetailPage() {
           lot_id: item.lot_id,
           quantity: item.quantity,
           unit: item.unit,
+          destination_type: item.destination_type as WithdrawalDestinationType | null,
+          collaborator_id: item.collaborator_id,
+          work_site_id: item.work_site_id,
           created_at: item.created_at,
           stock_items: item.stock_items as Tables<'stock_items'>,
         })),
@@ -1053,6 +1056,9 @@ interface RawWithdrawalRow {
     lot_id: string | null
     quantity: number
     unit: string
+    destination_type: string | null
+    collaborator_id: string | null
+    work_site_id: string | null
     created_at: string
     stock_items: Tables<'stock_items'>
   }[]

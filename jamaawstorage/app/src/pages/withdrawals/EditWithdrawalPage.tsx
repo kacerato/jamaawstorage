@@ -28,6 +28,7 @@ type StockItemRow = Tables<'stock_items'>
 
 interface EditableWithdrawalItem {
   entry_id: string
+  withdrawal_item_id: string | null
   stock_item_id: string
   quantity: number
   unit: string
@@ -143,14 +144,15 @@ export function EditWithdrawalPage() {
         .filter((item) => item.stock_items)
         .map((item) => ({
           entry_id: createEntryId(),
+          withdrawal_item_id: item.id,
           stock_item_id: item.stock_item_id,
           quantity: item.quantity,
           unit: item.unit,
           lot_id: item.lot_id,
           stock_item: item.stock_items,
-          destination_type: currentWithdrawal.destination_type,
-          collaborator_id: currentWithdrawal.collaborator_id,
-          work_site_id: currentWithdrawal.work_site_id,
+          destination_type: item.destination_type ?? currentWithdrawal.destination_type,
+          collaborator_id: item.collaborator_id ?? currentWithdrawal.collaborator_id,
+          work_site_id: item.work_site_id ?? currentWithdrawal.work_site_id,
         }))
 
       setWithdrawal(currentWithdrawal)
@@ -334,6 +336,7 @@ export function EditWithdrawalPage() {
   const handleAddItem = (stockItem: StockItemRow) => {
     const newItem: EditableWithdrawalItem = {
       entry_id: createEntryId(),
+      withdrawal_item_id: null,
       stock_item_id: stockItem.id,
       quantity: 1,
       unit: stockItem.unit,
@@ -378,6 +381,7 @@ export function EditWithdrawalPage() {
 
         nextItems.push({
           entry_id: createEntryId(),
+          withdrawal_item_id: null,
           stock_item_id: kitItem.stock_item_id,
           quantity: kitItem.quantity,
           unit: kitItem.stock_items.unit,
@@ -443,7 +447,7 @@ export function EditWithdrawalPage() {
 
         return [
           { ...item, quantity: item.quantity - 1 },
-          { ...item, entry_id: createEntryId(), quantity: 1 },
+          { ...item, entry_id: createEntryId(), withdrawal_item_id: null, quantity: 1 },
         ]
       })
     })
@@ -480,21 +484,14 @@ export function EditWithdrawalPage() {
         p_work_site_id: groups[0].destination_type === 'work_site' ? groups[0].work_site_id : null,
         p_notes: notes.trim() || null,
         p_items: refreshedItems.map((item) => ({
+          withdrawal_item_id: item.withdrawal_item_id,
           stock_item_id: item.stock_item_id,
           lot_id: item.lot_id,
           quantity: item.quantity,
           unit: item.unit,
-        })),
-        p_groups: groups.map((group) => ({
-          destination_type: group.destination_type,
-          collaborator_id: group.destination_type === 'collaborator' ? group.collaborator_id : null,
-          work_site_id: group.destination_type === 'work_site' ? group.work_site_id : null,
-          items: group.items.map((item) => ({
-            stock_item_id: item.stock_item_id,
-            lot_id: item.lot_id,
-            quantity: item.quantity,
-            unit: item.unit,
-          })),
+          destination_type: item.destination_type,
+          collaborator_id: item.destination_type === 'collaborator' ? item.collaborator_id : null,
+          work_site_id: item.destination_type === 'work_site' ? item.work_site_id : null,
         })),
       })
 
