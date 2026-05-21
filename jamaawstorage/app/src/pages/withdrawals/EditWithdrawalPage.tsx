@@ -111,6 +111,7 @@ export function EditWithdrawalPage() {
 
   const [showItemSelector, setShowItemSelector] = useState(false)
   const [showKitSelector, setShowKitSelector] = useState(false)
+  const [editingItemId, setEditingItemId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -243,6 +244,11 @@ export function EditWithdrawalPage() {
       items: groupItems,
     }))
   }, [items])
+
+  const editingItem = useMemo(
+    () => items.find((item) => item.entry_id === editingItemId) ?? null,
+    [editingItemId, items],
+  )
 
   const canEdit = withdrawal && withdrawal.status !== 'rejected'
 
@@ -416,6 +422,17 @@ export function EditWithdrawalPage() {
     })
   }
 
+  const handleUpdateQuantity = (entryId: string, quantity: number) => {
+    setItems((current) =>
+      current.map((item) =>
+        item.entry_id === entryId
+          ? { ...item, quantity: Number.isFinite(quantity) ? quantity : 0 }
+          : item,
+      ),
+    )
+    setSaveError(null)
+  }
+
   const handleSplitItem = (entryId: string) => {
     setItems((current) => {
       const targetItem = current.find((item) => item.entry_id === entryId)
@@ -430,6 +447,12 @@ export function EditWithdrawalPage() {
         ]
       })
     })
+    setSaveError(null)
+  }
+
+  const handleRemoveItem = (entryId: string) => {
+    setItems((current) => current.filter((item) => item.entry_id !== entryId))
+    if (editingItemId === entryId) setEditingItemId(null)
     setSaveError(null)
   }
 
@@ -659,98 +682,74 @@ export function EditWithdrawalPage() {
                 Nenhum item mantido na retirada. Adicione pelo menos um item para salvar.
               </div>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-700">
-                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Item</th>
-                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Destino</th>
-                      <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Saldo livre</th>
-                      <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Qtd</th>
-                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Unidade</th>
-                      <th className="px-3 py-2 text-right text-sm font-medium text-gray-300">Acao</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {items.map((item) => {
-                      const maxAvailable = computeMaxAvailable(item)
-                      const overStock = item.quantity > maxAvailable
+              <div className="space-y-3">
+                {items.map((item) => {
+                  const maxAvailable = computeMaxAvailable(item)
+                  const overStock = item.quantity > maxAvailable
 
-                      return (
-                        <tr key={item.entry_id} className="border-b border-gray-800">
-                          <td className="px-3 py-3 text-sm text-white">
-                            <div className="flex flex-col">
-                              <span>{item.stock_item.name}</span>
-                              <span className="text-xs text-gray-500">{item.stock_item.category ?? 'Sem categoria'}</span>
-                            </div>
-                          </td>
-                          <td className="px-3 py-3 text-sm text-gray-300">
-                            <select
-                              value={encodeDestination(item.destination_type, item.collaborator_id, item.work_site_id)}
-                              onChange={(event) => handleUpdateDestination(item.entry_id, event.target.value)}
-                              className="w-full min-w-[220px] rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
-                            >
-                              {destinationOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          </td>
-                          <td className={`px-3 py-3 text-center text-sm ${overStock ? 'text-red-400' : 'text-gray-300'}`}>
-                            {maxAvailable}
-                          </td>
-                          <td className="px-3 py-3 text-center">
-                            <input
-                              type="number"
-                              min={1}
-                              value={item.quantity}
-                              onChange={(event) => {
-                                const nextQuantity = Number(event.target.value)
-                                setItems((current) =>
-                                  current.map((currentItem) =>
-                                    currentItem.entry_id === item.entry_id
-                                      ? { ...currentItem, quantity: Number.isFinite(nextQuantity) ? nextQuantity : 0 }
-                                      : currentItem,
-                                  ),
-                                )
-                              }}
-                              className={`w-24 rounded-lg border bg-gray-950 px-3 py-2 text-center text-sm text-white outline-none transition-colors ${
-                                overStock
-                                  ? 'border-red-500 focus:ring-red-500/40'
-                                  : 'border-gray-700 focus:border-orange-500 focus:ring-orange-500/30'
-                              }`}
-                            />
-                          </td>
-                          <td className="px-3 py-3 text-sm text-gray-300">{item.unit}</td>
-                          <td className="px-3 py-3 text-right">
-                            <div className="flex justify-end gap-2">
-                              <Button
-                                type="button"
-                                variant="secondary"
-                                size="sm"
-                                disabled={item.quantity <= 1}
-                                onClick={() => handleSplitItem(item.entry_id)}
-                              >
-                                Dividir
-                              </Button>
-                              <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => {
-                                  setItems((current) => current.filter((currentItem) => currentItem.entry_id !== item.entry_id))
-                                }}
-                              >
-                                Remover
-                              </Button>
-                            </div>
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
+                  return (
+                    <div
+                      key={item.entry_id}
+                      className={`grid gap-4 rounded-2xl border p-4 transition-colors lg:grid-cols-[minmax(0,1fr)_170px_150px] ${
+                        overStock
+                          ? 'border-red-400/30 bg-red-500/8'
+                          : 'border-white/8 bg-white/3 hover:bg-white/5'
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge variant={item.destination_type === 'work_site' ? 'info' : 'primary'} size="sm">
+                            {item.destination_type === 'work_site' ? 'Obra' : 'Colaborador'}
+                          </Badge>
+                          {overStock ? <Badge variant="danger" size="sm">Saldo excedido</Badge> : null}
+                        </div>
+                        <h4 className="mt-2 truncate text-base font-semibold text-white">{item.stock_item.name}</h4>
+                        <p className="mt-1 text-xs text-gray-500">{item.stock_item.category ?? 'Sem categoria'}</p>
+                        <div className="mt-3 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                          <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Destino</p>
+                          <p className="mt-1 truncate text-sm font-medium text-white">
+                            {item.destination_type === 'collaborator'
+                              ? collaborators.find((collaborator) => collaborator.id === item.collaborator_id)?.full_name ?? 'Colaborador nao selecionado'
+                              : selectedWorkSiteLabel(workSites, item.work_site_id ?? '')}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2 lg:block lg:space-y-2">
+                        <MiniMetric label="Qtd" value={`${item.quantity} ${item.unit}`} />
+                        <MiniMetric label="Saldo livre" value={`${maxAvailable} ${item.unit}`} danger={overStock} />
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-end gap-2 lg:flex-col lg:items-stretch">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setEditingItemId(item.entry_id)}
+                        >
+                          Ajustar
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          disabled={item.quantity <= 1}
+                          onClick={() => handleSplitItem(item.entry_id)}
+                        >
+                          Dividir
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleRemoveItem(item.entry_id)}
+                        >
+                          Remover
+                        </Button>
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
             )}
           </Card>
@@ -837,6 +836,100 @@ export function EditWithdrawalPage() {
       >
         <KitSelector onSelect={handleAddKit} />
       </Modal>
+
+      <Modal
+        isOpen={Boolean(editingItem)}
+        onClose={() => setEditingItemId(null)}
+        title="Ajustar item"
+        size="lg"
+      >
+        {editingItem ? (
+          <div className="space-y-5">
+            <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div className="min-w-0">
+                  <h3 className="truncate text-lg font-semibold text-white">{editingItem.stock_item.name}</h3>
+                  <p className="mt-1 text-sm text-gray-400">{editingItem.stock_item.category ?? 'Sem categoria'}</p>
+                </div>
+                <Badge variant={editingItem.destination_type === 'work_site' ? 'info' : 'primary'}>
+                  {editingItem.destination_type === 'work_site' ? 'Obra' : 'Colaborador'}
+                </Badge>
+              </div>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
+              <div>
+                <label className="text-sm font-medium text-gray-300">Quantidade</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={editingItem.quantity}
+                  onChange={(event) => handleUpdateQuantity(editingItem.entry_id, Number(event.target.value))}
+                  className="mt-1.5 w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-center text-lg font-semibold text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
+                />
+                <p className="mt-2 text-xs text-gray-500">
+                  Saldo livre: {computeMaxAvailable(editingItem)} {editingItem.unit}
+                </p>
+              </div>
+
+              <Select
+                label="Destino deste item"
+                value={encodeDestination(editingItem.destination_type, editingItem.collaborator_id, editingItem.work_site_id)}
+                onChange={(event) => handleUpdateDestination(editingItem.entry_id, event.target.value)}
+                options={destinationOptions}
+                placeholder="Selecione o destino"
+              />
+            </div>
+
+            <div className="rounded-2xl border border-orange-400/10 bg-orange-500/5 p-4">
+              <p className="text-sm font-medium text-white">Separar parte da quantidade</p>
+              <p className="mt-1 text-sm text-gray-400">
+                Use dividir para criar uma nova linha com 1 unidade. Depois troque o destino dessa nova linha.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-3"
+                disabled={editingItem.quantity <= 1}
+                onClick={() => handleSplitItem(editingItem.entry_id)}
+              >
+                Dividir 1 unidade
+              </Button>
+            </div>
+
+            <div className="flex flex-col-reverse gap-3 border-t border-white/8 pt-4 sm:flex-row sm:justify-between">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => handleRemoveItem(editingItem.entry_id)}
+              >
+                Remover item
+              </Button>
+              <Button type="button" onClick={() => setEditingItemId(null)}>
+                Concluir ajuste
+              </Button>
+            </div>
+          </div>
+        ) : null}
+      </Modal>
+    </div>
+  )
+}
+
+function MiniMetric({
+  label,
+  value,
+  danger = false,
+}: {
+  label: string
+  value: string
+  danger?: boolean
+}) {
+  return (
+    <div className={`rounded-xl border px-3 py-2 ${danger ? 'border-red-400/25 bg-red-500/10' : 'border-white/8 bg-black/20'}`}>
+      <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">{label}</p>
+      <p className={`mt-1 truncate text-sm font-semibold ${danger ? 'text-red-300' : 'text-white'}`}>{value}</p>
     </div>
   )
 }
