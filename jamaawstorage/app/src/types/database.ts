@@ -473,6 +473,9 @@ export interface Database {
       lot_id: string | null
       quantity: number
       unit: string
+      destination_type: WithdrawalDestinationType | null
+      collaborator_id: string | null
+      work_site_id: string | null
       created_at: string
     }
     Insert: {
@@ -482,6 +485,9 @@ export interface Database {
       lot_id?: string | null
       quantity: number
       unit: string
+      destination_type?: WithdrawalDestinationType | null
+      collaborator_id?: string | null
+      work_site_id?: string | null
       created_at?: string
     }
     Update: {
@@ -491,6 +497,9 @@ export interface Database {
       lot_id?: string | null
       quantity?: number
       unit?: string
+      destination_type?: WithdrawalDestinationType | null
+      collaborator_id?: string | null
+      work_site_id?: string | null
       created_at?: string
     }
         Relationships: [
@@ -779,7 +788,6 @@ export interface Database {
       p_work_site_id?: string | null
       p_notes?: string | null
       p_items?: Record<string, unknown>[]
-      p_groups?: Record<string, unknown>[] | null
     }
     Returns: string
   }

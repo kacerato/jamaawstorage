@@ -60,7 +60,7 @@ export function WithdrawalDetailPage() {
     supabase
       .from('withdrawals')
       .select(
-        '*, withdrawal_items(*, stock_items(*)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*), approved_by_profile:profiles!withdrawals_authorized_by_fkey(*)',
+        '*, withdrawal_items(*, stock_items(*), collaborator:people!withdrawal_items_collaborator_id_fkey(id, full_name, employee_id), work_site:work_sites!withdrawal_items_work_site_id_fkey(id, name)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*), approved_by_profile:profiles!withdrawals_authorized_by_fkey(*)',
       )
       .eq('id', id)
       .single<WithdrawalRow>()
@@ -256,6 +256,7 @@ export function WithdrawalDetailPage() {
                 <tr className="border-b border-gray-700">
                   <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Item</th>
                   <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Categoria</th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Destino</th>
                   <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Qtd</th>
                   <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Unidade</th>
                 </tr>
@@ -268,6 +269,9 @@ export function WithdrawalDetailPage() {
                     </td>
                     <td className="px-3 py-2 text-sm text-gray-400">
                       {wi.stock_items?.category ?? '-'}
+                    </td>
+                    <td className="px-3 py-2 text-sm text-gray-300">
+                      {withdrawalItemDestinationLabel(wi, withdrawal)}
                     </td>
                     <td className="px-3 py-2 text-center text-sm text-gray-300">
                       {wi.quantity}
@@ -431,6 +435,21 @@ function getWithdrawalPhotoUrls(withdrawal: WithdrawalRow): string[] {
   ].filter((url): url is string => !!url)
 
   return Array.from(new Set(urls))
+}
+
+function withdrawalItemDestinationLabel(
+  item: WithdrawalRow['withdrawal_items'][number],
+  withdrawal: WithdrawalRow,
+): string {
+  const destinationType = item.destination_type ?? withdrawal.destination_type
+
+  if (destinationType === 'collaborator') {
+    const collaborator = item.collaborator ?? withdrawal.collaborator
+    if (!collaborator) return 'Colaborador nao informado'
+    return `${collaborator.full_name}${collaborator.employee_id ? ` (${collaborator.employee_id})` : ''}`
+  }
+
+  return item.work_site?.name ?? withdrawal.work_site?.name ?? 'Obra'
 }
 
 function isImageUrl(url: string | null | undefined): boolean {

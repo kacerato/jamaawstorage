@@ -762,74 +762,61 @@ export function NewWithdrawalPage() {
         return
       }
 
-      const createdIds: string[] = []
       const photoUrls = photoAttachments.map((photo) => photo.url)
       const mainPhotoUrl = photoUrls[0] ?? null
+      const primaryGroup = groups[0]
 
-      for (const group of groups) {
-        const { data: withdrawalId, error: withdrawalError } = await supabase.rpc('create_completed_withdrawal', {
-          p_requested_by: requestedBy,
-          p_destination_type: group.destination_type,
-          p_collaborator_id: group.destination_type === 'collaborator' ? group.collaborator_id : null,
-          p_work_site_id: group.destination_type === 'work_site' ? group.work_site_id : null,
-          p_authorized_by: profile.id,
-          p_notes: notes || null,
-          p_photo_url: mainPhotoUrl,
-          p_supervisor_signature: supervisorSignatureUrl,
-          p_requester_signature: requesterSignatureUrl,
-          p_witness_signature: null,
-          p_items: group.items.map((item) => ({
-            stock_item_id: item.stock_item_id,
-            lot_id: item.lot_id,
-            quantity: item.quantity,
-            unit: item.unit,
-          })),
-        })
+      const { data: withdrawalId, error: withdrawalError } = await supabase.rpc('create_completed_withdrawal', {
+        p_requested_by: requestedBy,
+        p_destination_type: primaryGroup.destination_type,
+        p_collaborator_id: primaryGroup.destination_type === 'collaborator' ? primaryGroup.collaborator_id : null,
+        p_work_site_id: primaryGroup.destination_type === 'work_site' ? primaryGroup.work_site_id : null,
+        p_authorized_by: profile.id,
+        p_notes: notes || null,
+        p_photo_url: mainPhotoUrl,
+        p_supervisor_signature: supervisorSignatureUrl,
+        p_requester_signature: requesterSignatureUrl,
+        p_witness_signature: null,
+        p_items: refreshedItems.map((item) => ({
+          stock_item_id: item.stock_item_id,
+          lot_id: item.lot_id,
+          quantity: item.quantity,
+          unit: item.unit,
+          destination_type: item.destination_type,
+          collaborator_id: item.destination_type === 'collaborator' ? item.collaborator_id : null,
+          work_site_id: item.destination_type === 'work_site' ? item.work_site_id : null,
+        })),
+      })
 
-        if (withdrawalError || !withdrawalId) {
-          const partialPrefix = createdIds.length > 0
-            ? `${createdIds.length} retirada(s) ja foram criadas antes da falha. `
-            : ''
-          setSubmitError(`${partialPrefix}${withdrawalError?.message ?? 'Erro ao criar retirada'}`)
-          setSubmitting(false)
-          return
-        }
-
-        const { error: attachmentUpdateError } = await supabase
-          .from('withdrawals')
-          .update({
-            photo_urls: photoUrls,
-            supervisor_signature_attachment_url: signatureDocument.url,
-            supervisor_signature_attachment_name: signatureDocument.name,
-            requester_signature_attachment_url: signatureDocument.url,
-            requester_signature_attachment_name: signatureDocument.name,
-          })
-          .eq('id', withdrawalId)
-
-        if (attachmentUpdateError) {
-          const partialPrefix = createdIds.length > 0
-            ? `${createdIds.length} retirada(s) ja foram criadas antes da falha. `
-            : ''
-          setSubmitError(`${partialPrefix}${attachmentUpdateError.message}`)
-          setSubmitting(false)
-          return
-        }
-
-        createdIds.push(withdrawalId)
+      if (withdrawalError || !withdrawalId) {
+        setSubmitError(withdrawalError?.message ?? 'Erro ao criar retirada')
+        setSubmitting(false)
+        return
       }
 
-      notifyTelegram(createdIds).catch((notifyError) => {
+      const { error: attachmentUpdateError } = await supabase
+        .from('withdrawals')
+        .update({
+          photo_urls: photoUrls,
+          supervisor_signature_attachment_url: signatureDocument.url,
+          supervisor_signature_attachment_name: signatureDocument.name,
+          requester_signature_attachment_url: signatureDocument.url,
+          requester_signature_attachment_name: signatureDocument.name,
+        })
+        .eq('id', withdrawalId)
+
+      if (attachmentUpdateError) {
+        setSubmitError(attachmentUpdateError.message)
+        setSubmitting(false)
+        return
+      }
+
+      notifyTelegram([withdrawalId]).catch((notifyError) => {
         console.warn('Telegram notify failed:', notifyError)
       })
 
       setSubmitting(false)
-
-      if (createdIds.length === 1) {
-        navigate(`/withdrawals/${createdIds[0]}?printTerm=1`)
-        return
-      }
-
-      navigate(`/withdrawals?created=${createdIds.length}`)
+      navigate(`/withdrawals/${withdrawalId}?printTerm=1`)
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : 'Nao foi possivel concluir a retirada.')
       setSubmitting(false)
@@ -1426,7 +1413,7 @@ export function NewWithdrawalPage() {
             <p className="text-sm text-white">{selectedRequester?.full_name ?? '-'}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Retiradas que serao criadas</p>
+            <p className="text-xs font-medium text-gray-400">Destinos nesta retirada</p>
             <p className="text-sm text-white">{groups.length}</p>
           </div>
           <div>
@@ -1437,7 +1424,7 @@ export function NewWithdrawalPage() {
 
         {groups.length > 1 && (
           <Alert variant="warning" className="mt-4">
-            Existem {groups.length} destinos diferentes nesta operacao, entao o sistema vai registrar {groups.length} retiradas separadas.
+            Existem {groups.length} destinos diferentes nesta operacao, mas tudo ficara na mesma retirada.
           </Alert>
         )}
       </Card>
