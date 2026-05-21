@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import type { Tables, AppRole, WithdrawalDestinationType } from '../../types/database'
 import { supabase } from '../../lib/supabase'
@@ -1080,45 +1081,49 @@ function InventoryQuantityInfo({
 }) {
   const withdrawalTotal = traces.reduce((sum, trace) => sum + trace.quantity, 0)
   const manualOrAdjustedQuantity = inventory.quantity - withdrawalTotal
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const [cardPosition, setCardPosition] = useState({ top: 0, left: 0 })
 
-  return (
-    <div
-      className="relative min-w-[260px]"
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-    >
-      <button
-        type="button"
-        onClick={(event) => {
-          event.stopPropagation()
-          onToggle()
-        }}
-        className={cn(
-          'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-all duration-200',
-          isOpen
-            ? 'border-orange-400/45 bg-orange-500/15 text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.18)]'
-            : 'border-orange-400/15 bg-orange-500/8 text-orange-300 hover:border-orange-400/35 hover:bg-orange-500/12',
-        )}
-      >
-        <span className="font-semibold">
-          {formatQuantity(inventory.quantity, inventory.stock_items.unit)}
-        </span>
-        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-gray-400">
-          {traces.length > 0 ? `${traces.length} retirada(s)` : 'manual'}
-        </span>
-      </button>
+  const updateCardPosition = useCallback(() => {
+    const button = buttonRef.current
+    if (!button) return
 
+    const rect = button.getBoundingClientRect()
+    const cardWidth = Math.min(520, window.innerWidth - 48)
+    const left = Math.min(Math.max(rect.left, 16), window.innerWidth - cardWidth - 16)
+
+    setCardPosition({
+      top: rect.bottom + 10,
+      left,
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    updateCardPosition()
+    window.addEventListener('scroll', updateCardPosition, true)
+    window.addEventListener('resize', updateCardPosition)
+
+    return () => {
+      window.removeEventListener('scroll', updateCardPosition, true)
+      window.removeEventListener('resize', updateCardPosition)
+    }
+  }, [isOpen, updateCardPosition])
+
+  const infoCard = isOpen
+    ? createPortal(
       <div
-        className={cn(
-          'absolute left-0 top-full z-40 mt-2 w-[min(520px,calc(100vw-48px))] overflow-hidden rounded-2xl border bg-[#101114] shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-300',
-          isOpen
-            ? 'pointer-events-auto max-h-[520px] border-orange-400/25 opacity-100'
-            : 'pointer-events-none max-h-0 border-transparent opacity-0',
-        )}
+        className="fixed z-[9999] w-[min(520px,calc(100vw-48px))] overflow-hidden rounded-2xl border border-orange-400/25 bg-[#101114] opacity-100 shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-300"
         style={{
-          transform: isOpen ? 'translateY(0) scale(1)' : 'translateY(-10px) scale(0.94)',
+          top: cardPosition.top,
+          left: cardPosition.left,
+          transform: 'translateY(0) scale(1)',
           transformOrigin: 'top left',
         }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        onClick={(event) => event.stopPropagation()}
       >
         <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.18),_transparent_58%)] p-4">
           <div className="flex items-start justify-between gap-3">
@@ -1181,7 +1186,41 @@ function InventoryQuantityInfo({
             </div>
           )}
         </div>
-      </div>
+      </div>,
+      document.body,
+    )
+    : null
+
+  return (
+    <div
+      className="relative min-w-[260px]"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          updateCardPosition()
+          onToggle()
+        }}
+        className={cn(
+          'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-all duration-200',
+          isOpen
+            ? 'border-orange-400/45 bg-orange-500/15 text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.18)]'
+            : 'border-orange-400/15 bg-orange-500/8 text-orange-300 hover:border-orange-400/35 hover:bg-orange-500/12',
+        )}
+      >
+        <span className="font-semibold">
+          {formatQuantity(inventory.quantity, inventory.stock_items.unit)}
+        </span>
+        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-gray-400">
+          {traces.length > 0 ? `${traces.length} retirada(s)` : 'manual'}
+        </span>
+      </button>
+
+      {infoCard}
     </div>
   )
 }
