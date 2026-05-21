@@ -33,10 +33,54 @@ interface EditableWithdrawalItem {
   unit: string
   lot_id: string | null
   stock_item: StockItemRow
+  destination_type: WithdrawalDestinationType
+  collaborator_id: string | null
+  work_site_id: string | null
 }
 
 function createEntryId(): string {
   return `withdrawal-edit-${crypto.randomUUID()}`
+}
+
+function makeEntryDuplicateKey(entry: Pick<EditableWithdrawalItem, 'stock_item_id' | 'destination_type' | 'collaborator_id' | 'work_site_id'>): string {
+  return [
+    entry.stock_item_id,
+    entry.destination_type,
+    entry.collaborator_id ?? 'none',
+    entry.work_site_id ?? 'none',
+  ].join(':')
+}
+
+function makeDestinationGroupKey(entry: Pick<EditableWithdrawalItem, 'destination_type' | 'collaborator_id' | 'work_site_id'>): string {
+  return [
+    entry.destination_type,
+    entry.collaborator_id ?? 'none',
+    entry.work_site_id ?? 'none',
+  ].join(':')
+}
+
+function encodeDestination(destinationType: WithdrawalDestinationType, collaboratorId: string | null, workSiteId: string | null): string {
+  return destinationType === 'work_site'
+    ? `work_site:${workSiteId ?? ''}`
+    : `collaborator:${collaboratorId ?? ''}`
+}
+
+function decodeDestination(value: string): { destination_type: WithdrawalDestinationType; collaborator_id: string | null; work_site_id: string | null } {
+  const [type, id] = value.split(':')
+
+  if (type === 'work_site') {
+    return {
+      destination_type: 'work_site',
+      collaborator_id: null,
+      work_site_id: id || null,
+    }
+  }
+
+  return {
+    destination_type: 'collaborator',
+    collaborator_id: id || null,
+    work_site_id: null,
+  }
 }
 
 function selectedWorkSiteLabel(workSites: WorkSiteRow[], workSiteId: string): string {
@@ -103,6 +147,9 @@ export function EditWithdrawalPage() {
           unit: item.unit,
           lot_id: item.lot_id,
           stock_item: item.stock_items,
+          destination_type: currentWithdrawal.destination_type,
+          collaborator_id: currentWithdrawal.collaborator_id,
+          work_site_id: currentWithdrawal.work_site_id,
         }))
 
       setWithdrawal(currentWithdrawal)
@@ -127,7 +174,7 @@ export function EditWithdrawalPage() {
   const originalQuantities = useMemo(() => {
     const map = new Map<string, number>()
     for (const item of withdrawal?.withdrawal_items ?? []) {
-      map.set(item.stock_item_id, item.quantity)
+      map.set(item.stock_item_id, (map.get(item.stock_item_id) ?? 0) + item.quantity)
     }
     return map
   }, [withdrawal])
@@ -135,6 +182,20 @@ export function EditWithdrawalPage() {
   const selectedIds = useMemo(
     () => new Set(items.map((item) => item.stock_item_id)),
     [items],
+  )
+
+  const destinationOptions = useMemo(
+    () => [
+      ...collaborators.map((collaborator) => ({
+        value: encodeDestination('collaborator', collaborator.id, null),
+        label: `${collaborator.full_name}${collaborator.employee_id ? ` (${collaborator.employee_id})` : ''}`,
+      })),
+      ...workSites.map((workSite) => ({
+        value: encodeDestination('work_site', null, workSite.id),
+        label: workSite.name,
+      })),
+    ],
+    [collaborators, workSites],
   )
 
   const requesterOptions = useMemo(
@@ -165,6 +226,23 @@ export function EditWithdrawalPage() {
     () => items.reduce((sum, item) => sum + item.quantity, 0),
     [items],
   )
+
+  const groups = useMemo(() => {
+    const map = new Map<string, EditableWithdrawalItem[]>()
+
+    for (const item of items) {
+      const key = makeDestinationGroupKey(item)
+      map.set(key, [...(map.get(key) ?? []), item])
+    }
+
+    return Array.from(map.entries()).map(([key, groupItems]) => ({
+      key,
+      destination_type: groupItems[0].destination_type,
+      collaborator_id: groupItems[0].collaborator_id,
+      work_site_id: groupItems[0].work_site_id,
+      items: groupItems,
+    }))
+  }, [items])
 
   const canEdit = withdrawal && withdrawal.status !== 'rejected'
 
@@ -221,11 +299,25 @@ export function EditWithdrawalPage() {
       return false
     }
 
-    const overStock = itemsSource.find((item) => item.quantity > computeMaxAvailable(item))
+    const overStock = itemsSource.find((item) => {
+      const requestedForStockItem = itemsSource
+        .filter((currentItem) => currentItem.stock_item_id === item.stock_item_id)
+        .reduce((sum, currentItem) => sum + currentItem.quantity, 0)
+      return requestedForStockItem > computeMaxAvailable(item)
+    })
+
     if (overStock) {
       setSaveError(
         `"${overStock.stock_item.name}" excede o saldo disponivel para edicao. Maximo agora: ${computeMaxAvailable(overStock)} ${overStock.unit}.`,
       )
+      return false
+    }
+
+    const invalidDestination = itemsSource.find((item) =>
+      item.destination_type === 'collaborator' ? !item.collaborator_id : !item.work_site_id,
+    )
+    if (invalidDestination) {
+      setSaveError(`Revise o destino de "${invalidDestination.stock_item.name}".`)
       return false
     }
 
@@ -234,22 +326,24 @@ export function EditWithdrawalPage() {
   }
 
   const handleAddItem = (stockItem: StockItemRow) => {
-    if (selectedIds.has(stockItem.id)) {
-      setSaveError(`"${stockItem.name}" ja faz parte desta retirada. Ajuste a quantidade no item existente.`)
+    const newItem: EditableWithdrawalItem = {
+      entry_id: createEntryId(),
+      stock_item_id: stockItem.id,
+      quantity: 1,
+      unit: stockItem.unit,
+      lot_id: null,
+      stock_item: stockItem,
+      destination_type: destinationType,
+      collaborator_id: destinationType === 'collaborator' ? collaboratorId || null : null,
+      work_site_id: destinationType === 'work_site' ? workSiteId || null : null,
+    }
+
+    if (items.some((item) => makeEntryDuplicateKey(item) === makeEntryDuplicateKey(newItem))) {
+      setSaveError(`"${stockItem.name}" ja existe neste destino. Ajuste a quantidade ou divida o item existente.`)
       return
     }
 
-    setItems((current) => [
-      ...current,
-      {
-        entry_id: createEntryId(),
-        stock_item_id: stockItem.id,
-        quantity: 1,
-        unit: stockItem.unit,
-        lot_id: null,
-        stock_item: stockItem,
-      },
-    ])
+    setItems((current) => [...current, newItem])
     setShowItemSelector(false)
     setSaveError(null)
   }
@@ -261,7 +355,13 @@ export function EditWithdrawalPage() {
       for (const kitItem of kit.kit_items) {
         if (!kitItem.stock_items) continue
 
-        const existingIndex = nextItems.findIndex((item) => item.stock_item_id === kitItem.stock_item_id)
+        const kitEntryDestination = {
+          stock_item_id: kitItem.stock_item_id,
+          destination_type: destinationType,
+          collaborator_id: destinationType === 'collaborator' ? collaboratorId || null : null,
+          work_site_id: destinationType === 'work_site' ? workSiteId || null : null,
+        }
+        const existingIndex = nextItems.findIndex((item) => makeEntryDuplicateKey(item) === makeEntryDuplicateKey(kitEntryDestination))
         if (existingIndex >= 0) {
           nextItems[existingIndex] = {
             ...nextItems[existingIndex],
@@ -277,6 +377,9 @@ export function EditWithdrawalPage() {
           unit: kitItem.stock_items.unit,
           lot_id: null,
           stock_item: kitItem.stock_items,
+          destination_type: destinationType,
+          collaborator_id: destinationType === 'collaborator' ? collaboratorId || null : null,
+          work_site_id: destinationType === 'work_site' ? workSiteId || null : null,
         })
       }
 
@@ -284,6 +387,49 @@ export function EditWithdrawalPage() {
     })
 
     setShowKitSelector(false)
+    setSaveError(null)
+  }
+
+  const handleUpdateDestination = (entryId: string, encodedDestination: string) => {
+    const nextDestination = decodeDestination(encodedDestination)
+
+    setItems((current) => {
+      const targetItem = current.find((item) => item.entry_id === entryId)
+      if (!targetItem) return current
+
+      const updatedItem = {
+        ...targetItem,
+        ...nextDestination,
+      }
+
+      const duplicateExists = current.some((item) =>
+        item.entry_id !== entryId && makeEntryDuplicateKey(item) === makeEntryDuplicateKey(updatedItem),
+      )
+
+      if (duplicateExists) {
+        setSaveError(`"${targetItem.stock_item.name}" ja existe no destino escolhido. Ajuste a quantidade no item existente.`)
+        return current
+      }
+
+      setSaveError(null)
+      return current.map((item) => item.entry_id === entryId ? updatedItem : item)
+    })
+  }
+
+  const handleSplitItem = (entryId: string) => {
+    setItems((current) => {
+      const targetItem = current.find((item) => item.entry_id === entryId)
+      if (!targetItem || targetItem.quantity <= 1) return current
+
+      return current.flatMap((item) => {
+        if (item.entry_id !== entryId) return [item]
+
+        return [
+          { ...item, quantity: item.quantity - 1 },
+          { ...item, entry_id: createEntryId(), quantity: 1 },
+        ]
+      })
+    })
     setSaveError(null)
   }
 
@@ -306,15 +452,26 @@ export function EditWithdrawalPage() {
       }).rpc('update_completed_withdrawal', {
         p_withdrawal_id: id,
         p_requested_by: requestedBy,
-        p_destination_type: destinationType,
-        p_collaborator_id: destinationType === 'collaborator' ? collaboratorId : null,
-        p_work_site_id: destinationType === 'work_site' ? workSiteId : null,
+        p_destination_type: groups[0].destination_type,
+        p_collaborator_id: groups[0].destination_type === 'collaborator' ? groups[0].collaborator_id : null,
+        p_work_site_id: groups[0].destination_type === 'work_site' ? groups[0].work_site_id : null,
         p_notes: notes.trim() || null,
         p_items: refreshedItems.map((item) => ({
           stock_item_id: item.stock_item_id,
           lot_id: item.lot_id,
           quantity: item.quantity,
           unit: item.unit,
+        })),
+        p_groups: groups.map((group) => ({
+          destination_type: group.destination_type,
+          collaborator_id: group.destination_type === 'collaborator' ? group.collaborator_id : null,
+          work_site_id: group.destination_type === 'work_site' ? group.work_site_id : null,
+          items: group.items.map((item) => ({
+            stock_item_id: item.stock_item_id,
+            lot_id: item.lot_id,
+            quantity: item.quantity,
+            unit: item.unit,
+          })),
         })),
       })
 
@@ -461,6 +618,9 @@ export function EditWithdrawalPage() {
                 />
               </div>
             </div>
+            <Alert variant="info" className="mt-4">
+              Este destino serve como padrao para novos itens. O destino real pode ser ajustado individualmente na tabela abaixo.
+            </Alert>
           </Card>
 
           <Card variant="bordered" padding="lg">
@@ -504,6 +664,7 @@ export function EditWithdrawalPage() {
                   <thead>
                     <tr className="border-b border-gray-700">
                       <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Item</th>
+                      <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Destino</th>
                       <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Saldo livre</th>
                       <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Qtd</th>
                       <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Unidade</th>
@@ -522,6 +683,19 @@ export function EditWithdrawalPage() {
                               <span>{item.stock_item.name}</span>
                               <span className="text-xs text-gray-500">{item.stock_item.category ?? 'Sem categoria'}</span>
                             </div>
+                          </td>
+                          <td className="px-3 py-3 text-sm text-gray-300">
+                            <select
+                              value={encodeDestination(item.destination_type, item.collaborator_id, item.work_site_id)}
+                              onChange={(event) => handleUpdateDestination(item.entry_id, event.target.value)}
+                              className="w-full min-w-[220px] rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
+                            >
+                              {destinationOptions.map((option) => (
+                                <option key={option.value} value={option.value}>
+                                  {option.label}
+                                </option>
+                              ))}
+                            </select>
                           </td>
                           <td className={`px-3 py-3 text-center text-sm ${overStock ? 'text-red-400' : 'text-gray-300'}`}>
                             {maxAvailable}
@@ -550,16 +724,27 @@ export function EditWithdrawalPage() {
                           </td>
                           <td className="px-3 py-3 text-sm text-gray-300">{item.unit}</td>
                           <td className="px-3 py-3 text-right">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                setItems((current) => current.filter((currentItem) => currentItem.entry_id !== item.entry_id))
-                              }}
-                            >
-                              Remover
-                            </Button>
+                            <div className="flex justify-end gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={item.quantity <= 1}
+                                onClick={() => handleSplitItem(item.entry_id)}
+                              >
+                                Dividir
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setItems((current) => current.filter((currentItem) => currentItem.entry_id !== item.entry_id))
+                                }}
+                              >
+                                Remover
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       )
@@ -594,12 +779,21 @@ export function EditWithdrawalPage() {
           </div>
 
           <div className="rounded-2xl border border-white/8 bg-[#111217] p-4 text-sm text-gray-300">
-            <p className="font-medium text-white">Resumo do destino</p>
-            <p className="mt-3">
-              {destinationType === 'collaborator'
-                ? collaborators.find((collaborator) => collaborator.id === collaboratorId)?.full_name ?? 'Colaborador nao selecionado'
-                : selectedWorkSiteLabel(workSites, workSiteId)}
-            </p>
+            <p className="font-medium text-white">Destinos da retirada</p>
+            <div className="mt-3 space-y-2">
+              {groups.map((group) => (
+                <div key={group.key} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                  <span className="truncate">
+                    {group.destination_type === 'collaborator'
+                      ? collaborators.find((collaborator) => collaborator.id === group.collaborator_id)?.full_name ?? 'Colaborador'
+                      : selectedWorkSiteLabel(workSites, group.work_site_id ?? '')}
+                  </span>
+                  <Badge variant={group.destination_type === 'work_site' ? 'info' : 'primary'} size="sm">
+                    {group.items.length} item(ns)
+                  </Badge>
+                </div>
+              ))}
+            </div>
           </div>
 
           {saveError ? (
@@ -611,7 +805,7 @@ export function EditWithdrawalPage() {
           <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/10 bg-emerald-500/5 p-4">
             <p className="text-sm font-medium text-white">Ao salvar</p>
             <p className="text-sm text-gray-300">
-              O estoque e o inventario vinculado serao recalculados na mesma transacao, e a alteracao continuara aparecendo na auditoria.
+              O estoque e o inventario vinculado serao recalculados na mesma transacao. Se houver mais de um destino, o sistema mantem esta retirada e cria os registros separados necessarios.
             </p>
           </div>
 
