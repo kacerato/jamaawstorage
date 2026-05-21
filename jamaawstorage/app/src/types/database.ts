@@ -770,6 +770,19 @@ export interface Database {
     }
     Returns: string
   }
+  update_completed_withdrawal: {
+    Args: {
+      p_withdrawal_id: string
+      p_requested_by: string
+      p_destination_type: WithdrawalDestinationType
+      p_collaborator_id?: string | null
+      p_work_site_id?: string | null
+      p_notes?: string | null
+      p_items?: Record<string, unknown>[]
+      p_groups?: Record<string, unknown>[] | null
+    }
+    Returns: string
+  }
   activate_supervisor_profile: {
     Args: {
       p_user_id: string
