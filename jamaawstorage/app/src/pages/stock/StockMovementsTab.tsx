@@ -18,6 +18,7 @@ type StockItemRow = Tables<'stock_items'>
 
 type MovementKind = 'entry' | 'exit' | 'return' | 'adjustment'
 type MovementSource = 'audit' | 'withdrawal' | 'return'
+type PeriodPreset = 'all' | 'today' | '7d' | '30d' | 'custom'
 
 interface AuditLogRow {
   id: string
@@ -99,6 +100,41 @@ const SOURCE_OPTIONS = [
   { value: 'withdrawal', label: 'Retiradas' },
   { value: 'return', label: 'Devolucoes' },
 ]
+
+const PERIOD_PRESETS: { value: PeriodPreset; label: string }[] = [
+  { value: 'all', label: 'Tudo' },
+  { value: 'today', label: 'Hoje' },
+  { value: '7d', label: '7 dias' },
+  { value: '30d', label: '30 dias' },
+  { value: 'custom', label: 'Personalizado' },
+]
+
+function toDateTimeLocalValue(date: Date): string {
+  const offsetMs = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
+}
+
+function startOfToday(): Date {
+  const date = new Date()
+  date.setHours(0, 0, 0, 0)
+  return date
+}
+
+function endOfToday(): Date {
+  const date = new Date()
+  date.setHours(23, 59, 59, 999)
+  return date
+}
+
+function formatPeriodDateTime(value: string): string {
+  return new Date(value).toLocaleString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
 
 function numericValue(source: Record<string, unknown> | null | undefined, key: string): number | null {
   const value = source?.[key]
@@ -331,8 +367,9 @@ export function StockMovementsTab() {
   const [searchQuery, setSearchQuery] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
-  const [dateFrom, setDateFrom] = useState('')
-  const [dateTo, setDateTo] = useState('')
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('all')
+  const [dateTimeFrom, setDateTimeFrom] = useState('')
+  const [dateTimeTo, setDateTimeTo] = useState('')
 
   const loadMovements = useCallback(async () => {
     setLoading(true)
@@ -411,8 +448,11 @@ export function StockMovementsTab() {
 
   const filteredMovements = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase()
-    const fromTime = dateFrom ? new Date(`${dateFrom}T00:00:00`).getTime() : null
-    const toTime = dateTo ? new Date(`${dateTo}T23:59:59`).getTime() : null
+    const rawFromTime = dateTimeFrom ? new Date(dateTimeFrom).getTime() : null
+    const rawToTime = dateTimeTo ? new Date(dateTimeTo).getTime() : null
+    const hasInvalidPeriod = rawFromTime !== null && rawToTime !== null && rawFromTime > rawToTime
+    const fromTime = hasInvalidPeriod ? null : rawFromTime
+    const toTime = hasInvalidPeriod ? null : rawToTime
 
     return movements.filter((movement) => {
       if (typeFilter !== 'all' && movement.kind !== typeFilter) return false
@@ -440,7 +480,47 @@ export function StockMovementsTab() {
 
       return haystack.includes(normalizedSearch)
     })
-  }, [dateFrom, dateTo, movements, searchQuery, sourceFilter, typeFilter])
+  }, [dateTimeFrom, dateTimeTo, movements, searchQuery, sourceFilter, typeFilter])
+
+  const invalidPeriod = Boolean(
+    dateTimeFrom
+      && dateTimeTo
+      && new Date(dateTimeFrom).getTime() > new Date(dateTimeTo).getTime(),
+  )
+
+  const periodSummary = useMemo(() => {
+    if (invalidPeriod) return 'Periodo inicial maior que o final.'
+    if (dateTimeFrom && dateTimeTo) return `${formatPeriodDateTime(dateTimeFrom)} ate ${formatPeriodDateTime(dateTimeTo)}`
+    if (dateTimeFrom) return `A partir de ${formatPeriodDateTime(dateTimeFrom)}`
+    if (dateTimeTo) return `Ate ${formatPeriodDateTime(dateTimeTo)}`
+    return 'Sem limite de data e hora.'
+  }, [dateTimeFrom, dateTimeTo, invalidPeriod])
+
+  const handlePeriodPresetChange = (preset: PeriodPreset) => {
+    setPeriodPreset(preset)
+
+    if (preset === 'custom') return
+
+    if (preset === 'all') {
+      setDateTimeFrom('')
+      setDateTimeTo('')
+      return
+    }
+
+    const end = endOfToday()
+    const start = startOfToday()
+
+    if (preset === '7d') {
+      start.setDate(start.getDate() - 6)
+    }
+
+    if (preset === '30d') {
+      start.setDate(start.getDate() - 29)
+    }
+
+    setDateTimeFrom(toDateTimeLocalValue(start))
+    setDateTimeTo(toDateTimeLocalValue(end))
+  }
 
   const stats = useMemo(() => {
     return filteredMovements.reduce(
@@ -505,15 +585,16 @@ export function StockMovementsTab() {
             <p className="text-sm font-medium text-white">Filtros</p>
             <p className="mt-1 text-xs text-gray-500">Use para encontrar um item, responsavel ou periodo especifico.</p>
           </div>
-          {(searchQuery || typeFilter !== 'all' || sourceFilter !== 'all' || dateFrom || dateTo) && (
+          {(searchQuery || typeFilter !== 'all' || sourceFilter !== 'all' || periodPreset !== 'all' || dateTimeFrom || dateTimeTo) && (
             <button
               type="button"
               onClick={() => {
                 setSearchQuery('')
                 setTypeFilter('all')
                 setSourceFilter('all')
-                setDateFrom('')
-                setDateTo('')
+                setPeriodPreset('all')
+                setDateTimeFrom('')
+                setDateTimeTo('')
               }}
               className="rounded-lg border border-white/8 bg-gray-950/50 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-white/8 hover:text-white"
             >
@@ -522,7 +603,7 @@ export function StockMovementsTab() {
           )}
         </div>
 
-        <div className="grid gap-3 xl:grid-cols-[1.5fr_1fr_1fr_0.8fr_0.8fr]">
+        <div className="grid gap-3 xl:grid-cols-[1.5fr_1fr_1fr_1.1fr]">
           <Input
             placeholder="Buscar por item, codigo, responsavel ou referencia..."
             value={searchQuery}
@@ -536,20 +617,67 @@ export function StockMovementsTab() {
           />
           <Select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} options={TYPE_OPTIONS} />
           <Select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} options={SOURCE_OPTIONS} />
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(event) => setDateFrom(event.target.value)}
-            className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-            aria-label="Data inicial"
+          <Select
+            value={periodPreset}
+            onChange={(event) => handlePeriodPresetChange(event.target.value as PeriodPreset)}
+            options={PERIOD_PRESETS}
+            aria-label="Periodo"
           />
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(event) => setDateTo(event.target.value)}
-            className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-            aria-label="Data final"
-          />
+        </div>
+
+        <div className="mt-3 grid gap-3 rounded-xl border border-white/8 bg-gray-950/35 p-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-[0.16em] text-gray-500">Inicio</span>
+            <input
+              type="datetime-local"
+              value={dateTimeFrom}
+              onChange={(event) => {
+                setPeriodPreset('custom')
+                setDateTimeFrom(event.target.value)
+              }}
+              className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+              aria-label="Data e hora inicial"
+            />
+          </label>
+          <label className="flex flex-col gap-1.5">
+            <span className="text-xs font-medium uppercase tracking-[0.16em] text-gray-500">Fim</span>
+            <input
+              type="datetime-local"
+              value={dateTimeTo}
+              min={dateTimeFrom || undefined}
+              onChange={(event) => {
+                setPeriodPreset('custom')
+                setDateTimeTo(event.target.value)
+              }}
+              className={cn(
+                'w-full rounded-lg border bg-gray-950 px-3 py-2 text-sm text-white transition-colors focus:outline-none focus:ring-2',
+                invalidPeriod
+                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
+                  : 'border-gray-700 focus:border-orange-500 focus:ring-orange-500/50',
+              )}
+              aria-label="Data e hora final"
+            />
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setPeriodPreset('today')
+              setDateTimeFrom(toDateTimeLocalValue(startOfToday()))
+              setDateTimeTo(toDateTimeLocalValue(endOfToday()))
+            }}
+            className="rounded-lg border border-white/8 bg-white/5 px-3 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/8 hover:text-white"
+          >
+            Hoje
+          </button>
+        </div>
+
+        <div className={cn(
+          'mt-3 rounded-lg border px-3 py-2 text-xs',
+          invalidPeriod
+            ? 'border-red-500/20 bg-red-500/10 text-red-300'
+            : 'border-white/8 bg-gray-950/35 text-gray-400',
+        )}>
+          Periodo aplicado: <span className="text-gray-200">{periodSummary}</span>
         </div>
       </Card>
 
