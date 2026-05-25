@@ -1,4 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { useParams, useNavigate } from 'react-router-dom'
 import type { Tables, AppRole, WithdrawalDestinationType } from '../../types/database'
 import { supabase } from '../../lib/supabase'
@@ -40,6 +41,18 @@ type ConsumptionData = {
   quantity: number
 }
 
+type InventoryWithdrawalTrace = {
+  id: string
+  withdrawalId: string
+  code: string
+  quantity: number
+  unit: string
+  createdAt: string
+  requestedBy: string
+  status: string
+  notes: string | null
+}
+
 type TabType = 'profile' | 'inventory' | 'withdrawals' | 'consumption'
 type DatePeriod = 'week' | 'month' | 'custom'
 type InventoryActionMode = 'delete' | 'return_to_stock' | null
@@ -77,6 +90,9 @@ export function PersonDetailPage() {
 
   const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([])
   const [withdrawalsLoading, setWithdrawalsLoading] = useState(false)
+  const [inventoryTraces, setInventoryTraces] = useState<Record<string, InventoryWithdrawalTrace[]>>({})
+  const [activeInventoryInfoId, setActiveInventoryInfoId] = useState<string | null>(null)
+  const [pinnedInventoryInfoId, setPinnedInventoryInfoId] = useState<string | null>(null)
 
   const [datePeriod, setDatePeriod] = useState<DatePeriod>('month')
   const [customDateRange, setCustomDateRange] = useState<CustomDateRange>({
@@ -136,6 +152,61 @@ export function PersonDetailPage() {
         })),
     }
 
+    const stockItemIds = enriched.inventory.map((item) => item.stock_item_id)
+
+    if (stockItemIds.length > 0) {
+      const { data: traceData } = await supabase
+        .from('withdrawal_items')
+        .select(`
+          id,
+          stock_item_id,
+          quantity,
+          unit,
+          created_at,
+          withdrawal:withdrawals(
+            id,
+            code,
+            status,
+            created_at,
+            notes,
+            requested_by_person:people!withdrawals_requested_by_fkey(full_name, employee_id)
+          )
+        `)
+        .eq('destination_type', 'collaborator')
+        .eq('collaborator_id', id)
+        .in('stock_item_id', stockItemIds)
+        .order('created_at', { ascending: false })
+
+      const nextTraces: Record<string, InventoryWithdrawalTrace[]> = {}
+
+      for (const row of ((traceData ?? []) as unknown as RawInventoryWithdrawalTraceRow[])) {
+        const withdrawal = row.withdrawal
+        if (!withdrawal || withdrawal.status === 'rejected') continue
+
+        if (!nextTraces[row.stock_item_id]) {
+          nextTraces[row.stock_item_id] = []
+        }
+
+        nextTraces[row.stock_item_id].push({
+          id: row.id,
+          withdrawalId: withdrawal.id,
+          code: withdrawal.code,
+          quantity: row.quantity,
+          unit: row.unit,
+          createdAt: withdrawal.created_at,
+          requestedBy: withdrawal.requested_by_person
+            ? `${withdrawal.requested_by_person.full_name}${withdrawal.requested_by_person.employee_id ? ` (${withdrawal.requested_by_person.employee_id})` : ''}`
+            : 'Nao informado',
+          status: withdrawal.status,
+          notes: withdrawal.notes,
+        })
+      }
+
+      setInventoryTraces(nextTraces)
+    } else {
+      setInventoryTraces({})
+    }
+
     setPerson(enriched)
     setLoading(false)
   }, [id])
@@ -190,6 +261,9 @@ export function PersonDetailPage() {
           lot_id: item.lot_id,
           quantity: item.quantity,
           unit: item.unit,
+          destination_type: item.destination_type as WithdrawalDestinationType | null,
+          collaborator_id: item.collaborator_id,
+          work_site_id: item.work_site_id,
           created_at: item.created_at,
           stock_items: item.stock_items as Tables<'stock_items'>,
         })),
@@ -289,6 +363,11 @@ export function PersonDetailPage() {
     setInventoryActionQuantity('1')
     setInventoryActionMode(null)
     setShowInventoryActionModal(true)
+  }
+
+  const toggleInventoryInfo = (inventoryId: string) => {
+    setPinnedInventoryInfoId((current) => current === inventoryId ? null : inventoryId)
+    setActiveInventoryInfoId(inventoryId)
   }
 
   const handleInventoryAction = async (mode: Exclude<InventoryActionMode, null>) => {
@@ -445,11 +524,24 @@ export function PersonDetailPage() {
     {
       key: 'quantity',
       header: 'Quantidade',
-      render: (_value: unknown, row: PersonWithDetails['inventory'][0]) => (
-        <span className="font-medium text-orange-400">
-          {formatQuantity(row.quantity, row.stock_items.unit)}
-        </span>
-      ),
+      render: (_value: unknown, row: PersonWithDetails['inventory'][0]) => {
+        const traces = inventoryTraces[row.stock_item_id] ?? []
+        const isOpen = activeInventoryInfoId === row.id || pinnedInventoryInfoId === row.id
+
+        return (
+          <InventoryQuantityInfo
+            inventory={row}
+            traces={traces}
+            isOpen={isOpen}
+            isPinned={pinnedInventoryInfoId === row.id}
+            onMouseEnter={() => setActiveInventoryInfoId(row.id)}
+            onMouseLeave={() => {
+              if (pinnedInventoryInfoId !== row.id) setActiveInventoryInfoId(null)
+            }}
+            onToggle={() => toggleInventoryInfo(row.id)}
+          />
+        )
+      },
     },
     {
       key: 'updated_at',
@@ -970,6 +1062,203 @@ function DetailField({ label, value }: { label: string; value: string }) {
   )
 }
 
+function InventoryQuantityInfo({
+  inventory,
+  traces,
+  isOpen,
+  isPinned,
+  onMouseEnter,
+  onMouseLeave,
+  onToggle,
+}: {
+  inventory: PersonWithDetails['inventory'][0]
+  traces: InventoryWithdrawalTrace[]
+  isOpen: boolean
+  isPinned: boolean
+  onMouseEnter: () => void
+  onMouseLeave: () => void
+  onToggle: () => void
+}) {
+  const withdrawalTotal = traces.reduce((sum, trace) => sum + trace.quantity, 0)
+  const manualOrAdjustedQuantity = inventory.quantity - withdrawalTotal
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const [cardPosition, setCardPosition] = useState({
+    top: 0,
+    bottom: undefined as number | undefined,
+    left: 0,
+    maxHeight: 360,
+    placement: 'below' as 'above' | 'below',
+  })
+
+  const updateCardPosition = useCallback(() => {
+    const button = buttonRef.current
+    if (!button) return
+
+    const rect = button.getBoundingClientRect()
+    const cardWidth = Math.min(520, window.innerWidth - 48)
+    const left = Math.min(Math.max(rect.left, 16), window.innerWidth - cardWidth - 16)
+    const gap = 10
+    const viewportPadding = 12
+    const spaceBelow = window.innerHeight - rect.bottom - viewportPadding
+    const spaceAbove = rect.top - viewportPadding
+    const shouldOpenAbove = spaceBelow < 360 && spaceAbove > spaceBelow
+    const availableSpace = shouldOpenAbove ? spaceAbove : spaceBelow
+
+    setCardPosition({
+      top: shouldOpenAbove ? 0 : rect.bottom + gap,
+      bottom: shouldOpenAbove ? window.innerHeight - rect.top + gap : undefined,
+      left,
+      maxHeight: Math.max(180, Math.min(560, availableSpace - gap)),
+      placement: shouldOpenAbove ? 'above' : 'below',
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    updateCardPosition()
+    window.addEventListener('scroll', updateCardPosition, true)
+    window.addEventListener('resize', updateCardPosition)
+
+    return () => {
+      window.removeEventListener('scroll', updateCardPosition, true)
+      window.removeEventListener('resize', updateCardPosition)
+    }
+  }, [isOpen, updateCardPosition])
+
+  const infoCard = isOpen
+    ? createPortal(
+      <div
+        className="fixed z-[9999] flex w-[min(520px,calc(100vw-48px))] flex-col overflow-hidden rounded-2xl border border-orange-400/25 bg-[#101114] opacity-100 shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-300"
+        style={{
+          top: cardPosition.placement === 'below' ? cardPosition.top : undefined,
+          bottom: cardPosition.placement === 'above' ? cardPosition.bottom : undefined,
+          left: cardPosition.left,
+          maxHeight: cardPosition.maxHeight,
+          transform: 'translateY(0) scale(1)',
+          transformOrigin: cardPosition.placement === 'above' ? 'bottom left' : 'top left',
+        }}
+        onMouseEnter={onMouseEnter}
+        onMouseLeave={onMouseLeave}
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.18),_transparent_58%)] p-4">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-orange-200/75">
+                Origem no inventario
+              </p>
+              <p className="mt-1 text-sm font-semibold text-white">{inventory.stock_items.name}</p>
+            </div>
+            {isPinned ? (
+              <Badge variant="warning" size="sm">Fixado</Badge>
+            ) : (
+              <Badge variant="info" size="sm">Passe/click</Badge>
+            )}
+          </div>
+
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <InventoryInfoMetric label="Atual" value={formatQuantity(inventory.quantity, inventory.stock_items.unit)} />
+            <InventoryInfoMetric label="Retiradas" value={formatQuantity(withdrawalTotal, inventory.stock_items.unit)} />
+            <InventoryInfoMetric
+              label="Manual/Ajuste"
+              value={formatQuantity(Math.max(manualOrAdjustedQuantity, 0), inventory.stock_items.unit)}
+              muted={manualOrAdjustedQuantity <= 0}
+            />
+          </div>
+
+          {manualOrAdjustedQuantity < 0 ? (
+            <p className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+              O historico de retiradas passa do saldo atual. Parte desse item pode ter sido devolvida, removida ou ajustada depois.
+            </p>
+          ) : null}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto p-3">
+          {traces.length === 0 ? (
+            <div className="rounded-xl border border-white/8 bg-white/3 p-3 text-xs text-gray-400">
+              Nao ha retirada registrada para este item neste colaborador. Este saldo provavelmente veio de adicao manual, kit ou ajuste direto de inventario.
+            </div>
+          ) : (
+            <div className="space-y-2">
+              {traces.map((trace) => (
+                <div key={trace.id} className="rounded-xl border border-white/8 bg-white/4 p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs font-semibold text-orange-300">{trace.code}</p>
+                      <p className="mt-1 text-xs text-gray-400">{formatDateTime(trace.createdAt)}</p>
+                    </div>
+                    <span className="rounded-lg bg-black/25 px-2 py-1 text-xs font-semibold text-white">
+                      {formatQuantity(trace.quantity, trace.unit)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-xs text-gray-300">
+                    Solicitado por: <span className="text-white">{trace.requestedBy}</span>
+                  </p>
+                  {trace.notes ? (
+                    <p className="mt-1 line-clamp-2 text-xs text-gray-500">{trace.notes}</p>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>,
+      document.body,
+    )
+    : null
+
+  return (
+    <div
+      className="relative min-w-[260px]"
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <button
+        ref={buttonRef}
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation()
+          updateCardPosition()
+          onToggle()
+        }}
+        className={cn(
+          'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-all duration-200',
+          isOpen
+            ? 'border-orange-400/45 bg-orange-500/15 text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.18)]'
+            : 'border-orange-400/15 bg-orange-500/8 text-orange-300 hover:border-orange-400/35 hover:bg-orange-500/12',
+        )}
+      >
+        <span className="font-semibold">
+          {formatQuantity(inventory.quantity, inventory.stock_items.unit)}
+        </span>
+        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-gray-400">
+          {traces.length > 0 ? `${traces.length} retirada(s)` : 'manual'}
+        </span>
+      </button>
+
+      {infoCard}
+    </div>
+  )
+}
+
+function InventoryInfoMetric({
+  label,
+  value,
+  muted = false,
+}: {
+  label: string
+  value: string
+  muted?: boolean
+}) {
+  return (
+    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+      <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">{label}</p>
+      <p className={cn('mt-1 truncate text-xs font-semibold', muted ? 'text-gray-500' : 'text-white')}>{value}</p>
+    </div>
+  )
+}
+
 interface RawPersonDetailRow {
   id: string
   full_name: string
@@ -993,6 +1282,25 @@ interface RawPersonDetailRow {
     updated_at: string
     stock_items: Tables<'stock_items'>
   }[]
+}
+
+interface RawInventoryWithdrawalTraceRow {
+  id: string
+  stock_item_id: string
+  quantity: number
+  unit: string
+  created_at: string
+  withdrawal: {
+    id: string
+    code: string
+    status: string
+    created_at: string
+    notes: string | null
+    requested_by_person: {
+      full_name: string
+      employee_id: string | null
+    } | null
+  } | null
 }
 
 type PersonAttachment = {
@@ -1053,6 +1361,9 @@ interface RawWithdrawalRow {
     lot_id: string | null
     quantity: number
     unit: string
+    destination_type: string | null
+    collaborator_id: string | null
+    work_site_id: string | null
     created_at: string
     stock_items: Tables<'stock_items'>
   }[]

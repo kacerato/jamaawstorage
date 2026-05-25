@@ -473,6 +473,9 @@ export interface Database {
       lot_id: string | null
       quantity: number
       unit: string
+      destination_type: WithdrawalDestinationType | null
+      collaborator_id: string | null
+      work_site_id: string | null
       created_at: string
     }
     Insert: {
@@ -482,6 +485,9 @@ export interface Database {
       lot_id?: string | null
       quantity: number
       unit: string
+      destination_type?: WithdrawalDestinationType | null
+      collaborator_id?: string | null
+      work_site_id?: string | null
       created_at?: string
     }
     Update: {
@@ -491,6 +497,9 @@ export interface Database {
       lot_id?: string | null
       quantity?: number
       unit?: string
+      destination_type?: WithdrawalDestinationType | null
+      collaborator_id?: string | null
+      work_site_id?: string | null
       created_at?: string
     }
         Relationships: [
@@ -737,6 +746,23 @@ export interface Database {
     }
     Returns: Database['public']['Tables']['stock_return_requests']['Row']
   }
+  process_held_stock_return_request: {
+    Args: {
+      p_request_id: string
+      p_approve_quantity: number
+      p_hold_quantity: number
+      p_triage_notes?: string | null
+      p_approved_condition?: 'new' | 'used' | 'damaged' | null
+      p_hold_condition?: 'used' | 'damaged' | null
+    }
+    Returns: Database['public']['Tables']['stock_return_requests']['Row']
+  }
+  delete_stock_return_request: {
+    Args: {
+      p_request_id: string
+    }
+    Returns: void
+  }
   create_completed_withdrawal: {
     Args: {
       p_requested_by: string
@@ -749,6 +775,18 @@ export interface Database {
       p_supervisor_signature?: string | null
       p_requester_signature?: string | null
       p_witness_signature?: string | null
+      p_items?: Record<string, unknown>[]
+    }
+    Returns: string
+  }
+  update_completed_withdrawal: {
+    Args: {
+      p_withdrawal_id: string
+      p_requested_by: string
+      p_destination_type: WithdrawalDestinationType
+      p_collaborator_id?: string | null
+      p_work_site_id?: string | null
+      p_notes?: string | null
       p_items?: Record<string, unknown>[]
     }
     Returns: string

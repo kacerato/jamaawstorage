@@ -79,6 +79,8 @@ function getDateRange(period: ReportPeriod): DateRange {
 interface WithdrawalWithItems extends Tables<'withdrawals'> {
   withdrawal_items: (Tables<'withdrawal_items'> & {
     stock_items: StockItemRow
+    collaborator?: Pick<PersonRow, 'id' | 'full_name' | 'employee_id' | 'job_title'> | null
+    work_site?: Pick<WorkSiteRow, 'id' | 'name'> | null
   })[]
   requested_by_person: PersonRow
   collaborator: PersonRow | null
@@ -94,6 +96,7 @@ interface CollaboratorWithInventory extends PersonRow {
 interface AbcItem {
   name: string
   totalQuantity: number
+  withdrawalCount: number
   percentage: number
   cumulativePercentage: number
   classification: 'A' | 'B' | 'C'
@@ -107,14 +110,7 @@ interface LowStockItem extends StockItemRow {
 interface LeaderConsumptionItem {
   name: string
   quantity: number
-}
-
-interface LeaderConsumptionSection {
-  leaderId: string
-  leaderName: string
-  items: LeaderConsumptionItem[]
-  totalItems: number
-  totalWithdrawals: number
+  withdrawalCount: number
 }
 
 const JOB_TITLE_FILTER_OPTIONS = [
@@ -145,7 +141,6 @@ const reportsCache = {
   leader: {
     leaders: [] as PersonRow[],
     consumptionData: [] as LeaderConsumptionItem[],
-    sections: [] as LeaderConsumptionSection[],
     totalItems: 0,
     totalWithdrawals: 0,
   },
@@ -206,6 +201,35 @@ function exportToPDF(
     })),
     rows: data,
   })
+}
+
+function withdrawalItemDestinationLabel(
+  item: WithdrawalWithItems['withdrawal_items'][number],
+  withdrawal: WithdrawalWithItems,
+): string {
+  const destinationType = item.destination_type ?? withdrawal.destination_type
+
+  if (destinationType === 'collaborator') {
+    const collaborator = item.collaborator ?? withdrawal.collaborator
+    if (!collaborator) return 'Colaborador nao informado'
+    return `${collaborator.full_name}${collaborator.employee_id ? ` (${collaborator.employee_id})` : ''}`
+  }
+
+  return item.work_site?.name ?? withdrawal.work_site?.name ?? 'Obra'
+}
+
+function withdrawalDestinationsSummary(withdrawal: WithdrawalWithItems): string {
+  const uniqueDestinations = Array.from(new Set(
+    withdrawal.withdrawal_items.map((item) => withdrawalItemDestinationLabel(item, withdrawal)),
+  ))
+
+  if (uniqueDestinations.length === 0) {
+    return withdrawal.destination_type === 'collaborator'
+      ? withdrawal.collaborator?.full_name ?? 'Colaborador'
+      : withdrawal.work_site?.name ?? 'Obra'
+  }
+
+  return uniqueDestinations.join(' / ')
 }
 
 export function ReportsPage() {
@@ -302,7 +326,7 @@ function MovementsTab() {
     let query = supabase
       .from('withdrawals')
       .select(
-        '*, withdrawal_items(*, stock_items(*)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*)',
+        '*, withdrawal_items(*, stock_items(*), collaborator:people!withdrawal_items_collaborator_id_fkey(id, full_name, employee_id, job_title), work_site:work_sites!withdrawal_items_work_site_id_fkey(id, name)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*)',
       )
       .in('status', ['approved', 'completed'])
       .order('created_at', { ascending: false })
@@ -316,10 +340,6 @@ function MovementsTab() {
     if (debouncedLeaderFilter) {
       query = query.eq('requested_by', debouncedLeaderFilter)
     }
-    if (debouncedWorksiteFilter) {
-      query = query.eq('work_site_id', debouncedWorksiteFilter)
-    }
-
     const { data, error: fetchError } = await query
 
     if (fetchError) {
@@ -334,8 +354,21 @@ function MovementsTab() {
         )
       }
 
+      if (debouncedWorksiteFilter) {
+        results = results.filter((w) =>
+          w.withdrawal_items.some((wi) =>
+            (wi.destination_type ?? w.destination_type) === 'work_site'
+            && (wi.work_site_id ?? w.work_site_id) === debouncedWorksiteFilter,
+          ),
+        )
+      }
+
       if (debouncedJobTitleFilter) {
-        results = results.filter((w) => w.collaborator?.job_title === debouncedJobTitleFilter)
+        results = results.filter((w) =>
+          w.withdrawal_items.some((wi) =>
+            (wi.collaborator?.job_title ?? w.collaborator?.job_title) === debouncedJobTitleFilter,
+          ),
+        )
       }
 
       reportsCache.movements.withdrawals = results
@@ -366,7 +399,7 @@ function MovementsTab() {
   const worksiteOptions = useMemo(
     () => [
       { value: '', label: 'obra jamaaw' },
-      ...worksites.map((w) => ({ value: w.id, label: 'obra jamaaw' })),
+      ...worksites.map((w) => ({ value: w.id, label: w.name })),
     ],
     [worksites],
   )
@@ -416,10 +449,7 @@ function MovementsTab() {
         header: 'Destino',
         render: (_v: unknown, row: WithdrawalRowForTable) => {
           const w = row as unknown as WithdrawalWithItems
-          if (w.destination_type === 'collaborator') {
-            return w.collaborator?.full_name ?? 'Colaborador'
-          }
-          return 'obra jamaaw'
+          return withdrawalDestinationsSummary(w)
         },
       },
       {
@@ -432,6 +462,8 @@ function MovementsTab() {
               {items.map((wi) => (
                 <span key={wi.id} className="text-xs text-gray-400">
                   {wi.stock_items?.name ?? '-'} ({wi.quantity} {wi.unit})
+                  {' - '}
+                  {withdrawalItemDestinationLabel(wi, row as unknown as WithdrawalWithItems)}
                 </span>
               ))}
             </div>
@@ -458,11 +490,9 @@ function MovementsTab() {
       Codigo: w.code,
       Solicitante: w.requested_by_person?.full_name ?? '',
       Destino:
-        w.destination_type === 'collaborator'
-          ? w.collaborator?.full_name ?? 'Colaborador'
-          : 'obra jamaaw',
+        withdrawalDestinationsSummary(w),
       Itens: w.withdrawal_items
-        .map((wi) => `${wi.stock_items?.name ?? '-'} (${wi.quantity} ${wi.unit})`)
+        .map((wi) => `${wi.stock_items?.name ?? '-'} (${wi.quantity} ${wi.unit}) - ${withdrawalItemDestinationLabel(wi, w)}`)
         .join(', '),
       'Qtd Total': w.withdrawal_items.reduce((s, wi) => s + wi.quantity, 0),
     }))
@@ -475,11 +505,9 @@ function MovementsTab() {
       Codigo: w.code,
       Solicitante: w.requested_by_person?.full_name ?? '',
       Destino:
-        w.destination_type === 'collaborator'
-          ? w.collaborator?.full_name ?? 'Colaborador'
-          : 'obra jamaaw',
+        withdrawalDestinationsSummary(w),
       Itens: w.withdrawal_items
-        .map((wi) => `${wi.stock_items?.name ?? '-'} (${wi.quantity} ${wi.unit})`)
+        .map((wi) => `${wi.stock_items?.name ?? '-'} (${wi.quantity} ${wi.unit}) - ${withdrawalItemDestinationLabel(wi, w)}`)
         .join(', '),
       'Qtd Total': w.withdrawal_items.reduce((s, wi) => s + wi.quantity, 0),
     }))
@@ -630,6 +658,9 @@ function StockOverviewTab() {
       Categoria: item.category ?? '',
       Unidade: item.unit,
       'Qtd Atual': item.current_quantity,
+      Novo: item.quantity_new,
+      Usado: item.quantity_used,
+      Avaria: item.quantity_damaged,
       'Qtd Minima': item.minimum_quantity,
       Status: item.current_quantity <= item.minimum_quantity ? 'Abaixo do minimo' : 'OK',
     })),
@@ -670,7 +701,7 @@ function StockOverviewTab() {
       },
       {
         key: 'current_quantity' as const,
-        header: 'Qtd Atual',
+        header: 'Total',
         className: 'text-right',
         render: (_value: unknown, row: StockItemRow & Record<string, unknown>) => {
           const item = row as StockItemRow
@@ -684,6 +715,30 @@ function StockOverviewTab() {
             </span>
           )
         },
+      },
+      {
+        key: 'quantity_new' as const,
+        header: 'Novo',
+        className: 'text-right',
+        render: (value: unknown) => (
+          <span className="inline-block w-[72px] text-right text-emerald-300 tabular-nums">{value as number}</span>
+        ),
+      },
+      {
+        key: 'quantity_used' as const,
+        header: 'Usado',
+        className: 'text-right',
+        render: (value: unknown) => (
+          <span className="inline-block w-[72px] text-right text-sky-300 tabular-nums">{value as number}</span>
+        ),
+      },
+      {
+        key: 'quantity_damaged' as const,
+        header: 'Avaria',
+        className: 'text-right',
+        render: (value: unknown) => (
+          <span className="inline-block w-[72px] text-right text-red-300 tabular-nums">{value as number}</span>
+        ),
       },
       {
         key: 'minimum_quantity' as const,
@@ -741,12 +796,18 @@ function StockOverviewTab() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard title="Itens Ativos" value={stockItems.length} icon={<PackageIcon size={20} />} />
         <StatCard
           title="Qtd Total"
           value={stockItems.reduce((total, item) => total + item.current_quantity, 0)}
           icon={<ClipboardIcon size={20} />}
+        />
+        <StatCard
+          title="Usados e Avariados"
+          value={stockItems.reduce((total, item) => total + item.quantity_used + item.quantity_damaged, 0)}
+          icon={<PackageIcon size={20} />}
+          variant="warning"
         />
         <StatCard
           title="Abaixo do Minimo"
@@ -1158,8 +1219,9 @@ function AbcCurveTab() {
     }
 
     const { data, error: fetchError } = await supabase
-      .from('withdrawal_items')
-      .select('quantity, stock_items:stock_items(name)')
+      .from('withdrawals')
+      .select('id, created_at, withdrawal_items(quantity, stock_items:stock_items(name))')
+      .in('status', ['approved', 'completed'])
       .gte('created_at', range.from.toISOString())
       .lte('created_at', range.to.toISOString())
 
@@ -1171,14 +1233,24 @@ function AbcCurveTab() {
     }
 
     const rawData = (data ?? []) as unknown as {
-      quantity: number
-      stock_items: { name: string } | null
+      id: string
+      withdrawal_items: {
+        quantity: number
+        stock_items: { name: string } | null
+      }[]
     }[]
 
     const grouped = new Map<string, number>()
-    for (const item of rawData) {
-      const name = item.stock_items?.name ?? 'Desconhecido'
-      grouped.set(name, (grouped.get(name) ?? 0) + item.quantity)
+    const withdrawalCountByItem = new Map<string, Set<string>>()
+    for (const withdrawal of rawData) {
+      for (const item of withdrawal.withdrawal_items) {
+        const name = item.stock_items?.name ?? 'Desconhecido'
+        grouped.set(name, (grouped.get(name) ?? 0) + item.quantity)
+        if (!withdrawalCountByItem.has(name)) {
+          withdrawalCountByItem.set(name, new Set<string>())
+        }
+        withdrawalCountByItem.get(name)?.add(withdrawal.id)
+      }
     }
 
     const totalQuantity = Array.from(grouped.values()).reduce((s, q) => s + q, 0)
@@ -1200,6 +1272,7 @@ function AbcCurveTab() {
       return {
         name: item.name,
         totalQuantity: item.totalQuantity,
+        withdrawalCount: withdrawalCountByItem.get(item.name)?.size ?? 0,
         percentage: Math.round(pct * 100) / 100,
         cumulativePercentage: Math.round(cumulative * 100) / 100,
         classification,
@@ -1221,6 +1294,7 @@ function AbcCurveTab() {
         name: item.name.length > 20 ? item.name.substring(0, 17) + '...' : item.name,
         fullName: item.name,
         Quantidade: item.totalQuantity,
+        Classe: item.classification,
       })),
     [abcData],
   )
@@ -1272,6 +1346,15 @@ function AbcCurveTab() {
         ),
       },
       {
+        key: 'withdrawalCount' as const,
+        header: 'Retiradas',
+        sortable: true,
+        className: 'text-right font-mono tabular-nums',
+        render: (value: unknown) => (
+          <span className="font-medium text-gray-300">{value as number}</span>
+        ),
+      },
+      {
         key: 'percentage' as const,
         header: '%',
         sortable: true,
@@ -1306,11 +1389,25 @@ function AbcCurveTab() {
       Rank: idx + 1,
       Item: item.name,
       'Qtd Total': item.totalQuantity,
+      Retiradas: item.withdrawalCount,
       Porcentagem: `${item.percentage.toFixed(2)}%`,
       'Porcentagem Acumulada': `${item.cumulativePercentage.toFixed(2)}%`,
       Classificacao: item.classification,
     }))
     exportToCSV(rows, 'curva-abc-saida.csv')
+  }
+
+  const handleExportPDF = () => {
+    const rows = abcData.map((item, idx) => ({
+      Rank: idx + 1,
+      Item: item.name,
+      'Qtd Total': item.totalQuantity,
+      Retiradas: item.withdrawalCount,
+      '% do Periodo': `${item.percentage.toFixed(2)}%`,
+      '% Acumulado': `${item.cumulativePercentage.toFixed(2)}%`,
+      Classe: item.classification,
+    }))
+    exportToPDF(rows, 'Curva ABC de Saida', 'Classificacao por quantidade retirada no periodo. Usa a data da retirada, nao a data de edicao do item.', 'curva-abc-saida.pdf', { orientation: 'landscape', compact: true })
   }
 
   return (
@@ -1357,6 +1454,14 @@ function AbcCurveTab() {
             >
               Exportar CSV
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleExportPDF}
+              disabled={abcData.length === 0}
+            >
+              Exportar PDF
+            </Button>
           </div>
         </div>
       </Card>
@@ -1380,26 +1485,49 @@ function AbcCurveTab() {
         />
       ) : (
         <>
+          <Alert variant="info">
+            A Curva ABC classifica os itens pela participacao no total retirado do periodo: classe A concentra ate 80%, B ate 95% e C o restante. O periodo usa a data da retirada, entao edicoes posteriores de destino nao mudam o mes de competencia.
+          </Alert>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatCard
+              title="Itens na Curva"
+              value={abcData.length}
+              icon={<PackageIcon size={20} />}
+            />
+            <StatCard
+              title="Qtd Retirada"
+              value={abcData.reduce((sum, item) => sum + item.totalQuantity, 0)}
+              icon={<ClipboardIcon size={20} />}
+            />
+            <StatCard
+              title="Classe A"
+              value={abcData.filter((item) => item.classification === 'A').length}
+              icon={<ChartIcon size={20} />}
+              variant="warning"
+            />
+          </div>
           <Card variant="bordered" padding="md">
-            <h3 className="mb-4 text-sm font-semibold text-gray-300">
-              Curva ABC - Quantidade Retirada por Item
-            </h3>
+            <div className="mb-4 flex flex-col gap-1">
+              <h3 className="text-sm font-semibold text-gray-300">
+                Curva ABC - Quantidade Retirada por Item
+              </h3>
+              <p className="text-xs text-gray-500">Ordenado do item com maior saida para o menor, consolidando todos os solicitantes.</p>
+            </div>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
                   data={chartData}
-                  margin={{ top: 5, right: 20, left: 20, bottom: 60 }}
+                  layout="vertical"
+                  margin={{ top: 5, right: 20, left: 110, bottom: 5 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis
+                  <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                  <YAxis
                     dataKey="name"
+                    type="category"
                     tick={{ fill: '#9ca3af', fontSize: 11 }}
-                    angle={-45}
-                    textAnchor="end"
-                    interval={0}
-                    height={80}
+                    width={100}
                   />
-                  <YAxis tick={{ fill: '#9ca3af', fontSize: 12 }} />
                   <Tooltip
                     contentStyle={{
                       backgroundColor: '#1f2937',
@@ -1414,7 +1542,7 @@ function AbcCurveTab() {
                       return String(label)
                     })}
                   />
-                  <Bar dataKey="Quantidade" fill="#f97316" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="Quantidade" fill="#f97316" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1500,7 +1628,7 @@ function LowStockTab() {
       },
       {
         key: 'quantity' as const,
-        header: 'Qtd Atual',
+        header: 'Total',
         className: 'text-right',
         render: (_v: unknown, row: LowStockRowForTable) => {
           const item = row as unknown as LowStockItem
@@ -1515,6 +1643,30 @@ function LowStockTab() {
             </span>
           )
         },
+      },
+      {
+        key: 'quantity_new' as const,
+        header: 'Novo',
+        className: 'text-right',
+        render: (value: unknown) => (
+          <span className="inline-block w-[72px] text-right text-emerald-300 tabular-nums">{value as number}</span>
+        ),
+      },
+      {
+        key: 'quantity_used' as const,
+        header: 'Usado',
+        className: 'text-right',
+        render: (value: unknown) => (
+          <span className="inline-block w-[72px] text-right text-sky-300 tabular-nums">{value as number}</span>
+        ),
+      },
+      {
+        key: 'quantity_damaged' as const,
+        header: 'Avaria',
+        className: 'text-right',
+        render: (value: unknown) => (
+          <span className="inline-block w-[72px] text-right text-red-300 tabular-nums">{value as number}</span>
+        ),
       },
       {
         key: 'minimum_quantity' as const,
@@ -1563,6 +1715,9 @@ function LowStockTab() {
       Item: item.name,
       Categoria: item.category ?? '',
       'Qtd Atual': item.current_quantity,
+      Novo: item.quantity_new,
+      Usado: item.quantity_used,
+      Avaria: item.quantity_damaged,
       'Qtd Minima': item.minimum_quantity,
       Deficit: item.deficit,
       Severidade: item.severity === 'critical' ? 'Critico' : 'Atencao',
@@ -1575,6 +1730,9 @@ function LowStockTab() {
       Item: item.name,
       Categoria: item.category ?? '',
       'Qtd Atual': item.current_quantity,
+      Novo: item.quantity_new,
+      Usado: item.quantity_used,
+      Avaria: item.quantity_damaged,
       'Qtd Minima': item.minimum_quantity,
       Deficit: item.deficit,
       Severidade: item.severity === 'critical' ? 'Critico' : 'Atencao',
@@ -1648,7 +1806,6 @@ function LeaderConsumptionTab() {
   const [customFrom, setCustomFrom] = useState<string>('')
   const [customTo, setCustomTo] = useState<string>('')
   const [consumptionData, setConsumptionData] = useState<LeaderConsumptionItem[]>(reportsCache.leader.consumptionData)
-  const [sections, setSections] = useState<LeaderConsumptionSection[]>(reportsCache.leader.sections)
   const [totalItems, setTotalItems] = useState(reportsCache.leader.totalItems)
   const [totalWithdrawals, setTotalWithdrawals] = useState(reportsCache.leader.totalWithdrawals)
   const [loading, setLoading] = useState(false)
@@ -1729,60 +1886,38 @@ function LeaderConsumptionTab() {
       }[]
     }[]
 
-    const leaderNames = new Map(leaders.map((leader) => [leader.id, leader.full_name]))
     const grouped = new Map<string, number>()
-    const groupedByLeader = new Map<string, Map<string, number>>()
-    const withdrawalIdsByLeader = new Map<string, Set<string>>()
+    const withdrawalCountByItem = new Map<string, Set<string>>()
     let itemsTotal = 0
     const withdrawalIds = new Set<string>()
 
     for (const w of rawWithdrawals) {
       withdrawalIds.add(w.id)
-      if (!groupedByLeader.has(w.requested_by)) {
-        groupedByLeader.set(w.requested_by, new Map<string, number>())
-      }
-      if (!withdrawalIdsByLeader.has(w.requested_by)) {
-        withdrawalIdsByLeader.set(w.requested_by, new Set<string>())
-      }
-      withdrawalIdsByLeader.get(w.requested_by)?.add(w.id)
 
       for (const wi of w.withdrawal_items) {
         const name = wi.stock_items?.name ?? 'Desconhecido'
         const current = grouped.get(name) ?? 0
         grouped.set(name, current + wi.quantity)
-        const leaderBucket = groupedByLeader.get(w.requested_by)
-        if (leaderBucket) {
-          leaderBucket.set(name, (leaderBucket.get(name) ?? 0) + wi.quantity)
+        if (!withdrawalCountByItem.has(name)) {
+          withdrawalCountByItem.set(name, new Set<string>())
         }
+        withdrawalCountByItem.get(name)?.add(w.id)
         itemsTotal += wi.quantity
       }
     }
 
     const sorted = Array.from(grouped.entries())
       .sort((a, b) => b[1] - a[1])
-      .map(([name, quantity]) => ({ name, quantity }))
-
-    const leaderSections = Array.from(groupedByLeader.entries())
-      .map(([leaderId, leaderGrouped]) => {
-        const items = Array.from(leaderGrouped.entries())
-          .sort((a, b) => b[1] - a[1])
-          .map(([name, quantity]) => ({ name, quantity }))
-        return {
-          leaderId,
-          leaderName: leaderNames.get(leaderId) ?? 'Solicitante',
-          items,
-          totalItems: items.reduce((sum, item) => sum + item.quantity, 0),
-          totalWithdrawals: withdrawalIdsByLeader.get(leaderId)?.size ?? 0,
-        }
-      })
-      .sort((a, b) => a.leaderName.localeCompare(b.leaderName))
+      .map(([name, quantity]) => ({
+        name,
+        quantity,
+        withdrawalCount: withdrawalCountByItem.get(name)?.size ?? 0,
+      }))
 
     reportsCache.leader.consumptionData = sorted
-    reportsCache.leader.sections = leaderSections
     reportsCache.leader.totalItems = itemsTotal
     reportsCache.leader.totalWithdrawals = withdrawalIds.size
     setConsumptionData(sorted)
-    setSections(leaderSections)
     setTotalItems(itemsTotal)
     setTotalWithdrawals(withdrawalIds.size)
     setLoading(false)
@@ -1806,35 +1941,27 @@ function LeaderConsumptionTab() {
     const rows = consumptionData.map((item) => ({
       Item: item.name,
       Quantidade: item.quantity,
+      Retiradas: item.withdrawalCount,
     }))
     exportToCSV(rows, selectedLeader === 'all' ? 'consumo-todos-solicitantes.csv' : `consumo-solicitante-${selectedLeader}.csv`)
   }
 
   const handleExportPDF = () => {
     if (selectedLeader === 'all') {
-      openPrintSectionedTableDocument({
-        title: 'Consumo por Solicitante',
-        subtitle: 'Relatorio separado por solicitante no periodo selecionado.',
-        filename: 'consumo-todos-solicitantes.pdf',
-        sections: sections.map((section) => ({
-          title: section.leaderName,
-          subtitle: `Retiradas: ${section.totalWithdrawals} | Itens retirados: ${section.totalItems}`,
-          columns: [
-            { key: 'item', label: 'Item' },
-            { key: 'quantity', label: 'Quantidade' },
-          ],
-          rows: section.items.map((item) => ({
-            item: item.name,
-            quantity: item.quantity,
-          })),
-        })),
-      })
+      const rows = consumptionData.map((item, idx) => ({
+        Rank: idx + 1,
+        Item: item.name,
+        Quantidade: item.quantity,
+        Retiradas: item.withdrawalCount,
+      }))
+      exportToPDF(rows, 'Saidas Mensais por Item', 'Relatorio geral consolidado, sem separacao por solicitante.', 'saidas-mensais-geral.pdf', { orientation: 'landscape', compact: true })
       return
     }
 
     const rows = consumptionData.map((item) => ({
       Item: item.name,
       Quantidade: item.quantity,
+      Retiradas: item.withdrawalCount,
     }))
     exportToPDF(rows, 'Consumo por Solicitante', 'Resumo dos itens mais retirados pelo solicitante selecionado.', `consumo-solicitante-${selectedLeader}.pdf`)
   }
@@ -1936,9 +2063,16 @@ function LeaderConsumptionTab() {
           </div>
 
           <Card variant="bordered" padding="md">
-            <h3 className="mb-4 text-sm font-semibold text-gray-300">
-              {selectedLeader === 'all' ? 'Itens mais retirados por todos os solicitantes' : 'Itens mais retirados pelo solicitante'}
-            </h3>
+            <div className="mb-4 flex flex-col gap-1">
+              <h3 className="text-sm font-semibold text-gray-300">
+                {selectedLeader === 'all' ? 'Saidas gerais por item' : 'Itens mais retirados pelo solicitante'}
+              </h3>
+              <p className="text-xs text-gray-500">
+                {selectedLeader === 'all'
+                  ? 'Consolidado geral do periodo, sem separar por solicitante.'
+                  : 'Consolidado apenas do solicitante selecionado.'}
+              </p>
+            </div>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <BarChart
@@ -1982,6 +2116,7 @@ function LeaderConsumptionTab() {
                   <tr className="bg-gray-800">
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">#</th>
                     <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Item</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-300">Retiradas</th>
                     <th className="px-4 py-3 text-right text-sm font-medium text-gray-300">Quantidade</th>
                   </tr>
                 </thead>
@@ -1990,6 +2125,7 @@ function LeaderConsumptionTab() {
                     <tr key={item.name} className="border-t border-gray-800">
                       <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
                       <td className="px-4 py-3 text-sm font-medium text-white">{item.name}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-400">{item.withdrawalCount}</td>
                       <td className="px-4 py-3 text-right text-sm text-gray-300">{item.quantity}</td>
                     </tr>
                   ))}
