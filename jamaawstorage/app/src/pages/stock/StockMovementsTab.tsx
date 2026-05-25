@@ -146,38 +146,38 @@ function movementLabel(kind: MovementKind): string {
 
 function movementTone(kind: MovementKind): {
   badge: 'success' | 'danger' | 'info' | 'warning'
-  frame: string
+  border: string
   dot: string
   amount: string
 } {
   if (kind === 'entry') {
     return {
       badge: 'success',
-      frame: 'border-emerald-500/20 bg-emerald-500/8',
-      dot: 'bg-emerald-400 shadow-[0_0_0_5px_rgba(52,211,153,0.12)]',
+      border: 'border-l-emerald-500/70',
+      dot: 'bg-emerald-400',
       amount: 'text-emerald-300',
     }
   }
   if (kind === 'exit') {
     return {
       badge: 'danger',
-      frame: 'border-red-500/20 bg-red-500/8',
-      dot: 'bg-red-400 shadow-[0_0_0_5px_rgba(248,113,113,0.12)]',
+      border: 'border-l-red-500/70',
+      dot: 'bg-red-400',
       amount: 'text-red-300',
     }
   }
   if (kind === 'return') {
     return {
       badge: 'info',
-      frame: 'border-sky-500/20 bg-sky-500/8',
-      dot: 'bg-sky-400 shadow-[0_0_0_5px_rgba(56,189,248,0.12)]',
+      border: 'border-l-sky-500/70',
+      dot: 'bg-sky-400',
       amount: 'text-sky-300',
     }
   }
   return {
     badge: 'warning',
-    frame: 'border-amber-500/20 bg-amber-500/8',
-    dot: 'bg-amber-400 shadow-[0_0_0_5px_rgba(251,191,36,0.12)]',
+    border: 'border-l-amber-500/70',
+    dot: 'bg-amber-400',
     amount: 'text-amber-300',
   }
 }
@@ -476,7 +476,8 @@ export function StockMovementsTab() {
     <div className="flex flex-col gap-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-orange-400/20 bg-orange-500/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-orange-200">
+          <div className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gray-300">
+            <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
             Historico do estoque
           </div>
           <h2 className="mt-3 text-2xl font-bold text-white">Movimentacoes</h2>
@@ -498,13 +499,35 @@ export function StockMovementsTab() {
       )}
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MovementStat title="Entradas" value={`+${stats.entries}`} tone="entry" />
-        <MovementStat title="Saidas" value={`-${stats.exits}`} tone="exit" />
-        <MovementStat title="Devolucoes" value={`+${stats.returns}`} tone="return" />
-        <MovementStat title="Ajustes manuais" value={stats.adjustments} tone="adjustment" />
+        <MovementStat title="Entradas" value={`+${stats.entries}`} tone="entry" subtitle="Itens adicionados" />
+        <MovementStat title="Saidas" value={`-${stats.exits}`} tone="exit" subtitle="Itens retirados" />
+        <MovementStat title="Devolucoes" value={`+${stats.returns}`} tone="return" subtitle="Voltaram ao estoque" />
+        <MovementStat title="Ajustes manuais" value={stats.adjustments} tone="adjustment" subtitle="Correcoes detectadas" />
       </div>
 
-      <Card variant="bordered" className="border-white/8 bg-[#111215]">
+      <Card variant="bordered" className="border-white/8 bg-[#111215] shadow-[0_18px_42px_rgba(0,0,0,0.12)]">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <p className="text-sm font-medium text-white">Filtros</p>
+            <p className="mt-1 text-xs text-gray-500">Use para encontrar um item, responsavel ou periodo especifico.</p>
+          </div>
+          {(searchQuery || typeFilter !== 'all' || sourceFilter !== 'all' || dateFrom || dateTo) && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearchQuery('')
+                setTypeFilter('all')
+                setSourceFilter('all')
+                setDateFrom('')
+                setDateTo('')
+              }}
+              className="rounded-full border border-white/8 bg-white/4 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-white/8 hover:text-white"
+            >
+              Limpar filtros
+            </button>
+          )}
+        </div>
+
         <div className="grid gap-3 xl:grid-cols-[1.5fr_1fr_1fr_0.8fr_0.8fr]">
           <Input
             placeholder="Buscar por item, codigo, responsavel ou referencia..."
@@ -544,7 +567,7 @@ export function StockMovementsTab() {
         />
       ) : (
         <div className="relative">
-          <div className="absolute bottom-0 left-6 top-0 hidden w-px bg-gradient-to-b from-orange-400/30 via-white/10 to-transparent md:block" />
+          <div className="absolute bottom-0 left-6 top-0 hidden w-px bg-gradient-to-b from-white/16 via-white/10 to-transparent md:block" />
           <div className="flex flex-col gap-3">
             {filteredMovements.map((movement) => (
               <MovementCard key={movement.id} movement={movement} />
@@ -560,17 +583,25 @@ function MovementStat({
   title,
   value,
   tone,
+  subtitle,
 }: {
   title: string
   value: number | string
   tone: MovementKind
+  subtitle: string
 }) {
   const style = movementTone(tone)
 
   return (
-    <Card variant="bordered" className={cn('border-white/8 bg-[#111215]', style.frame)}>
-      <p className="text-xs uppercase tracking-[0.2em] text-gray-500">{title}</p>
-      <p className={cn('mt-2 text-2xl font-semibold', style.amount)}>{value}</p>
+    <Card variant="bordered" className={cn('border-white/8 border-l-4 bg-[#111215] shadow-[0_12px_30px_rgba(0,0,0,0.10)]', style.border)}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">{title}</p>
+          <p className={cn('mt-2 text-2xl font-semibold', style.amount)}>{value}</p>
+          <p className="mt-1 text-xs text-gray-500">{subtitle}</p>
+        </div>
+        <span className={cn('mt-1 h-2.5 w-2.5 rounded-full', style.dot)} />
+      </div>
     </Card>
   )
 }
@@ -583,11 +614,11 @@ function MovementCard({ movement }: { movement: StockMovement }) {
     <Card
       variant="bordered"
       className={cn(
-        'relative overflow-hidden border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,22,0.98)_0%,_rgba(10,10,13,0.98)_100%)] md:ml-14',
-        tone.frame,
+        'relative overflow-hidden border-white/8 border-l-4 bg-[#111215] shadow-[0_16px_36px_rgba(0,0,0,0.12)] transition-colors hover:border-white/14 md:ml-14',
+        tone.border,
       )}
     >
-      <span className={cn('absolute -left-[39px] top-7 hidden h-3 w-3 rounded-full md:block', tone.dot)} />
+      <span className={cn('absolute -left-[39px] top-7 hidden h-3 w-3 rounded-full ring-4 ring-[#101114] md:block', tone.dot)} />
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 gap-4">
