@@ -129,14 +129,6 @@ function conditionLabel(condition: StockMovement['condition']): string {
   return 'Nao informado'
 }
 
-function conditionVariant(condition: StockMovement['condition']): 'success' | 'info' | 'danger' | 'warning' | 'default' {
-  if (condition === 'new') return 'success'
-  if (condition === 'used') return 'info'
-  if (condition === 'damaged') return 'danger'
-  if (condition === 'mixed') return 'warning'
-  return 'default'
-}
-
 function movementLabel(kind: MovementKind): string {
   if (kind === 'entry') return 'Entrada'
   if (kind === 'exit') return 'Saida'
@@ -145,40 +137,40 @@ function movementLabel(kind: MovementKind): string {
 }
 
 function movementTone(kind: MovementKind): {
-  badge: 'success' | 'danger' | 'info' | 'warning'
-  border: string
   dot: string
   amount: string
+  symbol: string
+  badge: 'default' | 'success' | 'danger' | 'info'
 } {
   if (kind === 'entry') {
     return {
-      badge: 'success',
-      border: 'border-l-emerald-500/70',
       dot: 'bg-emerald-400',
       amount: 'text-emerald-300',
+      symbol: '+',
+      badge: 'success',
     }
   }
   if (kind === 'exit') {
     return {
-      badge: 'danger',
-      border: 'border-l-red-500/70',
       dot: 'bg-red-400',
       amount: 'text-red-300',
+      symbol: '-',
+      badge: 'danger',
     }
   }
   if (kind === 'return') {
     return {
+      dot: 'bg-blue-400',
+      amount: 'text-blue-300',
+      symbol: '+',
       badge: 'info',
-      border: 'border-l-sky-500/70',
-      dot: 'bg-sky-400',
-      amount: 'text-sky-300',
     }
   }
   return {
-    badge: 'warning',
-    border: 'border-l-amber-500/70',
-    dot: 'bg-amber-400',
-    amount: 'text-amber-300',
+    dot: 'bg-gray-500',
+    amount: 'text-gray-100',
+    symbol: movementLabel(kind).slice(0, 1),
+    badge: 'default',
   }
 }
 
@@ -474,21 +466,23 @@ export function StockMovementsTab() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-white/4 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gray-300">
-            <span className="h-1.5 w-1.5 rounded-full bg-orange-400" />
-            Historico do estoque
+      <div className="rounded-xl border border-white/8 bg-gray-900 p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-gray-950/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+              <span className="h-1.5 w-1.5 rounded-full bg-gray-500" />
+              Historico do estoque
+            </div>
+            <h2 className="mt-3 text-2xl font-bold text-white">Movimentacoes</h2>
+            <p className="mt-1 max-w-2xl text-sm text-gray-400">
+              Entradas, saidas, devolucoes e ajustes reconstruidos a partir das retiradas, devolucoes e auditoria ja existentes.
+            </p>
           </div>
-          <h2 className="mt-3 text-2xl font-bold text-white">Movimentacoes</h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-400">
-            Entradas, saidas, devolucoes e ajustes reconstruidos a partir das retiradas, devolucoes e auditoria ja existentes.
-          </p>
-        </div>
 
-        <div className="rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-gray-300">
-          <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Eventos visiveis</p>
-          <p className="mt-1 text-2xl font-semibold text-white">{filteredMovements.length}</p>
+          <div className="rounded-lg border border-white/8 bg-gray-950/50 px-4 py-3 text-sm text-gray-300">
+            <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Eventos visiveis</p>
+            <p className="mt-1 text-2xl font-semibold text-white">{filteredMovements.length}</p>
+          </div>
         </div>
       </div>
 
@@ -505,7 +499,7 @@ export function StockMovementsTab() {
         <MovementStat title="Ajustes manuais" value={stats.adjustments} tone="adjustment" subtitle="Correcoes detectadas" />
       </div>
 
-      <Card variant="bordered" className="border-white/8 bg-[#111215] shadow-[0_18px_42px_rgba(0,0,0,0.12)]">
+      <Card variant="bordered" className="border-white/8 bg-gray-900 shadow-[0_12px_26px_rgba(0,0,0,0.10)]">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
           <div>
             <p className="text-sm font-medium text-white">Filtros</p>
@@ -521,7 +515,7 @@ export function StockMovementsTab() {
                 setDateFrom('')
                 setDateTo('')
               }}
-              className="rounded-full border border-white/8 bg-white/4 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-white/8 hover:text-white"
+              className="rounded-lg border border-white/8 bg-gray-950/50 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-white/8 hover:text-white"
             >
               Limpar filtros
             </button>
@@ -546,14 +540,14 @@ export function StockMovementsTab() {
             type="date"
             value={dateFrom}
             onChange={(event) => setDateFrom(event.target.value)}
-            className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+            className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
             aria-label="Data inicial"
           />
           <input
             type="date"
             value={dateTo}
             onChange={(event) => setDateTo(event.target.value)}
-            className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+            className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
             aria-label="Data final"
           />
         </div>
@@ -567,7 +561,7 @@ export function StockMovementsTab() {
         />
       ) : (
         <div className="relative">
-          <div className="absolute bottom-0 left-6 top-0 hidden w-px bg-gradient-to-b from-white/16 via-white/10 to-transparent md:block" />
+          <div className="absolute bottom-0 left-6 top-0 hidden w-px bg-gradient-to-b from-white/12 via-white/8 to-transparent md:block" />
           <div className="flex flex-col gap-3">
             {filteredMovements.map((movement) => (
               <MovementCard key={movement.id} movement={movement} />
@@ -593,14 +587,16 @@ function MovementStat({
   const style = movementTone(tone)
 
   return (
-    <Card variant="bordered" className={cn('border-white/8 border-l-4 bg-[#111215] shadow-[0_12px_30px_rgba(0,0,0,0.10)]', style.border)}>
+    <Card variant="bordered" className="border-white/8 bg-gray-900 shadow-[0_10px_22px_rgba(0,0,0,0.10)]">
       <div className="flex items-start justify-between gap-3">
         <div>
           <p className="text-xs uppercase tracking-[0.2em] text-gray-500">{title}</p>
           <p className={cn('mt-2 text-2xl font-semibold', style.amount)}>{value}</p>
           <p className="mt-1 text-xs text-gray-500">{subtitle}</p>
         </div>
-        <span className={cn('mt-1 h-2.5 w-2.5 rounded-full', style.dot)} />
+        <span className={cn('mt-1 flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-gray-950/50 text-sm font-semibold', style.amount)}>
+          {style.symbol}
+        </span>
       </div>
     </Card>
   )
@@ -613,31 +609,28 @@ function MovementCard({ movement }: { movement: StockMovement }) {
   return (
     <Card
       variant="bordered"
-      className={cn(
-        'relative overflow-hidden border-white/8 border-l-4 bg-[#111215] shadow-[0_16px_36px_rgba(0,0,0,0.12)] transition-colors hover:border-white/14 md:ml-14',
-        tone.border,
-      )}
+      className="relative overflow-hidden border-white/8 bg-gray-900 shadow-[0_12px_26px_rgba(0,0,0,0.10)] transition-colors hover:border-white/14 md:ml-14"
     >
-      <span className={cn('absolute -left-[39px] top-7 hidden h-3 w-3 rounded-full ring-4 ring-[#101114] md:block', tone.dot)} />
+      <span className={cn('absolute -left-[39px] top-7 hidden h-3 w-3 rounded-full ring-4 ring-gray-950 md:block', tone.dot)} />
 
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex min-w-0 gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-black/25">
+          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-gray-950/55">
             <ItemVisual iconKey={movement.itemIconKey} size={34} />
           </div>
 
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
-              <Badge variant={tone.badge} dot>{movementLabel(movement.kind)}</Badge>
+              <MovementPill movement={movement} />
               <Badge variant="default">{sourceLabel(movement.source)}</Badge>
               {movement.condition && (
-                <Badge variant={conditionVariant(movement.condition)}>{conditionLabel(movement.condition)}</Badge>
+                <Badge variant="default">{conditionLabel(movement.condition)}</Badge>
               )}
             </div>
 
             <h3 className="mt-3 text-base font-semibold text-white">{movement.itemName}</h3>
             <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-              <span className="font-mono text-orange-300">{movement.itemCode ?? '-'}</span>
+              <span className="font-mono text-gray-300">{movement.itemCode ?? '-'}</span>
               <span>{formatDateTime(movement.createdAt)}</span>
               {movement.reference && <span>{movement.reference}</span>}
             </div>
@@ -657,7 +650,7 @@ function MovementCard({ movement }: { movement: StockMovement }) {
           </div>
         </div>
 
-        <div className="shrink-0 rounded-2xl border border-white/8 bg-black/20 px-4 py-3 text-right">
+        <div className="shrink-0 rounded-xl border border-white/8 bg-gray-950/50 px-4 py-3 text-right">
           <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Quantidade</p>
           <p className={cn('mt-1 text-2xl font-semibold', tone.amount)}>
             {sign}{formatQuantity(movement.quantity, movement.itemUnit)}
@@ -668,9 +661,26 @@ function MovementCard({ movement }: { movement: StockMovement }) {
   )
 }
 
+function MovementPill({ movement }: { movement: StockMovement }) {
+  const tone = movementTone(movement.kind)
+
+  return (
+    <span className={cn(
+      'inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium',
+      tone.badge === 'success' && 'bg-emerald-500/12 text-emerald-300',
+      tone.badge === 'danger' && 'bg-red-500/12 text-red-300',
+      tone.badge === 'info' && 'bg-blue-500/12 text-blue-300',
+      tone.badge === 'default' && 'bg-gray-800 text-gray-300',
+    )}>
+      <span className={cn('h-1.5 w-1.5 rounded-full', tone.dot)} />
+      {movementLabel(movement.kind)}
+    </span>
+  )
+}
+
 function MiniPill({ label, value }: { label: string; value: string }) {
   return (
-    <span className="inline-flex max-w-full items-center gap-2 rounded-full border border-white/8 bg-white/4 px-3 py-1 text-xs text-gray-300">
+    <span className="inline-flex max-w-full items-center gap-2 rounded-lg border border-white/8 bg-gray-950/45 px-3 py-1 text-xs text-gray-300">
       <span className="shrink-0 text-gray-500">{label}:</span>
       <span className="truncate text-gray-200">{value}</span>
     </span>

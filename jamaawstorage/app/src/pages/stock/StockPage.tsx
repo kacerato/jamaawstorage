@@ -589,7 +589,7 @@ export function StockPage() {
           })}
           className={cn(
             'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'items' ? 'bg-orange-500/14 text-orange-200' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+            activeTab === 'items' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
           )}
         >
           Itens
@@ -603,7 +603,7 @@ export function StockPage() {
           })}
           className={cn(
             'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'kits' ? 'bg-orange-500/14 text-orange-200' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+            activeTab === 'kits' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
           )}
         >
           Kits
@@ -617,7 +617,7 @@ export function StockPage() {
           })}
           className={cn(
             'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'returns' ? 'bg-orange-500/14 text-orange-200' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+            activeTab === 'returns' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
           )}
         >
           Itens devolvidos
@@ -631,7 +631,7 @@ export function StockPage() {
           })}
           className={cn(
             'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'movements' ? 'bg-orange-500/14 text-orange-200' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+            activeTab === 'movements' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
           )}
         >
           Movimentações
