@@ -1,3 +1,6 @@
+import jsPDF from 'jspdf'
+import autoTable from 'jspdf-autotable'
+
 export function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ')
 }
@@ -39,15 +42,6 @@ export function isValidUUID(uuid: string): boolean {
 
 export function formatQuantity(quantity: number, unit: string): string {
   return `${quantity} ${unit}`
-}
-
-function escapeHtml(value: string): string {
-  return value
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#39;')
 }
 
 interface PrintTableColumn {
@@ -92,169 +86,43 @@ export function openPrintTableDocument({
   compact = false,
 }: PrintTableDocumentOptions): void {
   const generatedLabel = generatedAt ?? new Date().toLocaleString('pt-BR')
-  const tableHead = columns
-    .map((column) => `<th>${escapeHtml(column.label)}</th>`)
-    .join('')
+  const doc = createReportPdf({ title, subtitle, filename, generatedLabel, orientation, compact })
 
-  const tableRows = rows.length > 0
-    ? rows
-      .map((row) => {
-        const cells = columns
-          .map((column) => `<td>${escapeHtml(String(row[column.key] ?? '-'))}</td>`)
-          .join('')
-        return `<tr>${cells}</tr>`
-      })
-      .join('')
-    : `<tr><td colspan="${columns.length}" class="empty">Nenhum dado disponivel</td></tr>`
+  autoTable(doc, {
+    startY: compact ? 34 : 42,
+    head: [columns.map((column) => column.label)],
+    body: rows.length > 0
+      ? rows.map((row) => columns.map((column) => formatPdfCell(row[column.key])))
+      : [[`Nenhum dado disponivel`]],
+    styles: {
+      font: 'helvetica',
+      fontSize: compact ? 7 : 8,
+      cellPadding: compact ? 1.6 : 2.4,
+      overflow: 'linebreak',
+      valign: 'top',
+      lineColor: [229, 231, 235],
+      lineWidth: 0.15,
+      textColor: [31, 41, 55],
+    },
+    headStyles: {
+      fillColor: [248, 250, 252],
+      textColor: [31, 41, 55],
+      fontStyle: 'bold',
+      fontSize: compact ? 6.5 : 7.5,
+    },
+    alternateRowStyles: {
+      fillColor: [252, 252, 253],
+    },
+    margin: {
+      left: compact ? 8 : 12,
+      right: compact ? 8 : 12,
+      top: compact ? 8 : 12,
+      bottom: compact ? 12 : 16,
+    },
+    didDrawPage: () => drawReportFooter(doc),
+  })
 
-  const safeTitle = escapeHtml(title)
-  const safeSubtitle = subtitle ? `<p class="subtitle">${escapeHtml(subtitle)}</p>` : ''
-  const safeFilename = escapeHtml(filename ?? title)
-
-  const html = `<!doctype html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="utf-8" />
-    <title>${safeTitle}</title>
-    <style>
-      :root {
-        color-scheme: light;
-        --ink: #1f2937;
-        --muted: #6b7280;
-        --line: #e5e7eb;
-        --soft: #f8fafc;
-        --brand: #ea580c;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: "Segoe UI", Arial, sans-serif;
-        color: var(--ink);
-        background: white;
-      }
-      .page {
-        padding: ${compact ? '20px' : '32px'};
-      }
-      .header {
-        margin-bottom: ${compact ? '14px' : '24px'};
-        border-bottom: 2px solid var(--line);
-        padding-bottom: ${compact ? '12px' : '18px'};
-      }
-      .eyebrow {
-        font-size: ${compact ? '10px' : '11px'};
-        font-weight: 700;
-        letter-spacing: 0.22em;
-        text-transform: uppercase;
-        color: var(--brand);
-        margin: 0 0 8px;
-      }
-      h1 {
-        margin: 0;
-        font-size: ${compact ? '22px' : '28px'};
-        line-height: 1.1;
-      }
-      .subtitle,
-      .meta {
-        margin: 8px 0 0;
-        color: var(--muted);
-        font-size: ${compact ? '11px' : '13px'};
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed;
-      }
-      th, td {
-        border: 1px solid var(--line);
-        padding: ${compact ? '6px 8px' : '10px 12px'};
-        text-align: left;
-        vertical-align: top;
-        font-size: ${compact ? '10px' : '12px'};
-        word-break: break-word;
-      }
-      th {
-        background: var(--soft);
-        font-size: ${compact ? '9px' : '11px'};
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-      .empty {
-        text-align: center;
-        color: var(--muted);
-        padding: 28px 12px;
-      }
-      .footer {
-        margin-top: ${compact ? '12px' : '18px'};
-        color: var(--muted);
-        font-size: ${compact ? '10px' : '11px'};
-      }
-      @page {
-        size: A4 ${orientation};
-        margin: ${compact ? '8mm' : '12mm'};
-      }
-      @media print {
-        body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-        .page { padding: ${compact ? '8px' : '20px'}; }
-      }
-    </style>
-  </head>
-  <body>
-    <main class="page">
-      <header class="header">
-        <p class="eyebrow">Relatorio</p>
-        <h1>${safeTitle}</h1>
-        ${safeSubtitle}
-        <p class="meta">Gerado em ${escapeHtml(generatedLabel)} | ${safeFilename}</p>
-      </header>
-      <table>
-        <thead><tr>${tableHead}</tr></thead>
-        <tbody>${tableRows}</tbody>
-      </table>
-      <p class="footer">Documento preparado para impressao e exportacao em PDF.</p>
-    </main>
-  </body>
-</html>`
-
-  const iframe = document.createElement('iframe')
-  iframe.setAttribute('aria-hidden', 'true')
-  iframe.style.position = 'fixed'
-  iframe.style.right = '0'
-  iframe.style.bottom = '0'
-  iframe.style.width = '0'
-  iframe.style.height = '0'
-  iframe.style.border = '0'
-  iframe.style.opacity = '0'
-  document.body.appendChild(iframe)
-
-  const cleanup = () => {
-    window.setTimeout(() => {
-      iframe.remove()
-    }, 1000)
-  }
-
-  const iframeWindow = iframe.contentWindow
-  if (!iframeWindow) {
-    iframe.remove()
-    throw new Error('Nao foi possivel preparar a impressao.')
-  }
-
-  iframeWindow.document.open()
-  iframeWindow.document.write(html)
-  iframeWindow.document.close()
-
-  const triggerPrint = () => {
-    iframeWindow.focus()
-    iframeWindow.print()
-    cleanup()
-  }
-
-  if (iframe.contentDocument?.readyState === 'complete') {
-    triggerPrint()
-  } else {
-    iframe.onload = () => {
-      triggerPrint()
-    }
-  }
+  doc.save(normalizePdfFilename(filename ?? title))
 }
 
 export function openPrintSectionedTableDocument({
@@ -265,191 +133,160 @@ export function openPrintSectionedTableDocument({
   sections,
 }: PrintSectionedTableDocumentOptions): void {
   const generatedLabel = generatedAt ?? new Date().toLocaleString('pt-BR')
-  const safeTitle = escapeHtml(title)
-  const safeSubtitle = subtitle ? `<p class="subtitle">${escapeHtml(subtitle)}</p>` : ''
-  const safeFilename = escapeHtml(filename ?? title)
-  const renderedSections = sections.length > 0
+  const doc = createReportPdf({ title, subtitle, filename, generatedLabel, orientation: 'portrait' })
+  const printableSections = sections.length > 0
     ? sections
-      .map((section) => {
-        const header = section.columns
-          .map((column) => `<th>${escapeHtml(column.label)}</th>`)
-          .join('')
-        const rows = section.rows.length > 0
-          ? section.rows
-            .map((row) => {
-              const cells = section.columns
-                .map((column) => `<td>${escapeHtml(String(row[column.key] ?? '-'))}</td>`)
-                .join('')
-              return `<tr>${cells}</tr>`
-            })
-            .join('')
-          : `<tr><td colspan="${section.columns.length}" class="empty">Nenhum dado disponivel</td></tr>`
+    : [{
+      title: 'Dados',
+      columns: [{ key: 'mensagem', label: 'Mensagem' }],
+      rows: [{ mensagem: 'Nenhum dado disponivel' }],
+    }]
 
-        return `
-          <section class="section">
-            <div class="section-header">
-              <h2>${escapeHtml(section.title)}</h2>
-              ${section.subtitle ? `<p class="section-subtitle">${escapeHtml(section.subtitle)}</p>` : ''}
-            </div>
-            <table>
-              <thead><tr>${header}</tr></thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </section>
-        `
-      })
-      .join('')
-    : '<p class="empty">Nenhum dado disponivel</p>'
+  let startY = 42
 
-  const html = `<!doctype html>
-<html lang="pt-BR">
-  <head>
-    <meta charset="utf-8" />
-    <title>${safeTitle}</title>
-    <style>
-      :root {
-        color-scheme: light;
-        --ink: #1f2937;
-        --muted: #6b7280;
-        --line: #e5e7eb;
-        --soft: #f8fafc;
-        --brand: #ea580c;
-      }
-      * { box-sizing: border-box; }
-      body {
-        margin: 0;
-        font-family: "Segoe UI", Arial, sans-serif;
-        color: var(--ink);
-        background: white;
-      }
-      .page {
-        padding: 32px;
-      }
-      .header {
-        margin-bottom: 24px;
-        border-bottom: 2px solid var(--line);
-        padding-bottom: 18px;
-      }
-      .eyebrow {
-        font-size: 11px;
-        font-weight: 700;
-        letter-spacing: 0.22em;
-        text-transform: uppercase;
-        color: var(--brand);
-        margin: 0 0 8px;
-      }
-      h1 {
-        margin: 0;
-        font-size: 28px;
-        line-height: 1.1;
-      }
-      h2 {
-        margin: 0;
-        font-size: 18px;
-      }
-      .subtitle,
-      .meta,
-      .section-subtitle {
-        margin: 8px 0 0;
-        color: var(--muted);
-        font-size: 13px;
-      }
-      .section {
-        margin-top: 24px;
-        page-break-inside: avoid;
-      }
-      .section-header {
-        margin-bottom: 12px;
-      }
-      table {
-        width: 100%;
-        border-collapse: collapse;
-        table-layout: fixed;
-      }
-      th, td {
-        border: 1px solid var(--line);
-        padding: 10px 12px;
-        text-align: left;
-        vertical-align: top;
-        font-size: 12px;
-        word-break: break-word;
-      }
-      th {
-        background: var(--soft);
-        font-size: 11px;
-        letter-spacing: 0.08em;
-        text-transform: uppercase;
-      }
-      .empty {
-        text-align: center;
-        color: var(--muted);
-        padding: 28px 12px;
-      }
-      .footer {
-        margin-top: 18px;
-        color: var(--muted);
-        font-size: 11px;
-      }
-      @media print {
-        body { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
-        .page { padding: 20px; }
-      }
-    </style>
-  </head>
-  <body>
-    <main class="page">
-      <header class="header">
-        <p class="eyebrow">Relatorio</p>
-        <h1>${safeTitle}</h1>
-        ${safeSubtitle}
-        <p class="meta">Gerado em ${escapeHtml(generatedLabel)} | ${safeFilename}</p>
-      </header>
-      ${renderedSections}
-      <p class="footer">Documento preparado para impressao e exportacao em PDF.</p>
-    </main>
-  </body>
-</html>`
-
-  const iframe = document.createElement('iframe')
-  iframe.setAttribute('aria-hidden', 'true')
-  iframe.style.position = 'fixed'
-  iframe.style.right = '0'
-  iframe.style.bottom = '0'
-  iframe.style.width = '0'
-  iframe.style.height = '0'
-  iframe.style.border = '0'
-  iframe.style.opacity = '0'
-  document.body.appendChild(iframe)
-
-  const cleanup = () => {
-    window.setTimeout(() => {
-      iframe.remove()
-    }, 1000)
-  }
-
-  const iframeWindow = iframe.contentWindow
-  if (!iframeWindow) {
-    iframe.remove()
-    throw new Error('Nao foi possivel preparar a impressao.')
-  }
-
-  iframeWindow.document.open()
-  iframeWindow.document.write(html)
-  iframeWindow.document.close()
-
-  const triggerPrint = () => {
-    iframeWindow.focus()
-    iframeWindow.print()
-    cleanup()
-  }
-
-  if (iframe.contentDocument?.readyState === 'complete') {
-    triggerPrint()
-  } else {
-    iframe.onload = () => {
-      triggerPrint()
+  printableSections.forEach((section, index) => {
+    if (index > 0 && startY > 245) {
+      doc.addPage()
+      startY = 18
     }
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(12)
+    doc.setTextColor(31, 41, 55)
+    doc.text(section.title, 12, startY)
+
+    if (section.subtitle) {
+      doc.setFont('helvetica', 'normal')
+      doc.setFontSize(8)
+      doc.setTextColor(107, 114, 128)
+      const subtitleLines = doc.splitTextToSize(section.subtitle, 186)
+      doc.text(subtitleLines, 12, startY + 5)
+      startY += 5 + subtitleLines.length * 4
+    } else {
+      startY += 5
+    }
+
+    autoTable(doc, {
+      startY: startY + 2,
+      head: [section.columns.map((column) => column.label)],
+      body: section.rows.length > 0
+        ? section.rows.map((row) => section.columns.map((column) => formatPdfCell(row[column.key])))
+        : [[`Nenhum dado disponivel`]],
+      styles: {
+        font: 'helvetica',
+        fontSize: 8,
+        cellPadding: 2.4,
+        overflow: 'linebreak',
+        valign: 'top',
+        lineColor: [229, 231, 235],
+        lineWidth: 0.15,
+        textColor: [31, 41, 55],
+      },
+      headStyles: {
+        fillColor: [248, 250, 252],
+        textColor: [31, 41, 55],
+        fontStyle: 'bold',
+        fontSize: 7.5,
+      },
+      alternateRowStyles: {
+        fillColor: [252, 252, 253],
+      },
+      margin: {
+        left: 12,
+        right: 12,
+        top: 12,
+        bottom: 16,
+      },
+      didDrawPage: () => drawReportFooter(doc),
+    })
+
+    startY = getAutoTableFinalY(doc) + 14
+  })
+
+  doc.save(normalizePdfFilename(filename ?? title))
+}
+
+function createReportPdf({
+  title,
+  subtitle,
+  filename,
+  generatedLabel,
+  orientation,
+  compact = false,
+}: {
+  title: string
+  subtitle?: string
+  filename?: string
+  generatedLabel: string
+  orientation: 'portrait' | 'landscape'
+  compact?: boolean
+}): jsPDF {
+  const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const margin = compact ? 8 : 12
+  const contentWidth = pageWidth - margin * 2
+  const titleLines = doc.splitTextToSize(title, contentWidth)
+
+  doc.setFont('helvetica', 'bold')
+  doc.setFontSize(compact ? 8 : 9)
+  doc.setTextColor(234, 88, 12)
+  doc.text('RELATORIO', margin, compact ? 10 : 14)
+
+  doc.setFontSize(compact ? 15 : 18)
+  doc.setTextColor(31, 41, 55)
+  doc.text(titleLines, margin, compact ? 17 : 23)
+
+  let cursorY = (compact ? 17 : 23) + titleLines.length * (compact ? 5 : 6)
+  if (subtitle) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(compact ? 7 : 8)
+    doc.setTextColor(107, 114, 128)
+    const subtitleLines = doc.splitTextToSize(subtitle, contentWidth)
+    doc.text(subtitleLines, margin, cursorY)
+    cursorY += subtitleLines.length * 4
   }
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(compact ? 7 : 8)
+  doc.setTextColor(107, 114, 128)
+  doc.text(`Gerado em ${generatedLabel} | ${normalizePdfFilename(filename ?? title)}`, margin, cursorY + 4)
+
+  doc.setDrawColor(229, 231, 235)
+  doc.setLineWidth(0.4)
+  doc.line(margin, cursorY + 8, pageWidth - margin, cursorY + 8)
+
+  return doc
+}
+
+function drawReportFooter(doc: jsPDF): void {
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const pageHeight = doc.internal.pageSize.getHeight()
+  const pageNumber = doc.getNumberOfPages()
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7)
+  doc.setTextColor(107, 114, 128)
+  doc.text('Documento gerado para download em PDF.', 12, pageHeight - 8)
+  doc.text(`Pagina ${pageNumber}`, pageWidth - 12, pageHeight - 8, { align: 'right' })
+}
+
+function formatPdfCell(value: unknown): string {
+  if (value === null || value === undefined || value === '') return '-'
+  return String(value)
+}
+
+function normalizePdfFilename(value: string): string {
+  const safeName = value
+    .trim()
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+    .replace(/\s+/g, '-')
+
+  if (!safeName) return 'relatorio.pdf'
+  return safeName.toLowerCase().endsWith('.pdf') ? safeName : `${safeName}.pdf`
+}
+
+function getAutoTableFinalY(doc: jsPDF): number {
+  return (doc as jsPDF & { lastAutoTable?: { finalY?: number } }).lastAutoTable?.finalY ?? 42
 }
 
 export const DEFAULT_IMAGE_UPLOAD_OPTIONS = {
