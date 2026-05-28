@@ -203,9 +203,14 @@ export function NewWithdrawalPage() {
   const availableRequesters = useMemo(
     () =>
       requesters.filter((requester) =>
-        requester.role === 'leader' || requester.profile_id === profile?.id,
+        requester.profile_id === profile?.id,
       ),
     [profile?.id, requesters],
+  )
+
+  const currentRequester = useMemo(
+    () => availableRequesters.find((requester) => requester.profile_id === profile?.id) ?? null,
+    [availableRequesters, profile?.id],
   )
 
   useEffect(() => {
@@ -242,13 +247,10 @@ export function NewWithdrawalPage() {
   }, [])
 
   useEffect(() => {
-    if (!profile || requestedBy || availableRequesters.length === 0) return
+    if (!profile || requestedBy || !currentRequester) return
 
-    const currentRequester = availableRequesters.find((requester) => requester.profile_id === profile.id)
-    if (currentRequester) {
-      setRequestedBy(currentRequester.id)
-    }
-  }, [availableRequesters, profile, requestedBy])
+    setRequestedBy(currentRequester.id)
+  }, [currentRequester, profile, requestedBy])
 
   const selectedEntryKeys = useMemo(
     () => new Set(items.map((item) => makeEntryDuplicateKey(item))),
@@ -576,7 +578,7 @@ export function NewWithdrawalPage() {
     const errors: Record<string, string> = {}
 
     if (step === 0) {
-      if (!requestedBy) errors.requestedBy = 'Selecione quem solicitou a retirada'
+      if (!currentRequester) errors.requestedBy = 'Supervisor solicitante nao encontrado para o usuario logado'
       if (draftDestinationType === 'collaborator' && !draftCollaboratorId) {
         errors.collaboratorId = 'Selecione um colaborador para usar como destino padrao'
       }
@@ -765,9 +767,17 @@ export function NewWithdrawalPage() {
       const photoUrls = photoAttachments.map((photo) => photo.url)
       const mainPhotoUrl = photoUrls[0] ?? null
       const primaryGroup = groups[0]
+      const requesterId = currentRequester?.id ?? requestedBy
+
+      if (!requesterId) {
+        setSubmitError('Supervisor solicitante nao encontrado para o usuario logado.')
+        setCurrentStep(0)
+        setSubmitting(false)
+        return
+      }
 
       const { data: withdrawalId, error: withdrawalError } = await supabase.rpc('create_completed_withdrawal', {
-        p_requested_by: requestedBy,
+        p_requested_by: requesterId,
         p_destination_type: primaryGroup.destination_type,
         p_collaborator_id: primaryGroup.destination_type === 'collaborator' ? primaryGroup.collaborator_id : null,
         p_work_site_id: primaryGroup.destination_type === 'work_site' ? primaryGroup.work_site_id : null,
@@ -823,23 +833,12 @@ export function NewWithdrawalPage() {
     }
   }
 
-  const requesterOptions = availableRequesters.map((requester) => {
-    const suffix = requester.employee_id ? ` (${requester.employee_id})` : ''
-    const roleLabel = requester.role === 'supervisor' ? 'Supervisor' : 'Lider'
-    const currentUserLabel = requester.profile_id === profile?.id ? ' - voce' : ''
-
-    return {
-      value: requester.id,
-      label: `${requester.full_name}${suffix} - ${roleLabel}${currentUserLabel}`,
-    }
-  })
-
   const collaboratorOptions = collaborators.map((collaborator) => ({
     value: collaborator.id,
     label: `${collaborator.full_name}${collaborator.employee_id ? ` (${collaborator.employee_id})` : ''}`,
   }))
 
-  const selectedRequester = availableRequesters.find((requester) => requester.id === requestedBy)
+  const selectedRequester = currentRequester ?? availableRequesters.find((requester) => requester.id === requestedBy)
 
   const renderStepIndicator = () => (
     <div className="mb-8 flex items-center justify-between">
@@ -901,24 +900,17 @@ export function NewWithdrawalPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-5">
-            <Select
-              label="Solicitante"
-              placeholder="Selecione quem solicitou"
-              options={requesterOptions}
-              value={requestedBy}
-              onChange={(event) => {
-                setRequestedBy(event.target.value)
-                setStepErrors((prev) => {
-                  const next = { ...prev }
-                  delete next.requestedBy
-                  return next
-                })
-              }}
-              error={stepErrors.requestedBy}
-            />
-            <p className="text-xs text-gray-500">
-              Supervisores so podem registrar retiradas no proprio nome. Para outras solicitacoes, escolha um lider.
-            </p>
+            <div className="rounded-xl border border-white/8 bg-[#0d0d10] px-4 py-3">
+              <p className="text-xs font-medium text-gray-400">Solicitado por</p>
+              <p className="mt-1 text-sm font-semibold text-white">
+                {selectedRequester
+                  ? `${selectedRequester.full_name}${selectedRequester.employee_id ? ` (${selectedRequester.employee_id})` : ''}`
+                  : 'Supervisor nao encontrado'}
+              </p>
+              {stepErrors.requestedBy && (
+                <p className="mt-2 text-xs text-red-400">{stepErrors.requestedBy}</p>
+              )}
+            </div>
 
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-gray-300">Destino padrao para proximos itens</label>

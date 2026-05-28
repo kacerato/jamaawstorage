@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../hooks/useAuth'
 import type { KitWithItems, WithdrawalWithDetails } from '../../types'
 import type { Tables, WithdrawalDestinationType } from '../../types/database'
 import {
@@ -92,6 +93,7 @@ function selectedWorkSiteLabel(workSites: WorkSiteRow[], workSiteId: string): st
 export function EditWithdrawalPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { profile } = useAuth()
 
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -103,7 +105,6 @@ export function EditWithdrawalPage() {
   const [collaborators, setCollaborators] = useState<PeopleRow[]>([])
   const [workSites, setWorkSites] = useState<WorkSiteRow[]>([])
 
-  const [requestedBy, setRequestedBy] = useState('')
   const [destinationType, setDestinationType] = useState<WithdrawalDestinationType>('collaborator')
   const [collaboratorId, setCollaboratorId] = useState('')
   const [workSiteId, setWorkSiteId] = useState('')
@@ -160,7 +161,6 @@ export function EditWithdrawalPage() {
       setCollaborators((collaboratorsRes.data as PeopleRow[]) ?? [])
       setWorkSites((workSitesRes.data as WorkSiteRow[]) ?? [])
 
-      setRequestedBy(currentWithdrawal.requested_by)
       setDestinationType(currentWithdrawal.destination_type)
       setCollaboratorId(currentWithdrawal.collaborator_id ?? '')
       setWorkSiteId(currentWithdrawal.work_site_id ?? '')
@@ -202,11 +202,18 @@ export function EditWithdrawalPage() {
   )
 
   const requesterOptions = useMemo(
-    () => requesters.map((requester) => ({
-      value: requester.id,
-      label: `${requester.full_name}${requester.employee_id ? ` (${requester.employee_id})` : ''}`,
-    })),
-    [requesters],
+    () => requesters
+      .filter((requester) => requester.profile_id === profile?.id)
+      .map((requester) => ({
+        value: requester.id,
+        label: `${requester.full_name}${requester.employee_id ? ` (${requester.employee_id})` : ''}`,
+      })),
+    [profile?.id, requesters],
+  )
+
+  const currentRequester = useMemo(
+    () => requesters.find((requester) => requester.profile_id === profile?.id) ?? null,
+    [profile?.id, requesters],
   )
 
   const totalUnits = useMemo(
@@ -265,8 +272,8 @@ export function EditWithdrawalPage() {
   }
 
   const validateForm = (itemsSource: EditableWithdrawalItem[]): boolean => {
-    if (!requestedBy) {
-      setSaveError('Selecione quem solicitou a retirada.')
+    if (!currentRequester) {
+      setSaveError('Supervisor solicitante nao encontrado para o usuario logado.')
       return false
     }
 
@@ -445,6 +452,12 @@ export function EditWithdrawalPage() {
         return
       }
 
+      if (!currentRequester) {
+        setSaveError('Supervisor solicitante nao encontrado para o usuario logado.')
+        setSaving(false)
+        return
+      }
+
       const { data, error: updateError } = await (supabase as typeof supabase & {
         rpc: (
           fn: string,
@@ -452,7 +465,7 @@ export function EditWithdrawalPage() {
         ) => Promise<{ data: string | null; error: { message: string } | null }>
       }).rpc('update_completed_withdrawal', {
         p_withdrawal_id: id,
-        p_requested_by: requestedBy,
+        p_requested_by: currentRequester.id,
         p_destination_type: groups[0].destination_type,
         p_collaborator_id: groups[0].destination_type === 'collaborator' ? groups[0].collaborator_id : null,
         p_work_site_id: groups[0].destination_type === 'work_site' ? groups[0].work_site_id : null,
@@ -547,13 +560,14 @@ export function EditWithdrawalPage() {
             </div>
 
             <div className="grid gap-4">
-              <Select
-                label="Solicitante"
-                value={requestedBy}
-                onChange={(event) => setRequestedBy(event.target.value)}
-                options={requesterOptions}
-                placeholder="Selecione quem solicitou"
-              />
+              <div className="rounded-xl border border-white/8 bg-[#0d0d10] px-4 py-3">
+                <p className="text-xs font-medium text-gray-400">Solicitado por</p>
+                <p className="mt-1 text-sm font-semibold text-white">
+                  {currentRequester
+                    ? `${currentRequester.full_name}${currentRequester.employee_id ? ` (${currentRequester.employee_id})` : ''}`
+                    : requesterOptions[0]?.label ?? 'Supervisor nao encontrado'}
+                </p>
+              </div>
 
               <div>
                 <label className="text-sm font-medium text-gray-300">Observacoes</label>
