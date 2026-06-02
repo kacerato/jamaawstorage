@@ -201,14 +201,11 @@ export function NewWithdrawalPage() {
   const [dragActiveDoc, setDragActiveDoc] = useState(false)
 
   const availableRequesters = useMemo(
-    () =>
-      requesters.filter((requester) =>
-        requester.profile_id === profile?.id,
-      ),
-    [profile?.id, requesters],
+    () => requesters,
+    [requesters],
   )
 
-  const currentRequester = useMemo(
+  const loggedSupervisorRequester = useMemo(
     () => availableRequesters.find((requester) => requester.profile_id === profile?.id) ?? null,
     [availableRequesters, profile?.id],
   )
@@ -247,10 +244,10 @@ export function NewWithdrawalPage() {
   }, [])
 
   useEffect(() => {
-    if (!profile || requestedBy || !currentRequester) return
+    if (!profile || requestedBy || availableRequesters.length === 0) return
 
-    setRequestedBy(currentRequester.id)
-  }, [currentRequester, profile, requestedBy])
+    setRequestedBy((loggedSupervisorRequester ?? availableRequesters[0]).id)
+  }, [availableRequesters, loggedSupervisorRequester, profile, requestedBy])
 
   const selectedEntryKeys = useMemo(
     () => new Set(items.map((item) => makeEntryDuplicateKey(item))),
@@ -578,7 +575,9 @@ export function NewWithdrawalPage() {
     const errors: Record<string, string> = {}
 
     if (step === 0) {
-      if (!currentRequester) errors.requestedBy = 'Supervisor solicitante nao encontrado para o usuario logado'
+      if (!requestedBy || !availableRequesters.some((requester) => requester.id === requestedBy)) {
+        errors.requestedBy = 'Selecione o lider ou supervisor que pediu a retirada'
+      }
       if (draftDestinationType === 'collaborator' && !draftCollaboratorId) {
         errors.collaboratorId = 'Selecione um colaborador para usar como destino padrao'
       }
@@ -767,10 +766,10 @@ export function NewWithdrawalPage() {
       const photoUrls = photoAttachments.map((photo) => photo.url)
       const mainPhotoUrl = photoUrls[0] ?? null
       const primaryGroup = groups[0]
-      const requesterId = currentRequester?.id ?? requestedBy
+      const requesterId = requestedBy
 
       if (!requesterId) {
-        setSubmitError('Supervisor solicitante nao encontrado para o usuario logado.')
+        setSubmitError('Selecione o lider ou supervisor que pediu a retirada.')
         setCurrentStep(0)
         setSubmitting(false)
         return
@@ -838,7 +837,12 @@ export function NewWithdrawalPage() {
     label: `${collaborator.full_name}${collaborator.employee_id ? ` (${collaborator.employee_id})` : ''}`,
   }))
 
-  const selectedRequester = currentRequester ?? availableRequesters.find((requester) => requester.id === requestedBy)
+  const requesterOptions = availableRequesters.map((requester) => ({
+    value: requester.id,
+    label: `${requester.full_name}${requester.employee_id ? ` (${requester.employee_id})` : ''}`,
+  }))
+
+  const selectedRequester = availableRequesters.find((requester) => requester.id === requestedBy) ?? null
 
   const renderStepIndicator = () => (
     <div className="mb-8 flex items-center justify-between">
@@ -900,17 +904,21 @@ export function NewWithdrawalPage() {
           </div>
         ) : (
           <div className="flex flex-col gap-5">
-            <div className="rounded-xl border border-white/8 bg-[#0d0d10] px-4 py-3">
-              <p className="text-xs font-medium text-gray-400">Solicitado por</p>
-              <p className="mt-1 text-sm font-semibold text-white">
-                {selectedRequester
-                  ? `${selectedRequester.full_name}${selectedRequester.employee_id ? ` (${selectedRequester.employee_id})` : ''}`
-                  : 'Supervisor nao encontrado'}
-              </p>
-              {stepErrors.requestedBy && (
-                <p className="mt-2 text-xs text-red-400">{stepErrors.requestedBy}</p>
-              )}
-            </div>
+            <Select
+              label="Lider solicitante"
+              placeholder="Selecione quem pediu a retirada"
+              value={requestedBy}
+              onChange={(event) => {
+                setRequestedBy(event.target.value)
+                setStepErrors((prev) => {
+                  const next = { ...prev }
+                  delete next.requestedBy
+                  return next
+                })
+              }}
+              options={requesterOptions}
+              error={stepErrors.requestedBy}
+            />
 
             <div className="flex flex-col gap-2">
               <label className="text-sm font-medium text-gray-300">Destino padrao para proximos itens</label>
