@@ -55,7 +55,7 @@ type InventoryWithdrawalTrace = {
 
 type TabType = 'profile' | 'inventory' | 'withdrawals' | 'consumption'
 type DatePeriod = 'week' | 'month' | 'custom'
-type InventoryActionMode = 'adjust' | 'delete' | 'return_to_stock' | null
+type InventoryActionMode = 'delete' | 'return_to_stock' | null
 
 interface CustomDateRange {
   from: string
@@ -86,7 +86,6 @@ export function PersonDetailPage() {
   const [inventorySubmitting, setInventorySubmitting] = useState(false)
   const [inventoryActionMode, setInventoryActionMode] = useState<InventoryActionMode>(null)
   const [inventoryActionQuantity, setInventoryActionQuantity] = useState('1')
-  const [inventoryAdjustmentQuantity, setInventoryAdjustmentQuantity] = useState('0')
   const [inventoryAdjustmentReason, setInventoryAdjustmentReason] = useState('')
   const [selectedInventoryItem, setSelectedInventoryItem] = useState<PersonWithDetails['inventory'][0] | null>(null)
 
@@ -363,7 +362,6 @@ export function PersonDetailPage() {
   const openInventoryActionModal = (inventoryItem: PersonWithDetails['inventory'][0]) => {
     setSelectedInventoryItem(inventoryItem)
     setInventoryActionQuantity('1')
-    setInventoryAdjustmentQuantity(String(inventoryItem.quantity))
     setInventoryAdjustmentReason('')
     setInventoryActionMode(null)
     setShowInventoryActionModal(true)
@@ -379,7 +377,7 @@ export function PersonDetailPage() {
 
     const quantity = Number.parseInt(inventoryActionQuantity, 10)
     if (!Number.isFinite(quantity) || quantity <= 0) {
-      setError('Informe uma quantidade valida para retirar do inventario.')
+      setError('Informe uma quantidade valida para baixar do inventario.')
       return
     }
 
@@ -388,60 +386,33 @@ export function PersonDetailPage() {
       return
     }
 
+    const reason = inventoryAdjustmentReason.trim()
+
+    if (mode === 'delete' && !reason) {
+      setError('Informe o motivo da baixa do inventario.')
+      return
+    }
+
     setInventorySubmitting(true)
     setInventoryActionMode(mode)
     setError(null)
 
-    const { error: actionError } = await supabase.rpc('remove_inventory_item_from_person', {
-      p_person_id: person.id,
-      p_stock_item_id: selectedInventoryItem.stock_item_id,
-      p_quantity: quantity,
-      p_destination: mode,
-    })
+    const { error: actionError } = mode === 'delete'
+      ? await supabase.rpc('adjust_inventory_item_quantity', {
+          p_person_id: person.id,
+          p_stock_item_id: selectedInventoryItem.stock_item_id,
+          p_next_quantity: Math.max(selectedInventoryItem.quantity - quantity, 0),
+          p_reason: reason,
+        })
+      : await supabase.rpc('remove_inventory_item_from_person', {
+          p_person_id: person.id,
+          p_stock_item_id: selectedInventoryItem.stock_item_id,
+          p_quantity: quantity,
+          p_destination: mode,
+        })
 
     if (actionError) {
       setError(actionError.message)
-      setInventorySubmitting(false)
-      return
-    }
-
-    setInventorySubmitting(false)
-    setShowInventoryActionModal(false)
-    setSelectedInventoryItem(null)
-    setInventoryActionMode(null)
-    setInventoryAdjustmentReason('')
-    await fetchPerson()
-  }
-
-  const handleInventoryAdjustment = async () => {
-    if (!selectedInventoryItem || !person) return
-
-    const nextQuantity = Number.parseInt(inventoryAdjustmentQuantity, 10)
-    const reason = inventoryAdjustmentReason.trim()
-
-    if (!Number.isFinite(nextQuantity) || nextQuantity < 0) {
-      setError('Informe uma quantidade final valida para o inventario.')
-      return
-    }
-
-    if (!reason) {
-      setError('Informe o motivo do ajuste do inventario.')
-      return
-    }
-
-    setInventorySubmitting(true)
-    setInventoryActionMode('adjust')
-    setError(null)
-
-    const { error: adjustmentError } = await supabase.rpc('adjust_inventory_item_quantity', {
-      p_person_id: person.id,
-      p_stock_item_id: selectedInventoryItem.stock_item_id,
-      p_next_quantity: nextQuantity,
-      p_reason: reason,
-    })
-
-    if (adjustmentError) {
-      setError(adjustmentError.message)
       setInventorySubmitting(false)
       return
     }
@@ -608,7 +579,7 @@ export function PersonDetailPage() {
           }}
           className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/16"
         >
-          Ajustar
+          Baixar
         </button>
       ),
     },
@@ -1045,7 +1016,7 @@ export function PersonDetailPage() {
           setInventoryActionMode(null)
           setInventoryAdjustmentReason('')
         }}
-        title="Ajustar item do inventario"
+        title="Baixar item do inventario"
         size="sm"
       >
         {selectedInventoryItem && (
@@ -1062,42 +1033,8 @@ export function PersonDetailPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-              <div className="grid gap-3">
-                <Input
-                  label="Quantidade final no inventario"
-                  type="number"
-                  min={0}
-                  value={inventoryAdjustmentQuantity}
-                  onChange={(event) => setInventoryAdjustmentQuantity(event.target.value)}
-                />
-
-                <Select
-                  label="Motivo do ajuste"
-                  value={inventoryAdjustmentReason}
-                  onChange={(event) => setInventoryAdjustmentReason(event.target.value)}
-                  placeholder="Selecione o motivo"
-                  options={[
-                    { value: 'Item danificado/rasgado', label: 'Item danificado/rasgado' },
-                    { value: 'Item perdido', label: 'Item perdido' },
-                    { value: 'Correcao de contagem', label: 'Correcao de contagem' },
-                    { value: 'Substituicao por nova retirada', label: 'Substituicao por nova retirada' },
-                  ]}
-                />
-
-                <Button
-                  type="button"
-                  onClick={() => void handleInventoryAdjustment()}
-                  isLoading={inventorySubmitting && inventoryActionMode === 'adjust'}
-                  disabled={inventoryAdjustmentQuantity === '' || !inventoryAdjustmentReason}
-                >
-                  Salvar ajuste
-                </Button>
-              </div>
-            </div>
-
             <Input
-              label="Quantidade para retirar"
+              label="Quantidade para baixar"
               type="number"
               min={1}
               max={selectedInventoryItem.quantity}
@@ -1105,9 +1042,18 @@ export function PersonDetailPage() {
               onChange={(event) => setInventoryActionQuantity(event.target.value)}
             />
 
-            <p className="text-sm text-gray-400">
-              Para baixa com movimentacao de estoque, escolha o destino dos itens retirados.
-            </p>
+            <Select
+              label="Motivo da baixa"
+              value={inventoryAdjustmentReason}
+              onChange={(event) => setInventoryAdjustmentReason(event.target.value)}
+              placeholder="Selecione o motivo"
+              options={[
+                { value: 'Item danificado/rasgado', label: 'Item danificado/rasgado' },
+                { value: 'Item perdido', label: 'Item perdido' },
+                { value: 'Correcao de contagem', label: 'Correcao de contagem' },
+                { value: 'Substituicao por nova retirada', label: 'Substituicao por nova retirada' },
+              ]}
+            />
 
             <div className="grid gap-3">
               <Button
@@ -1123,8 +1069,9 @@ export function PersonDetailPage() {
                 variant="danger"
                 onClick={() => void handleInventoryAction('delete')}
                 isLoading={inventorySubmitting && inventoryActionMode === 'delete'}
+                disabled={!inventoryAdjustmentReason}
               >
-                Excluir definitivamente
+                Baixar do inventario
               </Button>
             </div>
           </div>

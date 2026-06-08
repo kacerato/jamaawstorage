@@ -172,11 +172,11 @@ BEGIN
       INSERT INTO public.audit_logs (user_id, action, table_name, record_id, old_data, new_data)
       VALUES (
         current_user_id,
-        'INVENTORY_ADJUST',
+        'UPDATE',
         'person_inventories',
         p_person_id,
         jsonb_build_object('person_id', p_person_id, 'stock_item_id', p_stock_item_id, 'quantity', 0),
-        jsonb_build_object('person_id', p_person_id, 'stock_item_id', p_stock_item_id, 'quantity', 0, 'reason', sanitized_reason, 'noop', true)
+        jsonb_build_object('person_id', p_person_id, 'stock_item_id', p_stock_item_id, 'quantity', 0, 'reason', sanitized_reason, 'event', 'inventory_adjust', 'noop', true)
       );
 
       RETURN 0;
@@ -189,25 +189,32 @@ BEGIN
     INSERT INTO public.audit_logs (user_id, action, table_name, record_id, old_data, new_data)
     VALUES (
       current_user_id,
-      'INVENTORY_ADJUST',
+      'INSERT',
       'person_inventories',
       current_inventory.id,
       jsonb_build_object('person_id', p_person_id, 'stock_item_id', p_stock_item_id, 'quantity', 0),
-      jsonb_build_object('person_id', p_person_id, 'stock_item_id', p_stock_item_id, 'quantity', p_next_quantity, 'reason', sanitized_reason)
+      jsonb_build_object('person_id', p_person_id, 'stock_item_id', p_stock_item_id, 'quantity', p_next_quantity, 'reason', sanitized_reason, 'event', 'inventory_adjust')
     );
 
     RETURN p_next_quantity;
   END IF;
 
   IF current_inventory.quantity = p_next_quantity THEN
+    IF current_inventory.last_withdrawal_id IS NOT NULL THEN
+      UPDATE public.person_inventories
+         SET last_withdrawal_id = NULL,
+             updated_at = now()
+       WHERE id = current_inventory.id;
+    END IF;
+
     INSERT INTO public.audit_logs (user_id, action, table_name, record_id, old_data, new_data)
     VALUES (
       current_user_id,
-      'INVENTORY_ADJUST',
+      'UPDATE',
       'person_inventories',
       current_inventory.id,
-      jsonb_build_object('quantity', current_inventory.quantity),
-      jsonb_build_object('quantity', p_next_quantity, 'reason', sanitized_reason, 'noop', true)
+      jsonb_build_object('quantity', current_inventory.quantity, 'last_withdrawal_id', current_inventory.last_withdrawal_id),
+      jsonb_build_object('quantity', p_next_quantity, 'last_withdrawal_id', NULL, 'reason', sanitized_reason, 'event', 'inventory_adjust', 'quantity_unchanged', true)
     );
 
     RETURN p_next_quantity;
@@ -219,6 +226,7 @@ BEGIN
   ELSE
     UPDATE public.person_inventories
        SET quantity = p_next_quantity,
+           last_withdrawal_id = NULL,
            updated_at = now()
      WHERE id = current_inventory.id;
   END IF;
@@ -226,11 +234,11 @@ BEGIN
   INSERT INTO public.audit_logs (user_id, action, table_name, record_id, old_data, new_data)
   VALUES (
     current_user_id,
-    'INVENTORY_ADJUST',
+    CASE WHEN p_next_quantity = 0 THEN 'DELETE' ELSE 'UPDATE' END,
     'person_inventories',
     current_inventory.id,
-    jsonb_build_object('quantity', current_inventory.quantity),
-    jsonb_build_object('quantity', p_next_quantity, 'reason', sanitized_reason)
+    jsonb_build_object('quantity', current_inventory.quantity, 'last_withdrawal_id', current_inventory.last_withdrawal_id, 'event', 'inventory_adjust'),
+    jsonb_build_object('quantity', p_next_quantity, 'last_withdrawal_id', NULL, 'reason', sanitized_reason, 'event', 'inventory_adjust')
   );
 
   RETURN p_next_quantity;
