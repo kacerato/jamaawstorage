@@ -55,7 +55,7 @@ type InventoryWithdrawalTrace = {
 
 type TabType = 'profile' | 'inventory' | 'withdrawals' | 'consumption'
 type DatePeriod = 'week' | 'month' | 'custom'
-type InventoryActionMode = 'delete' | 'return_to_stock' | null
+type InventoryActionMode = 'adjust' | 'delete' | 'return_to_stock' | null
 
 interface CustomDateRange {
   from: string
@@ -86,6 +86,8 @@ export function PersonDetailPage() {
   const [inventorySubmitting, setInventorySubmitting] = useState(false)
   const [inventoryActionMode, setInventoryActionMode] = useState<InventoryActionMode>(null)
   const [inventoryActionQuantity, setInventoryActionQuantity] = useState('1')
+  const [inventoryAdjustmentQuantity, setInventoryAdjustmentQuantity] = useState('0')
+  const [inventoryAdjustmentReason, setInventoryAdjustmentReason] = useState('')
   const [selectedInventoryItem, setSelectedInventoryItem] = useState<PersonWithDetails['inventory'][0] | null>(null)
 
   const [withdrawals, setWithdrawals] = useState<WithdrawalRow[]>([])
@@ -361,6 +363,8 @@ export function PersonDetailPage() {
   const openInventoryActionModal = (inventoryItem: PersonWithDetails['inventory'][0]) => {
     setSelectedInventoryItem(inventoryItem)
     setInventoryActionQuantity('1')
+    setInventoryAdjustmentQuantity(String(inventoryItem.quantity))
+    setInventoryAdjustmentReason('')
     setInventoryActionMode(null)
     setShowInventoryActionModal(true)
   }
@@ -405,6 +409,48 @@ export function PersonDetailPage() {
     setShowInventoryActionModal(false)
     setSelectedInventoryItem(null)
     setInventoryActionMode(null)
+    setInventoryAdjustmentReason('')
+    await fetchPerson()
+  }
+
+  const handleInventoryAdjustment = async () => {
+    if (!selectedInventoryItem || !person) return
+
+    const nextQuantity = Number.parseInt(inventoryAdjustmentQuantity, 10)
+    const reason = inventoryAdjustmentReason.trim()
+
+    if (!Number.isFinite(nextQuantity) || nextQuantity < 0) {
+      setError('Informe uma quantidade final valida para o inventario.')
+      return
+    }
+
+    if (!reason) {
+      setError('Informe o motivo do ajuste do inventario.')
+      return
+    }
+
+    setInventorySubmitting(true)
+    setInventoryActionMode('adjust')
+    setError(null)
+
+    const { error: adjustmentError } = await supabase.rpc('adjust_inventory_item_quantity', {
+      p_person_id: person.id,
+      p_stock_item_id: selectedInventoryItem.stock_item_id,
+      p_next_quantity: nextQuantity,
+      p_reason: reason,
+    })
+
+    if (adjustmentError) {
+      setError(adjustmentError.message)
+      setInventorySubmitting(false)
+      return
+    }
+
+    setInventorySubmitting(false)
+    setShowInventoryActionModal(false)
+    setSelectedInventoryItem(null)
+    setInventoryActionMode(null)
+    setInventoryAdjustmentReason('')
     await fetchPerson()
   }
 
@@ -562,7 +608,7 @@ export function PersonDetailPage() {
           }}
           className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/16"
         >
-          Retirar
+          Ajustar
         </button>
       ),
     },
@@ -997,8 +1043,9 @@ export function PersonDetailPage() {
           setShowInventoryActionModal(false)
           setSelectedInventoryItem(null)
           setInventoryActionMode(null)
+          setInventoryAdjustmentReason('')
         }}
-        title="Retirar item do inventario"
+        title="Ajustar item do inventario"
         size="sm"
       >
         {selectedInventoryItem && (
@@ -1015,6 +1062,40 @@ export function PersonDetailPage() {
               </div>
             </div>
 
+            <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
+              <div className="grid gap-3">
+                <Input
+                  label="Quantidade final no inventario"
+                  type="number"
+                  min={0}
+                  value={inventoryAdjustmentQuantity}
+                  onChange={(event) => setInventoryAdjustmentQuantity(event.target.value)}
+                />
+
+                <Select
+                  label="Motivo do ajuste"
+                  value={inventoryAdjustmentReason}
+                  onChange={(event) => setInventoryAdjustmentReason(event.target.value)}
+                  placeholder="Selecione o motivo"
+                  options={[
+                    { value: 'Item danificado/rasgado', label: 'Item danificado/rasgado' },
+                    { value: 'Item perdido', label: 'Item perdido' },
+                    { value: 'Correcao de contagem', label: 'Correcao de contagem' },
+                    { value: 'Substituicao por nova retirada', label: 'Substituicao por nova retirada' },
+                  ]}
+                />
+
+                <Button
+                  type="button"
+                  onClick={() => void handleInventoryAdjustment()}
+                  isLoading={inventorySubmitting && inventoryActionMode === 'adjust'}
+                  disabled={inventoryAdjustmentQuantity === '' || !inventoryAdjustmentReason}
+                >
+                  Salvar ajuste
+                </Button>
+              </div>
+            </div>
+
             <Input
               label="Quantidade para retirar"
               type="number"
@@ -1025,7 +1106,7 @@ export function PersonDetailPage() {
             />
 
             <p className="text-sm text-gray-400">
-              Escolha o destino dos itens retirados deste inventario antes de confirmar a movimentacao.
+              Para baixa com movimentacao de estoque, escolha o destino dos itens retirados.
             </p>
 
             <div className="grid gap-3">

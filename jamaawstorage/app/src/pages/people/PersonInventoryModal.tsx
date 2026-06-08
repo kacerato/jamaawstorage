@@ -132,6 +132,7 @@ export function PersonInventoryModal({
   const [selectedKitId, setSelectedKitId] = useState('')
   const [quantity, setQuantity] = useState('1')
   const [pendingEntries, setPendingEntries] = useState<PendingInventoryEntry[]>([])
+  const [inventoryStockItemIds, setInventoryStockItemIds] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -140,7 +141,7 @@ export function PersonInventoryModal({
     setLoading(true)
     setError(null)
 
-    const [stockRes, kitsRes] = await Promise.all([
+    const [stockRes, kitsRes, inventoryRes] = await Promise.all([
       supabase
         .from('stock_items')
         .select('id, name, unit, current_quantity, minimum_quantity, category, svg_icon_key, is_active')
@@ -151,6 +152,11 @@ export function PersonInventoryModal({
         .select('id, name, kit_items(stock_item_id, quantity, stock_items(id, name, unit, current_quantity, minimum_quantity, category, is_active))')
         .eq('is_active', true)
         .order('name'),
+      supabase
+        .from('person_inventories')
+        .select('stock_item_id')
+        .eq('person_id', personId)
+        .gt('quantity', 0),
     ])
 
     if (stockRes.error) {
@@ -165,13 +171,20 @@ export function PersonInventoryModal({
       return
     }
 
+    if (inventoryRes.error) {
+      setError(inventoryRes.error.message)
+      setLoading(false)
+      return
+    }
+
     setStockItems((stockRes.data ?? []) as StockItemOption[])
     setKits(((kitsRes.data ?? []) as KitOption[]).map((kit) => ({
       ...kit,
       kit_items: (kit.kit_items ?? []).filter((kitItem) => kitItem.stock_items?.is_active),
     })))
+    setInventoryStockItemIds(new Set((inventoryRes.data ?? []).map((row) => row.stock_item_id)))
     setLoading(false)
-  }, [])
+  }, [personId])
 
   useEffect(() => {
     void fetchSources()
@@ -184,12 +197,15 @@ export function PersonInventoryModal({
   }, [fetchSources, personId])
 
   const availableItems = useMemo(
-    () => stockItems.filter((item) => item.current_quantity > 0),
-    [stockItems],
+    () => stockItems.filter((item) => item.current_quantity > 0 && !inventoryStockItemIds.has(item.id)),
+    [inventoryStockItemIds, stockItems],
   )
   const availableKits = useMemo(
-    () => kits.filter((kit) => getKitAvailability(kit).maxAssemblies > 0),
-    [kits],
+    () => kits.filter((kit) => (
+      getKitAvailability(kit).maxAssemblies > 0
+      && !kit.kit_items.some((kitItem) => inventoryStockItemIds.has(kitItem.stock_item_id))
+    )),
+    [inventoryStockItemIds, kits],
   )
 
   const selectedItem = availableItems.find((item) => item.id === selectedItemId)
@@ -304,6 +320,11 @@ export function PersonInventoryModal({
       <p className="text-sm text-gray-400">
         Adicionar itens ou kits ao inventario de <span className="font-medium text-white">{personName}</span>
       </p>
+      {inventoryStockItemIds.size > 0 && (
+        <div className="rounded-2xl border border-amber-400/15 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Itens que ja estao no inventario nao entram nesta lista. Para substituir, ajuste a quantidade atual e depois registre a nova retirada.
+        </div>
+      )}
 
       {error && (
         <Alert variant="danger" dismissible onDismiss={() => setError(null)}>

@@ -726,6 +726,15 @@ export interface Database {
     }
     Returns: number
   }
+  adjust_inventory_item_quantity: {
+    Args: {
+      p_person_id: string
+      p_stock_item_id: string
+      p_next_quantity: number
+      p_reason: string
+    }
+    Returns: number
+  }
   remove_inventory_item_from_person: {
     Args: {
       p_person_id: string
