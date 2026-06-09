@@ -41,6 +41,8 @@ const MUTED = '#545866'
 const GRID = '#c8ceda'
 const LIGHT_BAND = '#edf0f6'
 const MAX_SINGLE_PAGE_ITEMS = 30
+const TERM_BODY_TEXT = 'Declaro, para os devidos fins, que os itens abaixo relacionados foram retirados do almoxarifado JAMAAW. O solicitante declara estar ciente do recebimento dos materiais, responsabilizando-se pelo uso adequado, guarda, conservação e zelo de todos os itens retirados, comprometendo-se a devolvê-los em boas condições, salvo desgaste natural de uso.'
+const READABLE_TABLE_FONT_SIZE = 7.9
 
 let logoDataUrlCache: string | null = null
 
@@ -180,8 +182,8 @@ function drawItemsTable(
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(Math.max(8.2, fontSize))
   pdf.setTextColor('#ffffff')
-  pdf.text('Quantidade', x + qtyWidth / 2, y + headerHeight - 1.7, { align: 'center' })
-  pdf.text('Descrição', x + qtyWidth + (width - qtyWidth) / 2, y + headerHeight - 1.7, { align: 'center' })
+  pdf.text('Quantidade', x + qtyWidth / 2, y + headerHeight / 2, { align: 'center', baseline: 'middle' })
+  pdf.text('Descrição', x + qtyWidth + (width - qtyWidth) / 2, y + headerHeight / 2, { align: 'center', baseline: 'middle' })
 
   pdf.setFont('helvetica', 'normal')
   pdf.setFontSize(fontSize)
@@ -190,10 +192,11 @@ function drawItemsTable(
 
   let cursorY = y + headerHeight
   for (const item of items) {
+    const textY = cursorY + rowHeight / 2
     pdf.rect(x, cursorY, width, rowHeight)
     pdf.line(x + qtyWidth, cursorY, x + qtyWidth, cursorY + rowHeight)
-    pdf.text(String(item.quantity), x + qtyWidth / 2, cursorY + rowHeight - 1.4, { align: 'center' })
-    pdf.text(truncateToWidth(pdf, item.description, width - qtyWidth - 5), x + qtyWidth + 2, cursorY + rowHeight - 1.4)
+    pdf.text(String(item.quantity), x + qtyWidth / 2, textY, { align: 'center', baseline: 'middle' })
+    pdf.text(truncateToWidth(pdf, item.description, width - qtyWidth - 5), x + qtyWidth + 2, textY, { baseline: 'middle' })
     cursorY += rowHeight
   }
 
@@ -236,49 +239,76 @@ function drawSignatureBlock(pdf: jsPDF, y: number, compact: boolean) {
   return y + headerHeight + bodyHeight
 }
 
-function layoutSettings(itemCount: number) {
-  if (itemCount <= 8) {
-    return {
-      logoY: 27,
-      logoWidth: 63,
-      titleY: 101,
-      textY: 123,
-      textFontSize: 11.2,
-      warningHeight: 10,
-      sectionGap: 9,
-      signatureGap: 8,
-      compact: false,
-    }
-  }
+function regularLayoutSettings(itemCount: number) {
+  return itemCount <= 8
+    ? {
+        logoY: 27,
+        logoWidth: 63,
+        titleY: 101,
+        textY: 123,
+        textFontSize: 11.2,
+        warningHeight: 10,
+        sectionGap: 9,
+        signatureGap: 8,
+        compact: false,
+      }
+    : {
+        logoY: 18,
+        logoWidth: 50,
+        titleY: 81,
+        textY: 101,
+        textFontSize: 9.8,
+        warningHeight: 8.5,
+        sectionGap: 6,
+        signatureGap: 6,
+        compact: true,
+      }
+}
 
-  if (itemCount <= 18) {
-    return {
-      logoY: 18,
-      logoWidth: 50,
-      titleY: 81,
-      textY: 101,
-      textFontSize: 9.8,
-      warningHeight: 8.5,
-      sectionGap: 6,
-      signatureGap: 6,
-      compact: true,
-    }
-  }
-
+function denseLayoutSettings() {
   return {
-    logoY: 12,
-    logoWidth: 40,
-    titleY: 68,
-    textY: 86,
-    textFontSize: 8.8,
-    warningHeight: 7.5,
-    sectionGap: 4,
-    signatureGap: 4,
+    logoY: 8,
+    logoWidth: 36,
+    titleY: 56,
+    textY: 73,
+    textFontSize: 8.6,
+    warningHeight: 7.2,
+    sectionGap: 3.4,
+    signatureGap: 3.2,
     compact: true,
   }
 }
 
-function computeRowLayout(itemsCount: number, itemTableY: number, settings: ReturnType<typeof layoutSettings>) {
+type TermLayoutSettings = ReturnType<typeof regularLayoutSettings>
+
+function estimateHeaderNextY(pdf: jsPDF, settings: TermLayoutSettings) {
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(settings.textFontSize)
+  const textLines = pdf.splitTextToSize(TERM_BODY_TEXT, 170)
+  const responsibleRowHeight = settings.compact ? 6.1 : 7.6
+
+  let y = settings.textY + textLines.length * settings.textFontSize * 0.46
+  y += settings.sectionGap
+  y += settings.warningHeight + settings.sectionGap
+  y += responsibleRowHeight * 2
+  y += settings.sectionGap
+
+  return y + (settings.compact ? 4.2 : 5.3)
+}
+
+function chooseLayoutSettings(pdf: jsPDF, itemCount: number) {
+  const regularSettings = regularLayoutSettings(itemCount)
+  const regularNextY = estimateHeaderNextY(pdf, regularSettings)
+  const regularRows = computeRowLayout(itemCount, regularNextY, regularSettings)
+
+  if (itemCount > 8 && regularRows.fontSize < READABLE_TABLE_FONT_SIZE) {
+    return denseLayoutSettings()
+  }
+
+  return regularSettings
+}
+
+function computeRowLayout(itemsCount: number, itemTableY: number, settings: TermLayoutSettings) {
   const signatureReserve = (settings.compact ? 26.4 : 32) + settings.signatureGap + 13
   const tableHeader = 5.2
   const available = PAGE_HEIGHT - 15 - signatureReserve - itemTableY - tableHeader
@@ -302,7 +332,7 @@ function computeRowLayout(itemsCount: number, itemTableY: number, settings: Retu
 }
 
 function drawTermHeader(pdf: jsPDF, term: WithdrawalTermDocument, logoDataUrl: string, itemCount: number) {
-  const settings = layoutSettings(itemCount)
+  const settings = chooseLayoutSettings(pdf, itemCount)
   const logoHeight = settings.logoWidth * 0.95
   const logoX = (PAGE_WIDTH - settings.logoWidth) / 2
 
@@ -311,8 +341,7 @@ function drawTermHeader(pdf: jsPDF, term: WithdrawalTermDocument, logoDataUrl: s
   addCenteredText(pdf, 'TERMO DE RETIRADA DO ALMOXARIFADO', settings.titleY, settings.compact ? 14 : 16, { bold: true, color: NAVY })
   addCenteredText(pdf, 'JAMAAW SOLUÇÕES INTELIGENTES', settings.titleY + 7.5, settings.compact ? 10.2 : 11.5, { bold: true, color: MUTED })
 
-  const text = 'Declaro, para os devidos fins, que os itens abaixo relacionados foram retirados do almoxarifado JAMAAW. O solicitante declara estar ciente do recebimento dos materiais, responsabilizando-se pelo uso adequado, guarda, conservação e zelo de todos os itens retirados, comprometendo-se a devolvê-los em boas condições, salvo desgaste natural de uso.'
-  let y = drawWrappedText(pdf, text, 20, settings.textY, 170, settings.textFontSize)
+  let y = drawWrappedText(pdf, TERM_BODY_TEXT, 20, settings.textY, 170, settings.textFontSize)
 
   y += settings.sectionGap
   pdf.setFillColor(LIGHT_BAND)
