@@ -3,7 +3,11 @@ import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import type { WithdrawalWithDetails, WithdrawalStatus } from '../../types'
 import { buildPublicStorageUrl } from '../../lib/storage'
-import { openPrintWithdrawalTerm } from './withdrawalPrint'
+import {
+  buildSavedWithdrawalTermDocuments,
+  downloadIndividualWithdrawalTermPdfs,
+  downloadWithdrawalTermPdf,
+} from './withdrawalTermPdf'
 import {
   Button,
   Card,
@@ -60,7 +64,7 @@ export function WithdrawalDetailPage() {
     supabase
       .from('withdrawals')
       .select(
-        '*, withdrawal_items(*, stock_items(*), collaborator:people!withdrawal_items_collaborator_id_fkey(id, full_name, employee_id), work_site:work_sites!withdrawal_items_work_site_id_fkey(id, name)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*), approved_by_profile:profiles!withdrawals_authorized_by_fkey(*)',
+        '*, withdrawal_items(*, stock_items(*), collaborator:people!withdrawal_items_collaborator_id_fkey(id, full_name, employee_id, cpf), work_site:work_sites!withdrawal_items_work_site_id_fkey(id, name)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*), approved_by_profile:profiles!withdrawals_authorized_by_fkey(*)',
       )
       .eq('id', id)
       .single<WithdrawalRow>()
@@ -93,7 +97,9 @@ export function WithdrawalDetailPage() {
   useEffect(() => {
     if (!withdrawal || !shouldAutoPrint || autoPrintHandledRef.current) return
     autoPrintHandledRef.current = true
-    openPrintWithdrawalTerm(withdrawal)
+    void downloadWithdrawalTermPdf(buildSavedWithdrawalTermDocuments(withdrawal), {
+      fileName: `${withdrawal.code}-termo-retirada.pdf`,
+    })
   }, [shouldAutoPrint, withdrawal])
 
   const handleCancel = async () => {
@@ -174,9 +180,17 @@ export function WithdrawalDetailPage() {
         <div className="flex items-center gap-2">
           <Button
             variant="secondary"
-            onClick={() => openPrintWithdrawalTerm(withdrawal)}
+            onClick={() => void downloadWithdrawalTermPdf(buildSavedWithdrawalTermDocuments(withdrawal), {
+              fileName: `${withdrawal.code}-termo-retirada.pdf`,
+            })}
           >
-            Gerar Termo PDF
+            PDF Geral
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => void downloadIndividualWithdrawalTermPdfs(buildSavedWithdrawalTermDocuments(withdrawal))}
+          >
+            PDFs Individuais
           </Button>
           {canEdit && (
             <Button

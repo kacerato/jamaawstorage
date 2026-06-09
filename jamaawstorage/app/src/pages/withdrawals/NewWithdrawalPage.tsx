@@ -25,6 +25,11 @@ import { cn, DEFAULT_IMAGE_UPLOAD_OPTIONS, generateWithdrawalCodePreview, imageF
 import { buildPublicStorageUrl, uploadDataUrlToStorage, uploadFileToStorage, uploadImageToStorage } from '../../lib/storage'
 import { ItemSelector } from './ItemSelector'
 import { KitSelector } from './KitSelector'
+import {
+  buildDraftWithdrawalTermDocuments,
+  downloadIndividualWithdrawalTermPdfs,
+  downloadWithdrawalTermPdf,
+} from './withdrawalTermPdf'
 
 type PeopleRow = Tables<'people'>
 type WorkSiteRow = Tables<'work_sites'>
@@ -844,6 +849,90 @@ export function NewWithdrawalPage() {
 
   const selectedRequester = availableRequesters.find((requester) => requester.id === requestedBy) ?? null
 
+  const termDocuments = useMemo(
+    () => buildDraftWithdrawalTermDocuments(groups, {
+      requester: selectedRequester,
+      collaborators,
+      workSites,
+    }),
+    [collaborators, groups, selectedRequester, workSites],
+  )
+
+  const handleGenerateTermPdf = async (mode: 'general' | 'individual') => {
+    if (!selectedRequester) {
+      setStepErrors((prev) => ({
+        ...prev,
+        requestedBy: 'Selecione o lider ou supervisor que pediu a retirada',
+      }))
+      setCurrentStep(0)
+      return
+    }
+
+    if (items.length === 0) {
+      setStepErrors((prev) => ({
+        ...prev,
+        items: 'Adicione ao menos um item para gerar o termo.',
+      }))
+      setCurrentStep(1)
+      return
+    }
+
+    const invalidDestination = items.find((item) =>
+      item.destination_type === 'collaborator' ? !item.collaborator_id : !item.work_site_id,
+    )
+
+    if (invalidDestination) {
+      setStepErrors((prev) => ({
+        ...prev,
+        items: `Revise o destino do item "${invalidDestination.stock_item.name}".`,
+      }))
+      setCurrentStep(1)
+      return
+    }
+
+    if (mode === 'general') {
+      await downloadWithdrawalTermPdf(termDocuments, {
+        fileName: `termo-retirada-${generateWithdrawalCodePreview()}.pdf`,
+      })
+      return
+    }
+
+    await downloadIndividualWithdrawalTermPdfs(termDocuments)
+  }
+
+  const renderTermPdfActions = () => (
+    <Card variant="bordered" padding="lg">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h3 className="text-lg font-semibold text-white">Termo de retirada PDF</h3>
+          <p className="mt-1 text-sm text-gray-400">
+            Gere antes da assinatura. O termo geral cria uma pagina por destino; os individuais baixam um PDF por responsavel.
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <Button
+            type="button"
+            variant="secondary"
+            leftIcon={<ClipboardIcon size={16} />}
+            disabled={items.length === 0}
+            onClick={() => void handleGenerateTermPdf('general')}
+          >
+            PDF Geral
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            leftIcon={<ClipboardIcon size={16} />}
+            disabled={items.length === 0}
+            onClick={() => void handleGenerateTermPdf('individual')}
+          >
+            PDFs Individuais
+          </Button>
+        </div>
+      </div>
+    </Card>
+  )
+
   const renderStepIndicator = () => (
     <div className="mb-8 flex items-center justify-between">
       {STEPS.map((step, idx) => {
@@ -1321,6 +1410,8 @@ export function NewWithdrawalPage() {
         </div>
       </Card>
 
+      {renderTermPdfActions()}
+
       <Card variant="bordered" padding="lg">
         <div className="mb-4 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-white">Documento com assinaturas</h3>
@@ -1400,6 +1491,8 @@ export function NewWithdrawalPage() {
 
   const renderStep4 = () => (
     <div className="flex flex-col gap-6">
+      {renderTermPdfActions()}
+
       <Card variant="bordered" padding="lg">
         <h3 className="mb-4 text-lg font-semibold text-white">Resumo da Operacao</h3>
 

@@ -21,6 +21,11 @@ import {
   UserIcon,
 } from '../../components/icons'
 import { ItemSelector, KitSelector } from './index'
+import {
+  buildDraftWithdrawalTermDocuments,
+  downloadIndividualWithdrawalTermPdfs,
+  downloadWithdrawalTermPdf,
+} from './withdrawalTermPdf'
 
 type PeopleRow = Tables<'people'>
 type WorkSiteRow = Tables<'work_sites'>
@@ -243,6 +248,16 @@ export function EditWithdrawalPage() {
     }))
   }, [items])
 
+  const termDocuments = useMemo(
+    () => buildDraftWithdrawalTermDocuments(groups, {
+      requester: selectedRequester,
+      collaborators,
+      workSites,
+      date: withdrawal?.withdrawn_at ?? withdrawal?.updated_at ?? withdrawal?.created_at,
+    }),
+    [collaborators, groups, selectedRequester, withdrawal?.created_at, withdrawal?.updated_at, withdrawal?.withdrawn_at, workSites],
+  )
+
   const editingItem = useMemo(
     () => items.find((item) => item.entry_id === editingItemId) ?? null,
     [editingItemId, items],
@@ -444,6 +459,19 @@ export function EditWithdrawalPage() {
     setItems((current) => current.filter((item) => item.entry_id !== entryId))
     if (editingItemId === entryId) setEditingItemId(null)
     setSaveError(null)
+  }
+
+  const handleGenerateTermPdf = async (mode: 'general' | 'individual') => {
+    if (!validateForm(items)) return
+
+    if (mode === 'general') {
+      await downloadWithdrawalTermPdf(termDocuments, {
+        fileName: `${withdrawal?.code ?? 'termo-retirada'}-termo-retirada.pdf`,
+      })
+      return
+    }
+
+    await downloadIndividualWithdrawalTermPdfs(termDocuments)
   }
 
   const handleSave = async () => {
@@ -738,6 +766,33 @@ export function EditWithdrawalPage() {
                   </Badge>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/8 bg-[#111217] p-4">
+            <p className="font-medium text-white">Termo de retirada PDF</p>
+            <p className="mt-2 text-sm text-gray-400">
+              Gere com os itens e destinos que estao nesta edicao antes de salvar ou anexar nova assinatura.
+            </p>
+            <div className="mt-4 flex flex-col gap-2">
+              <Button
+                type="button"
+                variant="secondary"
+                leftIcon={<ClipboardIcon size={16} />}
+                disabled={items.length === 0}
+                onClick={() => void handleGenerateTermPdf('general')}
+              >
+                PDF Geral
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                leftIcon={<ClipboardIcon size={16} />}
+                disabled={items.length === 0}
+                onClick={() => void handleGenerateTermPdf('individual')}
+              >
+                PDFs Individuais
+              </Button>
             </div>
           </div>
 
