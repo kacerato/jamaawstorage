@@ -118,6 +118,35 @@ function drawWrappedText(pdf: jsPDF, text: string, x: number, y: number, maxWidt
   return y + lines.length * fontSize * 0.46
 }
 
+function fitSingleLineText(
+  pdf: jsPDF,
+  value: string,
+  maxWidth: number,
+  preferredSize: number,
+  minSize: number,
+) {
+  const text = value.trim() || 'Nao informado'
+  let fontSize = preferredSize
+
+  pdf.setFont('helvetica', 'normal')
+  pdf.setFontSize(fontSize)
+
+  while (fontSize > minSize && pdf.getTextWidth(text) > maxWidth) {
+    fontSize -= 0.2
+    pdf.setFontSize(fontSize)
+  }
+
+  if (pdf.getTextWidth(text) <= maxWidth) {
+    return { text, fontSize }
+  }
+
+  pdf.setFontSize(minSize)
+  return {
+    text: truncateToWidth(pdf, text, maxWidth),
+    fontSize: minSize,
+  }
+}
+
 function drawResponsibleTable(pdf: jsPDF, term: WithdrawalTermDocument, y: number, compact: boolean) {
   const x = 26
   const width = 158
@@ -125,6 +154,15 @@ function drawResponsibleTable(pdf: jsPDF, term: WithdrawalTermDocument, y: numbe
   const rowHeight = compact ? 6.1 : 7.6
   const labelSize = compact ? 9.2 : 10.6
   const valueSize = compact ? 9.2 : 10.8
+  const valueX = x + labelWidth + 3
+  const valueMaxWidth = width - labelWidth - 6
+  const responsibleName = fitSingleLineText(
+    pdf,
+    term.responsibleName,
+    valueMaxWidth,
+    valueSize,
+    compact ? 6.8 : 7.4,
+  )
 
   pdf.setDrawColor(GRID)
   pdf.setLineWidth(0.25)
@@ -139,14 +177,15 @@ function drawResponsibleTable(pdf: jsPDF, term: WithdrawalTermDocument, y: numbe
   pdf.setFont('helvetica', 'bold')
   pdf.setFontSize(labelSize)
   pdf.setTextColor(NAVY)
-  pdf.text('Solicitado por', x + 3, y + rowHeight - 2)
-  pdf.text('CPF', x + 3, y + rowHeight * 2 - 2)
+  pdf.text('Solicitado por', x + 3, y + rowHeight / 2, { baseline: 'middle' })
+  pdf.text('CPF', x + 3, y + rowHeight + rowHeight / 2, { baseline: 'middle' })
 
   pdf.setFont('helvetica', 'normal')
-  pdf.setFontSize(valueSize)
+  pdf.setFontSize(responsibleName.fontSize)
   pdf.setTextColor(INK)
-  pdf.text(term.responsibleName || 'Nao informado', x + labelWidth + 3, y + rowHeight - 2)
-  pdf.text(formatCpf(term.responsibleCpf) || '-', x + labelWidth + 3, y + rowHeight * 2 - 2)
+  pdf.text(responsibleName.text, valueX, y + rowHeight / 2, { baseline: 'middle' })
+  pdf.setFontSize(valueSize)
+  pdf.text(formatCpf(term.responsibleCpf) || '-', valueX, y + rowHeight + rowHeight / 2, { baseline: 'middle' })
 
   return y + rowHeight * 2
 }
