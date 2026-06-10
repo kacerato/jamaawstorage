@@ -1,5 +1,6 @@
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
+import logoJamaaw from '../assets/jamaaw-logo-term.png'
 
 export function cn(...classes: (string | boolean | undefined | null)[]): string {
   return classes.filter(Boolean).join(' ')
@@ -75,7 +76,14 @@ interface PrintSectionedTableDocumentOptions {
   sections: PrintTableSection[]
 }
 
-export function openPrintTableDocument({
+const REPORT_NAVY = '#061846'
+const REPORT_MUTED = '#545866'
+const REPORT_GRID = '#c8ceda'
+const REPORT_LIGHT_BAND = '#edf0f6'
+
+let reportLogoDataUrlCache: string | null = null
+
+export async function openPrintTableDocument({
   title,
   subtitle,
   filename,
@@ -84,12 +92,12 @@ export function openPrintTableDocument({
   rows,
   orientation = 'portrait',
   compact = false,
-}: PrintTableDocumentOptions): void {
+}: PrintTableDocumentOptions): Promise<void> {
   const generatedLabel = generatedAt ?? new Date().toLocaleString('pt-BR')
-  const doc = createReportPdf({ title, subtitle, filename, generatedLabel, orientation, compact })
+  const { doc, startY, margin } = await createReportPdf({ title, subtitle, filename, generatedLabel, orientation, compact })
 
   autoTable(doc, {
-    startY: compact ? 34 : 42,
+    startY,
     head: [columns.map((column) => column.label)],
     body: rows.length > 0
       ? rows.map((row) => columns.map((column) => formatPdfCell(row[column.key])))
@@ -100,23 +108,23 @@ export function openPrintTableDocument({
       cellPadding: compact ? 1.6 : 2.4,
       overflow: 'linebreak',
       valign: 'top',
-      lineColor: [229, 231, 235],
-      lineWidth: 0.15,
-      textColor: [31, 41, 55],
+      lineColor: hexToRgb(REPORT_GRID),
+      lineWidth: 0.12,
+      textColor: hexToRgb('#111111'),
     },
     headStyles: {
-      fillColor: [248, 250, 252],
-      textColor: [31, 41, 55],
+      fillColor: hexToRgb(REPORT_NAVY),
+      textColor: [255, 255, 255],
       fontStyle: 'bold',
       fontSize: compact ? 6.5 : 7.5,
     },
     alternateRowStyles: {
-      fillColor: [252, 252, 253],
+      fillColor: hexToRgb('#fafbfd'),
     },
     margin: {
-      left: compact ? 8 : 12,
-      right: compact ? 8 : 12,
-      top: compact ? 8 : 12,
+      left: margin,
+      right: margin,
+      top: margin,
       bottom: compact ? 12 : 16,
     },
     didDrawPage: () => drawReportFooter(doc),
@@ -125,15 +133,15 @@ export function openPrintTableDocument({
   doc.save(normalizePdfFilename(filename ?? title))
 }
 
-export function openPrintSectionedTableDocument({
+export async function openPrintSectionedTableDocument({
   title,
   subtitle,
   filename,
   generatedAt,
   sections,
-}: PrintSectionedTableDocumentOptions): void {
+}: PrintSectionedTableDocumentOptions): Promise<void> {
   const generatedLabel = generatedAt ?? new Date().toLocaleString('pt-BR')
-  const doc = createReportPdf({ title, subtitle, filename, generatedLabel, orientation: 'portrait' })
+  const { doc, startY, margin } = await createReportPdf({ title, subtitle, filename, generatedLabel, orientation: 'portrait' })
   const printableSections = sections.length > 0
     ? sections
     : [{
@@ -142,32 +150,32 @@ export function openPrintSectionedTableDocument({
       rows: [{ mensagem: 'Nenhum dado disponivel' }],
     }]
 
-  let startY = 42
+  let sectionStartY = startY
 
   printableSections.forEach((section, index) => {
-    if (index > 0 && startY > 245) {
+    if (index > 0 && sectionStartY > 245) {
       doc.addPage()
-      startY = 18
+      sectionStartY = 18
     }
 
     doc.setFont('helvetica', 'bold')
     doc.setFontSize(12)
-    doc.setTextColor(31, 41, 55)
-    doc.text(section.title, 12, startY)
+    doc.setTextColor(REPORT_NAVY)
+    doc.text(section.title, margin, sectionStartY)
 
     if (section.subtitle) {
       doc.setFont('helvetica', 'normal')
       doc.setFontSize(8)
-      doc.setTextColor(107, 114, 128)
-      const subtitleLines = doc.splitTextToSize(section.subtitle, 186)
-      doc.text(subtitleLines, 12, startY + 5)
-      startY += 5 + subtitleLines.length * 4
+      doc.setTextColor(REPORT_MUTED)
+      const subtitleLines = doc.splitTextToSize(section.subtitle, doc.internal.pageSize.getWidth() - margin * 2)
+      doc.text(subtitleLines, margin, sectionStartY + 5)
+      sectionStartY += 5 + subtitleLines.length * 4
     } else {
-      startY += 5
+      sectionStartY += 5
     }
 
     autoTable(doc, {
-      startY: startY + 2,
+      startY: sectionStartY + 2,
       head: [section.columns.map((column) => column.label)],
       body: section.rows.length > 0
         ? section.rows.map((row) => section.columns.map((column) => formatPdfCell(row[column.key])))
@@ -178,35 +186,35 @@ export function openPrintSectionedTableDocument({
         cellPadding: 2.4,
         overflow: 'linebreak',
         valign: 'top',
-        lineColor: [229, 231, 235],
-        lineWidth: 0.15,
-        textColor: [31, 41, 55],
+        lineColor: hexToRgb(REPORT_GRID),
+        lineWidth: 0.12,
+        textColor: hexToRgb('#111111'),
       },
       headStyles: {
-        fillColor: [248, 250, 252],
-        textColor: [31, 41, 55],
+        fillColor: hexToRgb(REPORT_NAVY),
+        textColor: [255, 255, 255],
         fontStyle: 'bold',
         fontSize: 7.5,
       },
       alternateRowStyles: {
-        fillColor: [252, 252, 253],
+        fillColor: hexToRgb('#fafbfd'),
       },
       margin: {
-        left: 12,
-        right: 12,
+        left: margin,
+        right: margin,
         top: 12,
         bottom: 16,
       },
       didDrawPage: () => drawReportFooter(doc),
     })
 
-    startY = getAutoTableFinalY(doc) + 14
+    sectionStartY = getAutoTableFinalY(doc) + 14
   })
 
   doc.save(normalizePdfFilename(filename ?? title))
 }
 
-function createReportPdf({
+async function createReportPdf({
   title,
   subtitle,
   filename,
@@ -220,42 +228,50 @@ function createReportPdf({
   generatedLabel: string
   orientation: 'portrait' | 'landscape'
   compact?: boolean
-}): jsPDF {
+}): Promise<{ doc: jsPDF; startY: number; margin: number }> {
   const doc = new jsPDF({ orientation, unit: 'mm', format: 'a4' })
+  const logoDataUrl = await imageUrlToDataUrl(logoJamaaw)
   const pageWidth = doc.internal.pageSize.getWidth()
   const margin = compact ? 8 : 12
   const contentWidth = pageWidth - margin * 2
+  const logoWidth = compact ? 29 : 37
+  const logoHeight = logoWidth * 0.95
+  const logoX = (pageWidth - logoWidth) / 2
+  const logoY = compact ? 6 : 8
   const titleLines = doc.splitTextToSize(title, contentWidth)
 
+  doc.addImage(logoDataUrl, 'PNG', logoX, logoY, logoWidth, logoHeight)
+
   doc.setFont('helvetica', 'bold')
-  doc.setFontSize(compact ? 8 : 9)
-  doc.setTextColor(234, 88, 12)
-  doc.text('RELATORIO', margin, compact ? 10 : 14)
+  doc.setFontSize(compact ? 7.5 : 8.5)
+  doc.setTextColor(REPORT_MUTED)
+  doc.text('JAMAAW SOLUÇÕES INTELIGENTES', pageWidth / 2, logoY + logoHeight + (compact ? 4 : 5), { align: 'center' })
 
   doc.setFontSize(compact ? 15 : 18)
-  doc.setTextColor(31, 41, 55)
-  doc.text(titleLines, margin, compact ? 17 : 23)
+  doc.setTextColor(REPORT_NAVY)
+  const titleY = logoY + logoHeight + (compact ? 11 : 14)
+  doc.text(titleLines, pageWidth / 2, titleY, { align: 'center' })
 
-  let cursorY = (compact ? 17 : 23) + titleLines.length * (compact ? 5 : 6)
+  let cursorY = titleY + titleLines.length * (compact ? 5 : 6)
   if (subtitle) {
     doc.setFont('helvetica', 'normal')
     doc.setFontSize(compact ? 7 : 8)
-    doc.setTextColor(107, 114, 128)
+    doc.setTextColor(REPORT_MUTED)
     const subtitleLines = doc.splitTextToSize(subtitle, contentWidth)
-    doc.text(subtitleLines, margin, cursorY)
+    doc.text(subtitleLines, pageWidth / 2, cursorY, { align: 'center' })
     cursorY += subtitleLines.length * 4
   }
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(compact ? 7 : 8)
-  doc.setTextColor(107, 114, 128)
-  doc.text(`Gerado em ${generatedLabel} | ${normalizePdfFilename(filename ?? title)}`, margin, cursorY + 4)
+  doc.setTextColor(REPORT_MUTED)
+  doc.text(`Gerado em ${generatedLabel} | ${normalizePdfFilename(filename ?? title)}`, pageWidth / 2, cursorY + 4, { align: 'center' })
 
-  doc.setDrawColor(229, 231, 235)
-  doc.setLineWidth(0.4)
-  doc.line(margin, cursorY + 8, pageWidth - margin, cursorY + 8)
+  const bandY = cursorY + 8
+  doc.setFillColor(REPORT_LIGHT_BAND)
+  doc.rect(margin, bandY, pageWidth - margin * 2, compact ? 1.5 : 2, 'F')
 
-  return doc
+  return { doc, startY: bandY + (compact ? 5 : 7), margin }
 }
 
 function drawReportFooter(doc: jsPDF): void {
@@ -265,9 +281,45 @@ function drawReportFooter(doc: jsPDF): void {
 
   doc.setFont('helvetica', 'normal')
   doc.setFontSize(7)
-  doc.setTextColor(107, 114, 128)
-  doc.text('Documento gerado para download em PDF.', 12, pageHeight - 8)
+  doc.setTextColor(REPORT_MUTED)
+  doc.text('Jamaaw Soluções Inteligentes', 12, pageHeight - 8)
   doc.text(`Pagina ${pageNumber}`, pageWidth - 12, pageHeight - 8, { align: 'right' })
+}
+
+async function imageUrlToDataUrl(url: string): Promise<string> {
+  if (reportLogoDataUrlCache) return reportLogoDataUrlCache
+
+  const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const img = new Image()
+    img.onload = () => resolve(img)
+    img.onerror = () => reject(new Error('Nao foi possivel carregar a logo do relatorio.'))
+    img.src = url
+  })
+
+  const canvas = document.createElement('canvas')
+  const context = canvas.getContext('2d')
+
+  if (!context) {
+    throw new Error('Nao foi possivel preparar a logo do relatorio.')
+  }
+
+  canvas.width = image.naturalWidth
+  canvas.height = image.naturalHeight
+  context.fillStyle = '#ffffff'
+  context.fillRect(0, 0, canvas.width, canvas.height)
+  context.drawImage(image, 0, 0)
+
+  reportLogoDataUrlCache = canvas.toDataURL('image/png')
+  return reportLogoDataUrlCache
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const normalized = hex.replace('#', '')
+  return [
+    Number.parseInt(normalized.slice(0, 2), 16),
+    Number.parseInt(normalized.slice(2, 4), 16),
+    Number.parseInt(normalized.slice(4, 6), 16),
+  ]
 }
 
 function formatPdfCell(value: unknown): string {
