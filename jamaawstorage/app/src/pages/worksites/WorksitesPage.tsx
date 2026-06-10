@@ -33,16 +33,19 @@ interface RawWorksiteRow {
   created_by: string | null
   created_at: string
   updated_at: string
-  withdrawals: { id: string }[]
 }
 
-interface RawWithdrawalRow {
+interface RawWorksiteWithdrawalItemRow {
   id: string
-  code: string
-  status: string
-  created_at: string
-  requested_by_person: { full_name: string } | null
-  withdrawal_items: { id: string }[]
+  withdrawal_id: string
+  work_site_id: string | null
+  withdrawal: {
+    id: string
+    code: string
+    status: string
+    created_at: string
+    requested_by_person: { full_name: string } | null
+  } | null
 }
 
 const worksitesPageCache: {
@@ -79,28 +82,53 @@ export function WorksitesPage() {
     setError(null)
 
     try {
-      const { data, error: fetchError } = await supabase
-        .from('work_sites')
-        .select('*, withdrawals(id)')
-        .order('name')
+      const [worksitesRes, withdrawalItemsRes] = await Promise.all([
+        supabase
+          .from('work_sites')
+          .select('*')
+          .order('name'),
+        supabase
+          .from('withdrawal_items')
+          .select('id, withdrawal_id, work_site_id')
+          .eq('destination_type', 'work_site'),
+      ])
 
-      if (fetchError) {
-        setError(fetchError.message)
+      if (worksitesRes.error) {
+        setError(worksitesRes.error.message)
+        return
+      }
+      if (withdrawalItemsRes.error) {
+        setError(withdrawalItemsRes.error.message)
         return
       }
 
-      const mapped: WorksiteWithStats[] = ((data as RawWorksiteRow[]) ?? []).map((row) => ({
-        id: row.id,
-        name: row.name,
-        description: row.description,
-        location: row.location,
-        is_active: row.is_active,
-        created_by: row.created_by,
-        created_at: row.created_at,
-        updated_at: row.updated_at,
-        total_withdrawals: row.withdrawals?.length ?? 0,
-        total_items_dispatched: 0,
-      }))
+      const withdrawalItemsByWorksite = new Map<string, { withdrawalIds: Set<string>; itemCount: number }>()
+      for (const item of ((withdrawalItemsRes.data as { withdrawal_id: string; work_site_id: string | null }[]) ?? [])) {
+        if (!item.work_site_id) continue
+        const current = withdrawalItemsByWorksite.get(item.work_site_id) ?? {
+          withdrawalIds: new Set<string>(),
+          itemCount: 0,
+        }
+        current.withdrawalIds.add(item.withdrawal_id)
+        current.itemCount += 1
+        withdrawalItemsByWorksite.set(item.work_site_id, current)
+      }
+
+      const mapped: WorksiteWithStats[] = ((worksitesRes.data as RawWorksiteRow[]) ?? []).map((row) => {
+        const stats = withdrawalItemsByWorksite.get(row.id)
+        return {
+          id: row.id,
+          name: row.name,
+          description: row.description,
+          location: row.location,
+          is_active: row.is_active,
+          created_by: row.created_by,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+          total_withdrawals: stats?.withdrawalIds.size ?? 0,
+          total_items_dispatched: stats?.itemCount ?? 0,
+        }
+      })
 
       worksitesPageCache.worksites = mapped
       setWorksites(mapped)
@@ -121,8 +149,9 @@ export function WorksitesPage() {
     setLoadingHistory(true)
 
     const { data, error: fetchError } = await supabase
-      .from('withdrawals')
-      .select('id, code, status, created_at, requested_by_person:people!withdrawals_requested_by_fkey(full_name), withdrawal_items(id)')
+      .from('withdrawal_items')
+      .select('id, withdrawal_id, work_site_id, withdrawal:withdrawals(id, code, status, created_at, requested_by_person:people!withdrawals_requested_by_fkey(full_name))')
+      .eq('destination_type', 'work_site')
       .eq('work_site_id', worksiteId)
       .order('created_at', { ascending: false })
       .limit(20)
@@ -133,14 +162,26 @@ export function WorksitesPage() {
       return
     }
 
-    const mapped: WithdrawalSummary[] = ((data as RawWithdrawalRow[]) ?? []).map((row) => ({
-      id: row.id,
-      code: row.code,
-      status: row.status,
-      created_at: row.created_at,
-      requester_name: row.requested_by_person?.full_name ?? '-',
-      items_count: row.withdrawal_items?.length ?? 0,
-    }))
+    const grouped = new Map<string, WithdrawalSummary>()
+    for (const row of ((data as unknown as RawWorksiteWithdrawalItemRow[]) ?? [])) {
+      if (!row.withdrawal) continue
+      const current = grouped.get(row.withdrawal.id)
+      if (current) {
+        current.items_count += 1
+        continue
+      }
+
+      grouped.set(row.withdrawal.id, {
+        id: row.withdrawal.id,
+        code: row.withdrawal.code,
+        status: row.withdrawal.status,
+        created_at: row.withdrawal.created_at,
+        requester_name: row.withdrawal.requested_by_person?.full_name ?? '-',
+        items_count: 1,
+      })
+    }
+
+    const mapped = Array.from(grouped.values())
 
     setWithdrawalHistory(mapped)
     setLoadingHistory(false)

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { Tables } from '../../types/database'
+import type { Tables, WithdrawalDestinationType } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { cn, formatDateTime } from '../../lib/utils'
 import {
@@ -31,7 +31,16 @@ interface LowStockItem extends Tables<'stock_items'> {
 
 interface RecentWithdrawal extends Tables<'withdrawals'> {
   requested_by_person: Tables<'people'> | null
-  withdrawal_items: { id: string }[]
+  collaborator?: Pick<Tables<'people'>, 'id' | 'full_name'> | null
+  work_site?: Pick<Tables<'work_sites'>, 'id' | 'name'> | null
+  withdrawal_items: {
+    id: string
+    destination_type: WithdrawalDestinationType | null
+    collaborator_id: string | null
+    work_site_id: string | null
+    collaborator?: Pick<Tables<'people'>, 'id' | 'full_name'> | null
+    work_site?: Pick<Tables<'work_sites'>, 'id' | 'name'> | null
+  }[]
 }
 
 const dashboardCache: {
@@ -47,6 +56,33 @@ const dashboardCache: {
   },
   lowStockItems: [],
   recentWithdrawals: [],
+}
+
+function withdrawalItemDestinationLabel(
+  item: RecentWithdrawal['withdrawal_items'][number],
+  withdrawal: RecentWithdrawal,
+): string {
+  const destinationType = item.destination_type ?? withdrawal.destination_type
+
+  if (destinationType === 'collaborator') {
+    return item.collaborator?.full_name ?? withdrawal.collaborator?.full_name ?? 'Colaborador'
+  }
+
+  return item.work_site?.name ?? withdrawal.work_site?.name ?? 'Obra'
+}
+
+function withdrawalDestinationsSummary(withdrawal: RecentWithdrawal): string {
+  const uniqueDestinations = Array.from(new Set(
+    withdrawal.withdrawal_items.map((item) => withdrawalItemDestinationLabel(item, withdrawal)),
+  ))
+
+  if (uniqueDestinations.length > 0) {
+    return uniqueDestinations.join(' / ')
+  }
+
+  return withdrawal.destination_type === 'collaborator'
+    ? withdrawal.collaborator?.full_name ?? 'Colaborador'
+    : withdrawal.work_site?.name ?? 'Obra'
 }
 
 export function DashboardPage() {
@@ -97,7 +133,7 @@ export function DashboardPage() {
             .neq('role', 'supervisor'),
           supabase
             .from('withdrawals')
-            .select('*, requested_by_person:people!withdrawals_requested_by_fkey(*), withdrawal_items(id)')
+            .select('*, requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(id, full_name), work_site:work_sites!withdrawals_work_site_id_fkey(id, name), withdrawal_items(id, destination_type, collaborator_id, work_site_id, collaborator:people!withdrawal_items_collaborator_id_fkey(id, full_name), work_site:work_sites!withdrawal_items_work_site_id_fkey(id, name))')
             .order('created_at', { ascending: false })
             .limit(10),
         ])
@@ -365,7 +401,7 @@ export function DashboardPage() {
                         {withdrawal.requested_by_person?.full_name ?? '-'}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">
-                        {withdrawal.destination_type === 'collaborator' ? 'Colaborador' : 'Obra'}
+                        {withdrawalDestinationsSummary(withdrawal)}
                       </td>
                       <td className="px-4 py-3 text-sm text-gray-300">
                         {withdrawal.withdrawal_items?.length ?? 0}

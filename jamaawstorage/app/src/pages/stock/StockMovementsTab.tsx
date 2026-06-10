@@ -36,6 +36,11 @@ interface WithdrawalItemRow {
   id: string
   quantity: number
   unit: string
+  destination_type: 'collaborator' | 'work_site' | null
+  collaborator_id: string | null
+  work_site_id: string | null
+  collaborator: { full_name: string } | null
+  work_site: { name: string } | null
   stock_item: Pick<StockItemRow, 'id' | 'code' | 'name' | 'unit' | 'svg_icon_key'> | null
   withdrawal: {
     id: string
@@ -290,7 +295,11 @@ function buildWithdrawalMovements(rows: WithdrawalItemRow[]): StockMovement[] {
     .filter((row) => row.withdrawal && row.withdrawal.status !== 'rejected')
     .map((row) => {
       const withdrawal = row.withdrawal
-      const target = withdrawal?.collaborator?.full_name ?? withdrawal?.work_site?.name ?? null
+      const target = row.collaborator?.full_name
+        ?? row.work_site?.name
+        ?? withdrawal?.collaborator?.full_name
+        ?? withdrawal?.work_site?.name
+        ?? null
       return {
         id: `withdrawal-${row.id}`,
         kind: 'exit' as const,
@@ -389,6 +398,11 @@ export function StockMovementsTab() {
             id,
             quantity,
             unit,
+            destination_type,
+            collaborator_id,
+            work_site_id,
+            collaborator:people!withdrawal_items_collaborator_id_fkey(full_name),
+            work_site:work_sites!withdrawal_items_work_site_id_fkey(name),
             stock_item:stock_items(id, code, name, unit, svg_icon_key),
             withdrawal:withdrawals(
               id,

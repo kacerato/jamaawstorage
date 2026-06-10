@@ -139,6 +139,46 @@ function compositionNeedsConfirmation(composition: WithdrawalComposition): boole
   return composition.usedQty > 0 || composition.damagedQty > 0
 }
 
+function findStockTotalError(itemsSource: WithdrawalItemEntry[]): string | null {
+  const totals = new Map<string, { item: WithdrawalItemEntry; quantity: number }>()
+
+  for (const item of itemsSource) {
+    const current = totals.get(item.stock_item_id)
+    totals.set(item.stock_item_id, {
+      item,
+      quantity: (current?.quantity ?? 0) + item.quantity,
+    })
+  }
+
+  for (const { item, quantity } of totals.values()) {
+    if (quantity > item.stock_item.current_quantity) {
+      return `Quantidade total de "${item.stock_item.name}" excede o estoque disponivel (${item.stock_item.current_quantity} ${item.stock_item.unit}).`
+    }
+  }
+
+  return null
+}
+
+function buildCompositionWarningsByStockItem(itemsSource: WithdrawalItemEntry[]): WithdrawalCompositionWarning[] {
+  const totals = new Map<string, { item: WithdrawalItemEntry; quantity: number }>()
+
+  for (const item of itemsSource) {
+    const current = totals.get(item.stock_item_id)
+    totals.set(item.stock_item_id, {
+      item,
+      quantity: (current?.quantity ?? 0) + item.quantity,
+    })
+  }
+
+  return Array.from(totals.values()).map(({ item, quantity }) => ({
+    entryId: item.stock_item_id,
+    itemName: item.stock_item.name,
+    unit: item.unit,
+    quantity,
+    composition: buildWithdrawalComposition(item.stock_item, quantity),
+  }))
+}
+
 function encodeDestination(destinationType: WithdrawalDestinationType, collaboratorId: string | null, workSiteId: string | null): EncodedDestination {
   return destinationType === 'work_site'
     ? `work_site:${workSiteId ?? ''}`
@@ -601,9 +641,9 @@ export function NewWithdrawalPage() {
         errors.items = `Revise o destino do item "${invalidDestination.stock_item.name}".`
       }
 
-      const overStock = itemsSource.find((item) => item.quantity > item.stock_item.current_quantity)
-      if (overStock) {
-        errors.items = `Quantidade de "${overStock.stock_item.name}" excede o estoque disponivel (${overStock.stock_item.current_quantity} ${overStock.stock_item.unit})`
+      const stockTotalError = findStockTotalError(itemsSource)
+      if (stockTotalError) {
+        errors.items = stockTotalError
       }
 
       const zeroQty = itemsSource.find((item) => item.quantity <= 0)
@@ -683,7 +723,7 @@ export function NewWithdrawalPage() {
     const { data, error } = await supabase
       .from('withdrawals')
       .select(
-        '*, withdrawal_items(*, stock_items(*)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*), approved_by_profile:profiles!withdrawals_authorized_by_fkey(*)',
+        '*, withdrawal_items(*, stock_items(*), collaborator:people!withdrawal_items_collaborator_id_fkey(id, full_name, employee_id), work_site:work_sites!withdrawal_items_work_site_id_fkey(id, name)), requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*), approved_by_profile:profiles!withdrawals_authorized_by_fkey(*)',
       )
       .in('id', withdrawalIds)
       .order('created_at', { ascending: false })
@@ -716,25 +756,16 @@ export function NewWithdrawalPage() {
 
     try {
       const refreshedItems = await refreshSelectedItemsQuantities()
-      const overStock = refreshedItems.find((item) => item.quantity > item.stock_item.current_quantity)
+      const stockTotalError = findStockTotalError(refreshedItems)
 
-      if (overStock) {
-        setSubmitError(
-          `O estoque de "${overStock.stock_item.name}" mudou durante a retirada. Disponivel agora: ${overStock.stock_item.current_quantity} ${overStock.stock_item.unit}.`,
-        )
+      if (stockTotalError) {
+        setSubmitError(stockTotalError)
         setCurrentStep(1)
         setSubmitting(false)
         return
       }
 
-      const nextCompositions = refreshedItems
-        .map((item): WithdrawalCompositionWarning => ({
-          entryId: item.entry_id,
-          itemName: item.stock_item.name,
-          unit: item.unit,
-          quantity: item.quantity,
-          composition: buildWithdrawalComposition(item.stock_item, item.quantity),
-        }))
+      const nextCompositions = buildCompositionWarningsByStockItem(refreshedItems)
       const invalidComposition = nextCompositions.find((warning) => warning.composition.missingQty > 0)
 
       if (invalidComposition) {
@@ -1083,7 +1114,7 @@ export function NewWithdrawalPage() {
           <div>
             <h3 className="text-lg font-semibold text-white">Itens da Retirada</h3>
             <p className="mt-1 text-xs text-gray-500">
-              Mesmo formulario, varios destinos. Sistema cria uma retirada por destino no envio final.
+              Mesmo formulario, varios destinos. O sistema mantem uma retirada com destino separado por item.
             </p>
           </div>
           <div className="flex gap-2">

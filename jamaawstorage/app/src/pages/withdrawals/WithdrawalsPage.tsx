@@ -39,6 +39,37 @@ const statusLabels: Record<WithdrawalStatus, string> = {
   rejected: 'Rejeitada',
 }
 
+function withdrawalItemDestinationLabel(
+  item: NonNullable<WithdrawalListItem['withdrawal_items']>[number],
+  withdrawal: WithdrawalListItem,
+): string {
+  const destinationType = item.destination_type ?? withdrawal.destination_type
+
+  if (destinationType === 'collaborator') {
+    const collaborator = item.collaborator ?? withdrawal.collaborator
+    return collaborator?.full_name ?? 'Colaborador'
+  }
+
+  return item.work_site?.name ?? withdrawal.work_site?.name ?? 'Obra'
+}
+
+function withdrawalDestinationsSummary(withdrawal: WithdrawalListItem): string {
+  const itemDestinations = withdrawal.withdrawal_items?.map((item) =>
+    withdrawalItemDestinationLabel(item, withdrawal),
+  ) ?? []
+  const uniqueDestinations = Array.from(new Set(itemDestinations.filter(Boolean)))
+
+  if (uniqueDestinations.length > 0) {
+    return uniqueDestinations.join(' / ')
+  }
+
+  if (withdrawal.destination_type === 'collaborator') {
+    return withdrawal.collaborator?.full_name ?? 'Colaborador'
+  }
+
+  return withdrawal.work_site?.name ?? 'Obra'
+}
+
 export function WithdrawalsPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -96,7 +127,7 @@ export function WithdrawalsPage() {
         .from('withdrawals')
         .select(
           `id, code, requested_by, destination_type, collaborator_id, work_site_id, status, created_at, supervisor_signature, requester_signature,
-          withdrawal_items(id),
+          withdrawal_items(id, destination_type, collaborator_id, work_site_id, collaborator:people!withdrawal_items_collaborator_id_fkey(id, full_name, employee_id), work_site:work_sites!withdrawal_items_work_site_id_fkey(id, name)),
           requested_by_person:people!withdrawals_requested_by_fkey(id, full_name),
           collaborator:people!withdrawals_collaborator_id_fkey(id, full_name),
           work_site:work_sites!withdrawals_work_site_id_fkey(id, name)`,
@@ -129,7 +160,7 @@ export function WithdrawalsPage() {
         console.error('Error fetching withdrawals:', error.message)
         setWithdrawals([])
       } else {
-        const nextWithdrawals = (data as WithdrawalListItem[]) ?? []
+        const nextWithdrawals = (data as unknown as WithdrawalListItem[]) ?? []
         withdrawalsPageCache.withdrawals = nextWithdrawals
         setWithdrawals(nextWithdrawals)
       }
@@ -192,10 +223,7 @@ export function WithdrawalsPage() {
       header: 'Destino',
       render: (_value: unknown, row: WithdrawalRowForTable) => {
         const withdrawal = row as unknown as WithdrawalListItem
-        if (withdrawal.destination_type === 'collaborator') {
-          return withdrawal.collaborator?.full_name ?? 'Colaborador'
-        }
-        return 'obra jamaaw'
+        return withdrawalDestinationsSummary(withdrawal)
       },
     },
     {

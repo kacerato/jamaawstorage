@@ -805,7 +805,7 @@ export function EditWithdrawalPage() {
           <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/10 bg-emerald-500/5 p-4">
             <p className="text-sm font-medium text-white">Ao salvar</p>
             <p className="text-sm text-gray-300">
-              O estoque e o inventario vinculado serao recalculados na mesma transacao. Se houver mais de um destino, o sistema mantem esta retirada e cria os registros separados necessarios.
+              O estoque e o inventario vinculado serao recalculados na mesma transacao. Se houver mais de um destino, o sistema mantem esta retirada com destino separado em cada item.
             </p>
           </div>
 

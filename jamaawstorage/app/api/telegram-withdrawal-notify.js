@@ -23,7 +23,24 @@ function formatDateTime(value) {
   })
 }
 
+function itemDestinationLabel(item, withdrawal) {
+  const destinationType = item.destination_type || withdrawal.destination_type
+
+  if (destinationType === 'collaborator') {
+    return item.collaborator?.full_name || withdrawal.collaborator?.full_name || 'Colaborador'
+  }
+
+  return item.work_site?.name || withdrawal.work_site?.name || 'Obra'
+}
+
 function destinationLabel(withdrawal) {
+  const items = Array.isArray(withdrawal.withdrawal_items) ? withdrawal.withdrawal_items : []
+  const destinations = [...new Set(items.map((item) => itemDestinationLabel(item, withdrawal)).filter(Boolean))]
+
+  if (destinations.length > 0) {
+    return destinations.join(' / ')
+  }
+
   if (withdrawal.destination_type === 'collaborator') {
     return withdrawal.collaborator?.full_name || 'Colaborador'
   }
@@ -38,7 +55,7 @@ function buildItemsList(withdrawal) {
   }
 
   return items
-    .map((item) => `- ${escapeHtml(item.stock_items?.name || 'Item')} - <b>${item.quantity} ${escapeHtml(item.unit || 'un')}</b>`)
+    .map((item) => `- ${escapeHtml(item.stock_items?.name || 'Item')} - <b>${item.quantity} ${escapeHtml(item.unit || 'un')}</b> - ${escapeHtml(itemDestinationLabel(item, withdrawal))}`)
     .join('\n')
 }
 

@@ -72,7 +72,14 @@ export interface WithdrawalListItem {
   created_at: string
   supervisor_signature: string | null
   requester_signature: string | null
-  withdrawal_items?: { id: string }[]
+  withdrawal_items?: {
+    id: string
+    destination_type?: WithdrawalDestinationType | null
+    collaborator_id?: string | null
+    work_site_id?: string | null
+    collaborator?: Pick<Tables<'people'>, 'id' | 'full_name' | 'employee_id'> | null
+    work_site?: Pick<Tables<'work_sites'>, 'id' | 'name'> | null
+  }[]
   requested_by_person: Tables<'people'> | null
   collaborator: Tables<'people'> | null
   work_site: Tables<'work_sites'> | null

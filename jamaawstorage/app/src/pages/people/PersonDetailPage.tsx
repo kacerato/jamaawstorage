@@ -31,6 +31,8 @@ type PersonWithDetails = Omit<Tables<'people'>, 'document_attachments'> & {
 type WithdrawalRow = Tables<'withdrawals'> & {
   withdrawal_items: (Tables<'withdrawal_items'> & {
     stock_items: Tables<'stock_items'>
+    collaborator?: Pick<Tables<'people'>, 'id' | 'full_name'> | null
+    work_site?: Pick<Tables<'work_sites'>, 'id' | 'name'> | null
   })[]
   collaborator: Tables<'people'> | null
   work_site: Tables<'work_sites'> | null
@@ -220,7 +222,7 @@ export function PersonDetailPage() {
 
     const { data, error: fetchError } = await supabase
       .from('withdrawals')
-      .select('*, withdrawal_items(*, stock_items(*)), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*)')
+      .select('*, withdrawal_items(*, stock_items(*), collaborator:people!withdrawal_items_collaborator_id_fkey(id, full_name), work_site:work_sites!withdrawal_items_work_site_id_fkey(id, name)), collaborator:people!withdrawals_collaborator_id_fkey(*), work_site:work_sites!withdrawals_work_site_id_fkey(*)')
       .eq('requested_by', id)
       .order('created_at', { ascending: false })
 
@@ -267,6 +269,8 @@ export function PersonDetailPage() {
           work_site_id: item.work_site_id,
           created_at: item.created_at,
           stock_items: item.stock_items as Tables<'stock_items'>,
+          collaborator: item.collaborator ?? null,
+          work_site: item.work_site ?? null,
         })),
         collaborator: raw.collaborator as Tables<'people'> | null,
         work_site: raw.work_site as Tables<'work_sites'> | null,
@@ -435,6 +439,19 @@ export function PersonDetailPage() {
   }
 
   const getDestinationLabel = (w: WithdrawalRow): string => {
+    const itemDestinations = w.withdrawal_items.map((item) => {
+      const destinationType = item.destination_type ?? w.destination_type
+      if (destinationType === 'collaborator') {
+        return item.collaborator?.full_name ?? w.collaborator?.full_name ?? 'Colaborador'
+      }
+      return item.work_site?.name ?? w.work_site?.name ?? 'Obra'
+    })
+    const uniqueDestinations = Array.from(new Set(itemDestinations.filter(Boolean)))
+
+    if (uniqueDestinations.length > 0) {
+      return uniqueDestinations.join(' / ')
+    }
+
     if (w.destination_type === 'collaborator' && w.collaborator) {
       return w.collaborator.full_name
     }
@@ -1394,6 +1411,8 @@ interface RawWithdrawalRow {
     work_site_id: string | null
     created_at: string
     stock_items: Tables<'stock_items'>
+    collaborator?: Pick<Tables<'people'>, 'id' | 'full_name'> | null
+    work_site?: Pick<Tables<'work_sites'>, 'id' | 'name'> | null
   }[]
   collaborator: Tables<'people'> | null
   work_site: Tables<'work_sites'> | null
