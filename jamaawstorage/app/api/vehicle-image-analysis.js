@@ -1,4 +1,15 @@
 const ZAI_API_URL = 'https://api.z.ai/api/paas/v4'
+const DEFAULT_OCR_MODEL = 'glm-ocr'
+const DEFAULT_VEHICLE_VISION_MODEL = 'glm-4.5v'
+const DEFAULT_VEHICLE_REASONING_MODEL = 'glm-5.2'
+
+function getVehicleModels() {
+  return {
+    ocr: process.env.ZAI_VEHICLE_OCR_MODEL || DEFAULT_OCR_MODEL,
+    vision: process.env.ZAI_VEHICLE_VISION_MODEL || DEFAULT_VEHICLE_VISION_MODEL,
+    reasoning: process.env.ZAI_VEHICLE_REASONING_MODEL || DEFAULT_VEHICLE_REASONING_MODEL,
+  }
+}
 
 function sendJson(res, statusCode, payload) {
   res.status(statusCode).json(payload)
@@ -33,6 +44,16 @@ function normalizeFuelRange(value) {
   const text = String(value ?? '').trim().toLowerCase()
   if (['reserva', 'baixo', 'meio', 'alto', 'cheio'].includes(text)) return text
   return null
+}
+
+function shouldFallbackVisionModel(error) {
+  const message = error instanceof Error ? error.message.toLowerCase() : ''
+  return message.includes('model')
+    || message.includes('not found')
+    || message.includes('not exist')
+    || message.includes('not available')
+    || message.includes('unavailable')
+    || message.includes('permission')
 }
 
 function fuelPercentFromBars(filledBars, totalBars) {
@@ -82,7 +103,7 @@ function normalizeOdometerAnalysis(analysis) {
   }
 }
 
-async function runGlmOcr(apiKey, imageInput) {
+async function runGlmOcr(apiKey, imageInput, model) {
   const response = await fetch(`${ZAI_API_URL}/layout_parsing`, {
     method: 'POST',
     headers: {
@@ -90,7 +111,7 @@ async function runGlmOcr(apiKey, imageInput) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'glm-ocr',
+      model,
       file: imageInput,
     }),
   })
@@ -103,7 +124,7 @@ async function runGlmOcr(apiKey, imageInput) {
   return JSON.stringify(payload?.data ?? payload)
 }
 
-async function runVisionAnalysis(apiKey, imageInput, eventType, ocrText) {
+async function runVisionAnalysis(apiKey, imageInput, eventType, ocrText, model) {
   const response = await fetch(`${ZAI_API_URL}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -111,7 +132,7 @@ async function runVisionAnalysis(apiKey, imageInput, eventType, ocrText) {
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'glm-5v-turbo',
+      model,
       messages: [
         {
           role: 'system',
@@ -161,7 +182,7 @@ async function runVisionAnalysis(apiKey, imageInput, eventType, ocrText) {
   return parseJsonContent(content)
 }
 
-async function runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, firstAnalysis) {
+async function runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, firstAnalysis, model) {
   const response = await fetch(`${ZAI_API_URL}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -169,7 +190,7 @@ async function runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, fi
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'glm-5v-turbo',
+      model,
       messages: [
         {
           role: 'system',
@@ -219,7 +240,7 @@ async function runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, fi
   return parseJsonContent(content)
 }
 
-async function runFocusedOdometerAnalysis(apiKey, imageInput, eventType, ocrText, firstAnalysis) {
+async function runFocusedOdometerAnalysis(apiKey, imageInput, eventType, ocrText, firstAnalysis, model) {
   const response = await fetch(`${ZAI_API_URL}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -227,7 +248,7 @@ async function runFocusedOdometerAnalysis(apiKey, imageInput, eventType, ocrText
       'Content-Type': 'application/json',
     },
     body: JSON.stringify({
-      model: 'glm-5v-turbo',
+      model,
       messages: [
         {
           role: 'system',
@@ -259,6 +280,60 @@ async function runFocusedOdometerAnalysis(apiKey, imageInput, eventType, ocrText
           ],
         },
       ],
+    }),
+  })
+
+  const payload = await response.json().catch(() => null)
+  const content = payload?.choices?.[0]?.message?.content
+
+  if (!response.ok || !content) {
+    return null
+  }
+
+  return parseJsonContent(content)
+}
+
+async function runReasoningAdjudication(apiKey, eventType, ocrText, candidates, model) {
+  const response = await fetch(`${ZAI_API_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'Voce e um auditor final de leitura de painel de veiculo.',
+            'Voce NAO recebe a imagem diretamente nesta etapa. Use somente OCR e as leituras candidatas dos modelos visuais.',
+            'Seu trabalho e reconciliar conflitos, aplicar regras de painel e reduzir erro obvio.',
+            'Regra de odometro: odometer_km deve vir de ODO. TRIP nunca e odometro total.',
+            'Se uma candidata visual disser ODO 10 e outra/OCR disser TRIP 16.3, escolha odometer_km=10.',
+            'Regra de combustivel: quando houver fuel_bars_filled e fuel_bars_total, fuel_level_percent deve ser round(filled/total*100).',
+            'Para 4/8 use 50 e faixa meio. Para 5/8 use 63 e faixa meio. Para 6/8 use 75 e faixa alto. Para 7/8 use 88 e faixa alto.',
+            'Nao invente barras se nenhuma candidata visual contou barras. Nesse caso preserve null e needs_review=true.',
+            'Se as candidatas visuais discordarem entre si, escolha a mais especifica quando citar contagem de barras ou ODO/TRIP no summary; caso contrario marque needs_review=true.',
+            'Retorne apenas JSON valido, sem markdown.',
+            'Formato: {"odometer_km":number|null,"fuel_level_percent":number|null,"fuel_level_range":"reserva|baixo|meio|alto|cheio"|null,"fuel_bars_filled":number|null,"fuel_bars_total":number|null,"confidence":number,"needs_review":boolean,"summary":string}',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: [
+            `Tipo de registro: ${eventType}.`,
+            `OCR bruto: ${ocrText.slice(0, 4000)}.`,
+            `Leituras candidatas: ${JSON.stringify(candidates).slice(0, 8000)}.`,
+            'Faça a decisao final em portugues do Brasil.',
+          ].join('\n'),
+        },
+      ],
+      thinking: { type: 'enabled' },
+      reasoning_effort: 'max',
+      max_tokens: 1024,
+      temperature: 0.6,
+      stream: false,
     }),
   })
 
@@ -304,11 +379,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    const ocrText = await runGlmOcr(apiKey, imageInput)
-    const initialAnalysis = await runVisionAnalysis(apiKey, imageInput, eventType, ocrText)
+    const models = getVehicleModels()
+    const ocrText = await runGlmOcr(apiKey, imageInput, models.ocr)
+    let activeVisionModel = models.vision
+    let initialAnalysis
+    try {
+      initialAnalysis = await runVisionAnalysis(apiKey, imageInput, eventType, ocrText, activeVisionModel)
+    } catch (visionError) {
+      if (activeVisionModel === 'glm-5v-turbo' || !shouldFallbackVisionModel(visionError)) {
+        throw visionError
+      }
+      activeVisionModel = 'glm-5v-turbo'
+      initialAnalysis = await runVisionAnalysis(apiKey, imageInput, eventType, ocrText, activeVisionModel)
+    }
     let analysis = normalizeAnalysis(initialAnalysis)
 
-    const focusedFuel = await runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, initialAnalysis)
+    const focusedFuel = await runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, initialAnalysis, activeVisionModel)
     if (focusedFuel) {
       const focused = normalizeAnalysis({
         ...initialAnalysis,
@@ -332,7 +418,7 @@ export default async function handler(req, res) {
       }
     }
 
-    const focusedOdometer = await runFocusedOdometerAnalysis(apiKey, imageInput, eventType, ocrText, initialAnalysis)
+    const focusedOdometer = await runFocusedOdometerAnalysis(apiKey, imageInput, eventType, ocrText, initialAnalysis, activeVisionModel)
     if (focusedOdometer) {
       const focused = normalizeOdometerAnalysis(focusedOdometer)
       analysis = {
@@ -341,6 +427,37 @@ export default async function handler(req, res) {
         confidence: Math.min(analysis.confidence ?? 1, focused.confidence ?? 1),
         needsReview: analysis.needsReview || focused.needsReview || focused.odometerKm == null,
         summary: [analysis.summary, focused.summary].filter(Boolean).join(' '),
+      }
+    }
+
+    const finalDecision = await runReasoningAdjudication(
+      apiKey,
+      eventType,
+      ocrText,
+      { initialAnalysis, focusedFuel, focusedOdometer, normalizedBeforeFinal: analysis },
+      models.reasoning,
+    )
+    if (finalDecision) {
+      const finalAnalysis = normalizeAnalysis({
+        fuel_level_percent: finalDecision.fuel_level_percent,
+        fuel_level_range: finalDecision.fuel_level_range,
+        fuel_bars_filled: finalDecision.fuel_bars_filled,
+        fuel_bars_total: finalDecision.fuel_bars_total,
+        confidence: finalDecision.confidence,
+        needs_review: finalDecision.needs_review,
+        summary: finalDecision.summary,
+      })
+      const finalOdometer = normalizeOdometerAnalysis(finalDecision)
+      analysis = {
+        ...analysis,
+        odometerKm: finalOdometer.odometerKm ?? analysis.odometerKm,
+        fuelLevelPercent: finalAnalysis.fuelLevelPercent ?? analysis.fuelLevelPercent,
+        fuelLevelRange: finalAnalysis.fuelLevelRange ?? analysis.fuelLevelRange,
+        fuelBarsFilled: finalAnalysis.fuelBarsFilled ?? analysis.fuelBarsFilled,
+        fuelBarsTotal: finalAnalysis.fuelBarsTotal ?? analysis.fuelBarsTotal,
+        confidence: finalAnalysis.confidence ?? analysis.confidence,
+        needsReview: finalAnalysis.needsReview,
+        summary: finalAnalysis.summary ?? analysis.summary,
       }
     }
 

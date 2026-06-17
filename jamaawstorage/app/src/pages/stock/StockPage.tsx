@@ -887,7 +887,7 @@ export function StockPage() {
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_1fr]">
               <div className="rounded-2xl border border-white/8 bg-[#111215] p-5">
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                   <DetailField label="Código" value={<span className="font-mono text-orange-400">{selectedItem.code}</span>} />
                   <DetailField label="Nome" value={selectedItem.name} />
                   <DetailField
@@ -897,7 +897,7 @@ export function StockPage() {
                   <DetailField label="Unidade" value={selectedItem.unit} />
                   <DetailField label="CA/NR" value={selectedItem.ca_nr ?? '-'} />
                   <DetailField
-                    label="Quantidade Atual"
+                    label="Qtd Atual"
                     value={
                       <span className={cn('font-semibold', quantityColor(selectedItem.current_quantity, selectedItem.minimum_quantity))}>
                         {formatQuantity(selectedItem.current_quantity, selectedItem.unit)}
@@ -905,7 +905,7 @@ export function StockPage() {
                     }
                   />
                   <DetailField
-                    label="Quantidade Mínima"
+                    label="Qtd Mínima"
                     value={formatQuantity(selectedItem.minimum_quantity, selectedItem.unit)}
                   />
                   <DetailField label="Cadastrado em" value={formatDateTime(selectedItem.created_at)} />
@@ -1001,9 +1001,11 @@ export function StockPage() {
 
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex flex-col gap-1">
-      <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-500">{label}</p>
-      <div className="text-sm text-gray-200">{value}</div>
+    <div className="flex items-start gap-2">
+      <p className="mt-0.5 w-28 flex-shrink-0 text-right text-xs font-medium uppercase tracking-[0.18em] text-gray-500">
+        {label}
+      </p>
+      <div className="min-w-0 flex-1 text-sm text-gray-200">{value}</div>
     </div>
   )
 }
