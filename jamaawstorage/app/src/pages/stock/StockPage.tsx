@@ -885,9 +885,9 @@ export function StockPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1.1fr_1fr]">
-              <div className="rounded-2xl border border-white/8 bg-[#111215] p-5">
-                <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.15fr)]">
+              <div className="min-w-0 rounded-2xl border border-white/8 bg-[#111215] p-5">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
                   <DetailField label="Código" value={<span className="font-mono text-orange-400">{selectedItem.code}</span>} />
                   <DetailField label="Nome" value={selectedItem.name} />
                   <DetailField
@@ -910,14 +910,14 @@ export function StockPage() {
                   />
                   <DetailField label="Cadastrado em" value={formatDateTime(selectedItem.created_at)} />
                   {selectedItem.description && (
-                    <div className="sm:col-span-2">
+                    <div className="sm:col-span-2 lg:col-span-1">
                       <DetailField label="Descrição" value={selectedItem.description} />
                     </div>
                   )}
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-[#111215] p-5">
+              <div className="min-w-0 rounded-2xl border border-white/8 bg-[#111215] p-5">
                 <h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-gray-400">
                   Histórico de movimentações
                 </h4>
@@ -1001,11 +1001,9 @@ export function StockPage() {
 
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="flex items-start gap-2">
-      <p className="mt-0.5 w-28 flex-shrink-0 text-right text-xs font-medium uppercase tracking-[0.18em] text-gray-500">
-        {label}
-      </p>
-      <div className="min-w-0 flex-1 text-sm text-gray-200">{value}</div>
+    <div className="min-w-0 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500">{label}</p>
+      <div className="mt-1 min-w-0 break-words text-sm leading-5 text-gray-200">{value}</div>
     </div>
   )
 }
