@@ -20,7 +20,6 @@ import { ItemVisual } from '../../components/items/ItemVisual'
 import { StockItemForm } from './StockItemForm'
 import { StockImportModal } from './StockImportModal'
 import { KitsPage } from '../kits/KitsPage'
-import { StockReturnsTab } from './StockReturnsTab'
 import { StockMovementsTab } from './StockMovementsTab'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
@@ -137,7 +136,7 @@ export function StockPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { profile } = useAuth()
   const currentTab = searchParams.get('tab')
-  const activeTab = currentTab === 'kits' || currentTab === 'returns' || currentTab === 'movements' ? currentTab : 'items'
+  const activeTab = currentTab === 'kits' || currentTab === 'movements' ? currentTab : 'items'
   const initialQuery = searchParams.get('q') ?? ''
 
   const [items, setItems] = useState<StockItemWithLowStock[]>(stockPageCache.items)
@@ -612,20 +611,6 @@ export function StockPage() {
           type="button"
           onClick={() => setSearchParams((prev) => {
             const next = new URLSearchParams(prev)
-            next.set('tab', 'returns')
-            return next
-          })}
-          className={cn(
-            'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'returns' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
-          )}
-        >
-          Itens devolvidos
-        </button>
-        <button
-          type="button"
-          onClick={() => setSearchParams((prev) => {
-            const next = new URLSearchParams(prev)
             next.set('tab', 'movements')
             return next
           })}
@@ -640,8 +625,6 @@ export function StockPage() {
 
       {activeTab === 'kits' ? (
         <KitsPage embedded initialQuery={initialQuery} />
-      ) : activeTab === 'returns' ? (
-        <StockReturnsTab embedded profileId={profile?.id ?? null} />
       ) : activeTab === 'movements' ? (
         <StockMovementsTab />
       ) : (
@@ -946,10 +929,10 @@ export function StockPage() {
                 ) : itemWithdrawals.length === 0 ? (
                   <p className="text-sm text-gray-500">Nenhuma movimentação registrada para este item</p>
                 ) : (
-                  <div className="overflow-hidden rounded-2xl border border-white/8">
-                    <table className="w-full">
+                  <div className="max-h-[360px] overflow-auto rounded-2xl border border-white/8">
+                    <table className="w-full min-w-[620px]">
                       <thead>
-                        <tr className="bg-white/5">
+                        <tr className="sticky top-0 z-10 bg-[#1a1b1f] shadow-[0_1px_0_rgba(255,255,255,0.08)]">
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Código / Tipo</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Pessoa / Solicitante</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Qtd</th>

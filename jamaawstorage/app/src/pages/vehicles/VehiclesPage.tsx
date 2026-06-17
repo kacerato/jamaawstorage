@@ -10,6 +10,12 @@ type PersonRow = Tables<'people'>
 type VehicleEventType = 'pickup' | 'return' | 'fuel'
 type FuelLevelRange = 'reserva' | 'baixo' | 'meio' | 'alto' | 'cheio'
 
+const VEHICLE_LOG_IMAGE_OPTIONS = {
+  maxFileSizeMb: 18,
+  maxDimension: 3600,
+  quality: 0.96,
+} as const
+
 interface VehicleRow {
   id: string
   code: string
@@ -388,7 +394,7 @@ export function VehiclesPage() {
         file,
         scope: 'vehicles/logs',
         entityId: selectedVehicle.id,
-        options: DEFAULT_IMAGE_UPLOAD_OPTIONS,
+        options: VEHICLE_LOG_IMAGE_OPTIONS,
       })
       const analysisResponse = await fetch('/api/vehicle-image-analysis', {
         method: 'POST',
@@ -742,7 +748,7 @@ export function VehiclesPage() {
                 )}
               </div>
               <input type="file" accept="image/*" onChange={(event) => void handleLogPhoto(event)} disabled={analyzingImage} className="mt-4 block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white" />
-              <p className="mt-2 text-xs text-gray-500">A foto passa por GLM-OCR e analise visual para preencher km e combustivel.</p>
+              <p className="mt-2 text-xs text-gray-500">A foto passa por OCR e dupla conferencia visual em alta resolucao para preencher km e combustivel.</p>
             </div>
           </div>
 

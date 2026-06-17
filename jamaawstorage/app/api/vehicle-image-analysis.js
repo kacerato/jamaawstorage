@@ -73,6 +73,15 @@ function normalizeAnalysis(analysis) {
   }
 }
 
+function normalizeOdometerAnalysis(analysis) {
+  return {
+    odometerKm: clampNumber(analysis?.odometer_km, 0, 9999999),
+    confidence: normalizeConfidence(analysis?.confidence),
+    needsReview: Boolean(analysis?.needs_review),
+    summary: typeof analysis?.summary === 'string' ? analysis.summary.trim() || null : null,
+  }
+}
+
 async function runGlmOcr(apiKey, imageInput) {
   const response = await fetch(`${ZAI_API_URL}/layout_parsing`, {
     method: 'POST',
@@ -112,12 +121,15 @@ async function runVisionAnalysis(apiKey, imageInput, eventType, ocrText) {
             'Retorne apenas JSON valido, sem markdown.',
             'Estime odometer_km, fuel_level_percent, fuel_level_range, fuel_liters, fuel_amount, station_name, confidence, needs_review e summary quando estiverem visiveis.',
             'Use null para campos que nao estiverem visiveis ou confiaveis.',
+            'Para painel digital, leia odometer_km somente do valor ao lado de ODO. Nao use TRIP como kilometragem do veiculo.',
+            'Se aparecer ODO 10 e TRIP 16.3, retorne odometer_km=10 e ignore 16.3 para odometer_km.',
             'fuel_level_percent deve ser de 0 a 100.',
             'fuel_level_range deve ser reserva, baixo, meio, alto ou cheio.',
             'REGRA CRITICA PARA O SHINERAY TLUX T30 2025: o combustivel aparece como uma barra digital entre E e F com 8 pontos/barras no total.',
-            'Conte quantas barras claras/preenchidas aparecem entre E e F.',
+            'Conte somente os retangulos claros/preenchidos entre E e F. Ignore tracos horizontais, letras, icone de bomba e reflexos.',
             'Calcule fuel_level_percent = round((fuel_bars_filled / fuel_bars_total) * 100).',
             'Exemplo obrigatorio: se houver 4 barras preenchidas de 8, retorne fuel_bars_filled=4, fuel_bars_total=8, fuel_level_percent=50 e fuel_level_range="meio". Nao chame isso de baixo.',
+            'Exemplo obrigatorio: se houver 6 barras preenchidas de 8, retorne fuel_bars_filled=6, fuel_bars_total=8, fuel_level_percent=75 e fuel_level_range="alto".',
             'So use estimativa por faixa visual quando nao for possivel contar barras.',
             'Para saida e chegada, priorize painel: odometro e marcador de combustivel. Para abastecimento, tambem leia bomba/cupom se aparecer.',
             'Marque needs_review como true se a foto estiver inclinada, cortada, com reflexo, painel ilegivel, ou se combustivel tiver baixa confianca.',
@@ -167,8 +179,10 @@ async function runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, fi
             'Ignore tudo exceto o marcador de combustivel do painel, bomba ou comprovante.',
             'Procure ponteiro, barras digitais, letras E/F, reserva, escala de tanque e icones de combustivel.',
             'No Shineray TLux T30 2025, o marcador de combustivel digital tem 8 barras/pontos entre E e F.',
-            'Conte as barras preenchidas. A porcentagem deve ser round((barras preenchidas / 8) * 100).',
+            'Conte somente os retangulos claros/preenchidos entre E e F. Nao conte traco horizontal, letra E, letra F, icone de bomba, reflexo ou moldura.',
+            'A porcentagem deve ser round((barras preenchidas / 8) * 100).',
             'Se vir 4 barras preenchidas de 8, retorne exatamente 50%, fuel_level_range="meio" e summary dizendo que ha 4 de 8 barras.',
+            'Se vir 6 barras preenchidas de 8, retorne exatamente 75%, fuel_level_range="alto" e summary dizendo que ha 6 de 8 barras.',
             'Classifique fuel_level_range como reserva, baixo, meio, alto ou cheio.',
             'Nunca classifique 4 de 8 barras como baixo.',
             'Use needs_review true se o marcador nao estiver nitido.',
@@ -187,6 +201,59 @@ async function runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, fi
                 `OCR bruto: ${ocrText.slice(0, 3000)}.`,
                 `Primeira analise: ${JSON.stringify(firstAnalysis).slice(0, 3000)}.`,
                 'Reavalie somente o combustivel e responda em portugues do Brasil.',
+              ].join('\n'),
+            },
+          ],
+        },
+      ],
+    }),
+  })
+
+  const payload = await response.json().catch(() => null)
+  const content = payload?.choices?.[0]?.message?.content
+
+  if (!response.ok || !content) {
+    return null
+  }
+
+  return parseJsonContent(content)
+}
+
+async function runFocusedOdometerAnalysis(apiKey, imageInput, eventType, ocrText, firstAnalysis) {
+  const response = await fetch(`${ZAI_API_URL}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'glm-5v-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: [
+            'Voce e um verificador visual de odometro em painel de veiculo.',
+            'Responda apenas JSON valido em portugues do Brasil.',
+            'Leia somente o display central do painel quando houver ODO/TRIP.',
+            'odometer_km deve vir do valor ao lado de ODO. TRIP e a distancia parcial e nunca deve preencher odometer_km.',
+            'Se aparecer ODO 10 e TRIP 16.3, retorne odometer_km=10.',
+            'Se ODO estiver ilegivel ou coberto por reflexo, retorne odometer_km=null e needs_review=true.',
+            'Ignore velocimetro, conta-giros, temperatura e icones de aviso.',
+            'confidence deve ser decimal de 0 a 1.',
+            'Formato: {"odometer_km":number|null,"confidence":number,"needs_review":boolean,"summary":string}',
+          ].join('\n'),
+        },
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: imageInput } },
+            {
+              type: 'text',
+              text: [
+                `Tipo de registro: ${eventType}.`,
+                `OCR bruto: ${ocrText.slice(0, 3000)}.`,
+                `Primeira analise: ${JSON.stringify(firstAnalysis).slice(0, 3000)}.`,
+                'Reavalie somente o odometro/ODO e responda em portugues do Brasil.',
               ].join('\n'),
             },
           ],
@@ -229,7 +296,7 @@ export default async function handler(req, res) {
   const dataUrl = typeof body?.dataUrl === 'string' ? body.dataUrl : ''
   const imageUrl = typeof body?.imageUrl === 'string' ? body.imageUrl : ''
   const eventType = typeof body?.eventType === 'string' ? body.eventType : 'pickup'
-  const imageInput = imageUrl || dataUrl
+  const imageInput = dataUrl || imageUrl
 
   if (!imageInput || (!imageInput.startsWith('http') && !imageInput.startsWith('data:image/'))) {
     sendJson(res, 400, { error: 'Envie uma URL publica da imagem ou uma imagem em base64 data URL.' })
@@ -241,27 +308,39 @@ export default async function handler(req, res) {
     const initialAnalysis = await runVisionAnalysis(apiKey, imageInput, eventType, ocrText)
     let analysis = normalizeAnalysis(initialAnalysis)
 
-    if (analysis.needsReview || analysis.fuelLevelPercent == null) {
-      const focusedFuel = await runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, initialAnalysis)
-      if (focusedFuel) {
-        const focused = normalizeAnalysis({
-          ...initialAnalysis,
-          fuel_level_percent: focusedFuel.fuel_level_percent,
-          fuel_level_range: focusedFuel.fuel_level_range,
-          fuel_bars_filled: focusedFuel.fuel_bars_filled,
-          fuel_bars_total: focusedFuel.fuel_bars_total,
-          confidence: focusedFuel.confidence,
-          needs_review: focusedFuel.needs_review,
-          summary: focusedFuel.summary || initialAnalysis.summary,
-        })
-        analysis = {
-          ...analysis,
-          fuelLevelPercent: focused.fuelLevelPercent ?? analysis.fuelLevelPercent,
-          fuelLevelRange: focused.fuelLevelRange ?? analysis.fuelLevelRange,
-          confidence: Math.max(analysis.confidence ?? 0, focused.confidence ?? 0),
-          needsReview: focused.needsReview,
-          summary: focused.summary ?? analysis.summary,
-        }
+    const focusedFuel = await runFocusedFuelAnalysis(apiKey, imageInput, eventType, ocrText, initialAnalysis)
+    if (focusedFuel) {
+      const focused = normalizeAnalysis({
+        ...initialAnalysis,
+        fuel_level_percent: focusedFuel.fuel_level_percent,
+        fuel_level_range: focusedFuel.fuel_level_range,
+        fuel_bars_filled: focusedFuel.fuel_bars_filled,
+        fuel_bars_total: focusedFuel.fuel_bars_total,
+        confidence: focusedFuel.confidence,
+        needs_review: focusedFuel.needs_review,
+        summary: focusedFuel.summary || initialAnalysis.summary,
+      })
+      analysis = {
+        ...analysis,
+        fuelLevelPercent: focused.fuelLevelPercent ?? analysis.fuelLevelPercent,
+        fuelLevelRange: focused.fuelLevelRange ?? analysis.fuelLevelRange,
+        fuelBarsFilled: focused.fuelBarsFilled ?? analysis.fuelBarsFilled,
+        fuelBarsTotal: focused.fuelBarsTotal ?? analysis.fuelBarsTotal,
+        confidence: Math.min(analysis.confidence ?? 1, focused.confidence ?? 1),
+        needsReview: analysis.needsReview || focused.needsReview,
+        summary: focused.summary ?? analysis.summary,
+      }
+    }
+
+    const focusedOdometer = await runFocusedOdometerAnalysis(apiKey, imageInput, eventType, ocrText, initialAnalysis)
+    if (focusedOdometer) {
+      const focused = normalizeOdometerAnalysis(focusedOdometer)
+      analysis = {
+        ...analysis,
+        odometerKm: focused.odometerKm ?? analysis.odometerKm,
+        confidence: Math.min(analysis.confidence ?? 1, focused.confidence ?? 1),
+        needsReview: analysis.needsReview || focused.needsReview || focused.odometerKm == null,
+        summary: [analysis.summary, focused.summary].filter(Boolean).join(' '),
       }
     }
 
