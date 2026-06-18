@@ -87,6 +87,8 @@ VITE_SUPABASE_ANON_KEY=
 
 KIMI_API=
 ZAI_API_KEY=
+VEHICLE_CV_SERVICE_URL=
+VEHICLE_CV_SERVICE_TOKEN=
 
 TELEGRAM_BOT_TOKEN=
 TELEGRAM_CHAT_ID=
@@ -101,7 +103,9 @@ TELEGRAM_CHANNEL_URL=
 ### Opcionais conforme recurso
 
 - `KIMI_API`: usada em `api/kimi-stock-import.js` para importacao inteligente de documentos.
-- `ZAI_API_KEY`: usada em `api/vehicle-image-analysis.js` para analise de imagens de veiculos.
+- `VEHICLE_CV_SERVICE_URL`: URL do serviço Python em `vehicle-cv-service/`. Esta e a via rapida e deterministica para leitura de painel.
+- `VEHICLE_CV_SERVICE_TOKEN`: segredo compartilhado entre a Vercel e o serviço Python; use o mesmo valor nos dois ambientes.
+- `ZAI_API_KEY`: fallback visual usado somente quando a leitura Python estiver ausente ou abaixo da confianca minima.
 - `TELEGRAM_BOT_TOKEN`: token do bot Telegram.
 - `TELEGRAM_CHAT_ID`: canal, grupo ou chat numerico para envio de notificacoes.
 - `TELEGRAM_CHANNEL_URL`: link publico ou convite do canal, usado como apoio visual.
@@ -163,6 +167,22 @@ O arquivo `vercel.json` usa:
 antes do fallback para `index.html`, preservando as rotas `/api/*` e mantendo o roteamento SPA funcionando.
 
 No deploy, configure as mesmas variaveis de ambiente usadas localmente.
+
+### Visao computacional dos veiculos
+
+O diretório `vehicle-cv-service/` contém um serviço FastAPI/OpenCV independente,
+com Dockerfile e configurações para Render e Railway. O app primeiro otimiza a
+imagem para 1600 px, envia a evidência ao Supabase e chama o serviço Python. A
+IA generativa não participa quando ODO e combustível são reconhecidos com
+confiança; quando necessária, existe somente uma chamada de fallback.
+
+O usuário pode salvar o registro durante a análise. O registro fica marcado
+para revisão e é atualizado quando a leitura termina, sem manter o modal
+bloqueado.
+
+O endpoint `GET /v1/markers/{codigo}.png` gera um QR para identificação do
+veículo. Para que o marcador também corrija perspectiva, ele deve ser colado em
+posição fixa e passar por calibração geométrica com o painel real.
 
 ## Qualidade e Manutencao
 

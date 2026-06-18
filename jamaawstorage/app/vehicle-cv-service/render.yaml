@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: jamaaw-vehicle-cv
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: ALLOWED_IMAGE_HOSTS
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: VEHICLE_CV_SERVICE_TOKEN
+        generateValue: true

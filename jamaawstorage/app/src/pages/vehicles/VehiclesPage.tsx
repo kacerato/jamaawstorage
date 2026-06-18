@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
-import { Camera, Car, FileText, Fuel, Gauge, Pencil, Plus, Trash2, UserRound, Warehouse } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { Camera, Car, FileText, Fuel, Gauge, Pencil, Plus, QrCode, Trash2, UserRound, Warehouse } from 'lucide-react'
 import type { Tables } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { uploadFileToStorage, uploadImageToStorage } from '../../lib/storage'
@@ -12,9 +12,33 @@ type FuelLevelRange = 'reserva' | 'baixo' | 'meio' | 'alto' | 'cheio'
 
 const VEHICLE_LOG_IMAGE_OPTIONS = {
   maxFileSizeMb: 18,
-  maxDimension: 3600,
-  quality: 0.96,
+  maxDimension: 1600,
+  quality: 0.84,
 } as const
+
+interface VehicleImageAnalysis {
+  odometerKm: number | null
+  fuelLevelPercent: number | null
+  fuelLevelRange: FuelLevelRange | null
+  fuelBarsFilled: number | null
+  fuelBarsTotal: number | null
+  fuelLiters: number | null
+  fuelAmount: number | null
+  stationName: string | null
+  ocrText: string | null
+  summary: string | null
+  confidence: number | null
+  needsReview: boolean
+  method?: string
+  qrPayload?: string | null
+  timingsMs?: { total?: number }
+}
+
+interface PendingVehicleAnalysis {
+  savedLogId: string | null
+  saveCompleted: Promise<void> | null
+  preserveManual: Partial<Record<keyof LogFormState, boolean>>
+}
 
 interface VehicleRow {
   id: string
@@ -172,7 +196,10 @@ export function VehiclesPage() {
   const [loading, setLoading] = useState(true)
   const [savingVehicle, setSavingVehicle] = useState(false)
   const [savingLog, setSavingLog] = useState(false)
+  const [uploadingLogImage, setUploadingLogImage] = useState(false)
   const [analyzingImage, setAnalyzingImage] = useState(false)
+  const [analysisMethod, setAnalysisMethod] = useState<string | null>(null)
+  const [analysisDurationMs, setAnalysisDurationMs] = useState<number | null>(null)
   const [showVehicleModal, setShowVehicleModal] = useState(false)
   const [showLogModal, setShowLogModal] = useState(false)
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
@@ -180,6 +207,7 @@ export function VehiclesPage() {
   const [vehicleForm, setVehicleForm] = useState<VehicleFormState>(initialVehicleForm)
   const [logForm, setLogForm] = useState<LogFormState>(initialLogForm)
   const [error, setError] = useState<string | null>(null)
+  const pendingAnalysisRef = useRef<PendingVehicleAnalysis | null>(null)
 
   const selectedVehicle = useMemo(
     () => vehicles.find((vehicle) => vehicle.id === selectedVehicleId) ?? vehicles[0] ?? null,
@@ -261,12 +289,20 @@ export function VehiclesPage() {
   }
 
   const openCreateLogModal = () => {
+    pendingAnalysisRef.current = null
+    setAnalyzingImage(false)
+    setUploadingLogImage(false)
     setEditingLogId(null)
     setLogForm(initialLogForm)
+    setAnalysisMethod(null)
+    setAnalysisDurationMs(null)
     setShowLogModal(true)
   }
 
   const openEditLogModal = (log: VehicleLogRow) => {
+    pendingAnalysisRef.current = null
+    setAnalyzingImage(false)
+    setUploadingLogImage(false)
     setEditingLogId(log.id)
     setLogForm({
       event_type: log.event_type,
@@ -289,6 +325,7 @@ export function VehiclesPage() {
   }
 
   const closeLogModal = () => {
+    pendingAnalysisRef.current = null
     setShowLogModal(false)
     setEditingLogId(null)
     setLogForm(initialLogForm)
@@ -387,48 +424,88 @@ export function VehiclesPage() {
     const file = event.target.files?.[0]
     if (!file || !selectedVehicle) return
 
-    setAnalyzingImage(true)
+    setUploadingLogImage(true)
+    setAnalysisMethod(null)
+    setAnalysisDurationMs(null)
     setError(null)
+    let storageUrl: string | null = null
+    let analysisJob: PendingVehicleAnalysis | null = null
     try {
-      const storageUrl = await uploadImageToStorage({
+      storageUrl = await uploadImageToStorage({
         file,
         scope: 'vehicles/logs',
         entityId: selectedVehicle.id,
         options: VEHICLE_LOG_IMAGE_OPTIONS,
       })
+      setLogForm((prev) => ({ ...prev, photo_url: storageUrl }))
+      setUploadingLogImage(false)
+      setAnalyzingImage(true)
+
+      analysisJob = { savedLogId: null, saveCompleted: null, preserveManual: {} }
+      pendingAnalysisRef.current = analysisJob
       const analysisResponse = await fetch('/api/vehicle-image-analysis', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ imageUrl: storageUrl, eventType: logForm.event_type }),
       })
-      const analysis = await analysisResponse.json().catch(() => null)
+      const analysis = await analysisResponse.json().catch(() => null) as VehicleImageAnalysis | null
       if (!analysisResponse.ok) {
-        setLogForm((prev) => ({ ...prev, photo_url: storageUrl }))
-        throw new Error(analysis?.error || 'Nao foi possivel analisar a imagem.')
+        const responseError = analysis as unknown as { error?: string } | null
+        throw new Error(responseError?.error || 'Nao foi possivel analisar a imagem.')
       }
+      if (!analysis) throw new Error('A analise retornou uma resposta vazia.')
 
-      setLogForm((prev) => ({
-        ...prev,
-        photo_url: storageUrl,
-        odometer_km: analysis.odometerKm != null ? String(analysis.odometerKm) : prev.odometer_km,
-        fuel_level_percent: analysis.fuelLevelPercent != null ? String(analysis.fuelLevelPercent) : prev.fuel_level_percent,
-        fuel_level_range: analysis.fuelLevelRange ?? prev.fuel_level_range,
-        fuel_bars_filled: analysis.fuelBarsFilled != null ? String(analysis.fuelBarsFilled) : prev.fuel_bars_filled,
-        fuel_bars_total: analysis.fuelBarsTotal != null ? String(analysis.fuelBarsTotal) : prev.fuel_bars_total,
-        fuel_liters: analysis.fuelLiters != null ? String(analysis.fuelLiters) : prev.fuel_liters,
-        fuel_amount: analysis.fuelAmount != null ? String(analysis.fuelAmount) : prev.fuel_amount,
-        station_name: analysis.stationName ?? prev.station_name,
-        ocr_text: analysis.ocrText ?? null,
-        ai_summary: analysis.summary ?? null,
-        ai_confidence: analysis.confidence ?? null,
-        needs_review: Boolean(analysis.needsReview),
-      }))
+      setAnalysisMethod(analysis.method ?? null)
+      setAnalysisDurationMs(analysis.timingsMs?.total ?? null)
+
+      if (analysisJob.savedLogId) {
+        if (analysisJob.saveCompleted) await analysisJob.saveCompleted
+        if (!analysisJob.savedLogId) return
+        const preserve = analysisJob.preserveManual
+        const persistedPayload = {
+          ...(!preserve.odometer_km ? { odometer_km: analysis.odometerKm } : {}),
+          ...(!preserve.fuel_level_percent ? { fuel_level_percent: analysis.fuelLevelPercent } : {}),
+          ...(!preserve.fuel_level_range ? { fuel_level_range: analysis.fuelLevelRange } : {}),
+          ...(!preserve.fuel_bars_filled ? { fuel_bars_filled: analysis.fuelBarsFilled } : {}),
+          ...(!preserve.fuel_bars_total ? { fuel_bars_total: analysis.fuelBarsTotal } : {}),
+          ...(!preserve.fuel_liters ? { fuel_liters: analysis.fuelLiters } : {}),
+          ...(!preserve.fuel_amount ? { fuel_amount: analysis.fuelAmount } : {}),
+          ...(!preserve.station_name ? { station_name: analysis.stationName } : {}),
+          ocr_text: analysis.ocrText,
+          ai_summary: analysis.summary,
+          ai_confidence: analysis.confidence,
+          needs_review: Boolean(analysis.needsReview),
+        }
+        const updateResult = await db.from('vehicle_usage_logs').update(persistedPayload).eq('id', analysisJob.savedLogId)
+        if (updateResult.error) throw new Error(updateResult.error.message)
+        await load()
+      } else if (pendingAnalysisRef.current === analysisJob) {
+        setLogForm((prev) => ({
+          ...prev,
+          photo_url: storageUrl,
+          odometer_km: analysis.odometerKm != null ? String(analysis.odometerKm) : prev.odometer_km,
+          fuel_level_percent: analysis.fuelLevelPercent != null ? String(analysis.fuelLevelPercent) : prev.fuel_level_percent,
+          fuel_level_range: analysis.fuelLevelRange ?? prev.fuel_level_range,
+          fuel_bars_filled: analysis.fuelBarsFilled != null ? String(analysis.fuelBarsFilled) : prev.fuel_bars_filled,
+          fuel_bars_total: analysis.fuelBarsTotal != null ? String(analysis.fuelBarsTotal) : prev.fuel_bars_total,
+          fuel_liters: analysis.fuelLiters != null ? String(analysis.fuelLiters) : prev.fuel_liters,
+          fuel_amount: analysis.fuelAmount != null ? String(analysis.fuelAmount) : prev.fuel_amount,
+          station_name: analysis.stationName ?? prev.station_name,
+          ocr_text: analysis.ocrText ?? null,
+          ai_summary: analysis.summary ?? null,
+          ai_confidence: analysis.confidence ?? null,
+          needs_review: Boolean(analysis.needsReview),
+        }))
+      }
     } catch (uploadError) {
       setError(uploadError instanceof Error
         ? `${uploadError.message} A foto ficou anexada; revise os campos e salve manualmente se necessario.`
         : 'Nao foi possivel processar a foto do registro. A foto ficou anexada; revise os campos e salve manualmente se necessario.')
     } finally {
-      setAnalyzingImage(false)
+      setUploadingLogImage(false)
+      if (!analysisJob || pendingAnalysisRef.current === analysisJob || pendingAnalysisRef.current === null) {
+        setAnalyzingImage(false)
+      }
       event.target.value = ''
     }
   }
@@ -459,13 +536,39 @@ export function VehiclesPage() {
         ocr_text: logForm.ocr_text,
         ai_summary: logForm.ai_summary,
         ai_confidence: logForm.ai_confidence,
-        needs_review: logForm.needs_review,
+        needs_review: analyzingImage ? true : logForm.needs_review,
         notes: logForm.notes.trim() || null,
       }
-      const result = editingLogId
-        ? await db.from('vehicle_usage_logs').update(payload).eq('id', editingLogId)
-        : await (db.from('vehicle_usage_logs').insert(payload) as PromiseLike<{ error: { message: string } | null }>)
-      if (result.error) throw new Error(result.error.message)
+      const targetLogId = editingLogId ?? crypto.randomUUID()
+      const pendingJob = pendingAnalysisRef.current && analyzingImage ? pendingAnalysisRef.current : null
+      const pendingSaveGate: { resolve?: () => void } = {}
+      if (pendingJob) {
+        pendingJob.savedLogId = targetLogId
+        pendingJob.preserveManual = {
+          odometer_km: Boolean(logForm.odometer_km),
+          fuel_level_percent: Boolean(logForm.fuel_level_percent),
+          fuel_level_range: Boolean(logForm.fuel_level_range),
+          fuel_bars_filled: Boolean(logForm.fuel_bars_filled),
+          fuel_bars_total: Boolean(logForm.fuel_bars_total),
+          fuel_liters: Boolean(logForm.fuel_liters),
+          fuel_amount: Boolean(logForm.fuel_amount),
+          station_name: Boolean(logForm.station_name.trim()),
+        }
+        pendingJob.saveCompleted = new Promise((resolve) => {
+          pendingSaveGate.resolve = resolve
+        })
+      }
+      try {
+        const result = editingLogId
+          ? await db.from('vehicle_usage_logs').update(payload).eq('id', editingLogId)
+          : await (db.from('vehicle_usage_logs').insert({ id: targetLogId, ...payload }) as PromiseLike<{ error: { message: string } | null }>)
+        if (result.error) {
+          if (pendingJob) pendingJob.savedLogId = null
+          throw new Error(result.error.message)
+        }
+      } finally {
+        pendingSaveGate.resolve?.()
+      }
 
       closeLogModal()
       await load()
@@ -516,6 +619,15 @@ export function VehiclesPage() {
           <Button onClick={openCreateLogModal} disabled={!selectedVehicle} leftIcon={<Camera size={16} />}>
             Registrar uso
           </Button>
+          {selectedVehicle ? (
+            <a
+              href={`/api/vehicle-marker?code=${encodeURIComponent(selectedVehicle.code)}`}
+              download={`${selectedVehicle.code}-marker.png`}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10"
+            >
+              <QrCode size={16} /> Baixar QR
+            </a>
+          ) : null}
         </div>
       </div>
 
@@ -747,8 +859,8 @@ export function VehiclesPage() {
                   </div>
                 )}
               </div>
-              <input type="file" accept="image/*" onChange={(event) => void handleLogPhoto(event)} disabled={analyzingImage} className="mt-4 block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white" />
-              <p className="mt-2 text-xs text-gray-500">A foto passa por OCR e dupla conferencia visual em alta resolucao para preencher km e combustivel.</p>
+              <input type="file" accept="image/*" onChange={(event) => void handleLogPhoto(event)} disabled={uploadingLogImage || analyzingImage} className="mt-4 block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white" />
+              <p className="mt-2 text-xs text-gray-500">A imagem recebida e otimizada, enviada e lida primeiro por visao computacional local. A IA so entra quando houver duvida.</p>
             </div>
           </div>
 
@@ -759,9 +871,11 @@ export function VehiclesPage() {
               <MiniMetric label="Barras" value={logForm.fuel_bars_filled && logForm.fuel_bars_total ? `${logForm.fuel_bars_filled}/${logForm.fuel_bars_total}` : '-'} />
             </div>
             <div className="mt-3">
-              <MiniMetric label="Confianca IA" value={logForm.ai_confidence != null ? `${Math.round(logForm.ai_confidence * 100)}%` : '-'} />
+              <MiniMetric label="Confianca da leitura" value={logForm.ai_confidence != null ? `${Math.round(logForm.ai_confidence * 100)}%` : '-'} />
             </div>
-            {analyzingImage ? <p className="mt-2 text-xs text-orange-300">Analisando imagem...</p> : null}
+            {uploadingLogImage ? <p className="mt-2 text-xs text-orange-300">Enviando imagem otimizada...</p> : null}
+            {analyzingImage ? <p className="mt-2 text-xs text-orange-300">Leitura computacional em andamento. Voce ja pode salvar e continuar.</p> : null}
+            {analysisMethod ? <p className="mt-2 text-xs text-emerald-300">Metodo: {analysisMethod}{analysisDurationMs != null ? ` • ${Math.round(analysisDurationMs)} ms` : ''}</p> : null}
             {logForm.needs_review ? (
               <Alert variant="warning" className="mt-3">
                 A leitura do combustivel precisa de conferencia manual antes de salvar.
@@ -772,8 +886,8 @@ export function VehiclesPage() {
           <Input label="Observacoes" value={logForm.notes} onChange={(event) => setLogForm((prev) => ({ ...prev, notes: event.target.value }))} />
           <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
             <Button variant="secondary" onClick={closeLogModal}>Cancelar</Button>
-            <Button onClick={() => void handleSaveLog()} isLoading={savingLog} disabled={analyzingImage}>
-              {editingLogId ? 'Salvar alteracoes' : 'Salvar registro'}
+            <Button onClick={() => void handleSaveLog()} isLoading={savingLog} disabled={uploadingLogImage}>
+              {analyzingImage ? 'Salvar e continuar analise' : editingLogId ? 'Salvar alteracoes' : 'Salvar registro'}
             </Button>
           </div>
         </div>
