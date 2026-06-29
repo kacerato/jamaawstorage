@@ -4,7 +4,7 @@ import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { recognize } from 'tesseract.js'
 import { supabase } from '../../lib/supabase'
 import type { Tables } from '../../types/database'
-import { Alert, Button, Input, Select } from '../../components/ui'
+import { Alert, Button, InfoTip, Input, SectionLabel, Select } from '../../components/ui'
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = pdfWorkerUrl
 
@@ -1003,7 +1003,10 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
       {submitError && <Alert variant="danger">{submitError}</Alert>}
 
       <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
-        <p className="mb-2 text-sm font-semibold text-white">1. Envie um arquivo</p>
+        <div className="mb-2 flex items-center gap-2">
+          <p className="text-sm font-semibold text-white">1. Envie um arquivo</p>
+          <InfoTip text="Use OCR local para PDFs. Use Kimi quando o arquivo for imagem ou quando precisar de leitura estruturada." />
+        </div>
         <div className="mb-3 max-w-sm">
           <Select
             label="Modo de leitura"
@@ -1021,11 +1024,6 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
           onChange={handleFileChange}
           className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
         />
-        <p className="mt-2 text-xs text-gray-500">
-          {extractionMode === 'kimi'
-            ? 'Kimi recebe PDF ou imagem, devolve XML estruturado e tenta atribuir o item certo sem diferenca por maiuscula.'
-            : 'PDF com texto usa leitura direta. PDF escaneado recebe OCR reforcado por pagina.'}
-        </p>
       </div>
 
       {sourceFile && (
@@ -1033,11 +1031,6 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="flex-1">
               <p className="text-sm font-semibold text-white">{sourceLabel}</p>
-              <p className="mt-1 text-xs text-gray-500">
-                {extractionMode === 'kimi'
-                  ? 'Fluxo Kimi: upload seguro no backend, leitura estruturada e retorno em XML com sugestao de atribuicao.'
-                  : 'Fluxo PDF-first: leitura direta do documento e OCR por pagina para reforco.'}
-              </p>
             </div>
 
             <div className="flex flex-col gap-3">
@@ -1065,14 +1058,15 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-white">
-                  {contentFormat === 'structured-xml' ? '2. XML extraido' : '2. Texto extraido'}
-                </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  {contentFormat === 'structured-xml'
-                    ? 'Pode revisar o XML da Kimi e reprocessar. Os itens atribuídos continuam sendo validados contra o estoque local.'
-                    : 'Edite se necessario e reprocesse. Isso evita perder item por OCR imperfeito.'}
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold text-white">
+                    {contentFormat === 'structured-xml' ? '2. XML extraido' : '2. Texto extraido'}
+                  </p>
+                  <InfoTip text={contentFormat === 'structured-xml'
+                    ? 'Revise o XML se precisar e reprocesse. A atribuicao final ainda valida contra o estoque local.'
+                    : 'Edite somente se a leitura falhar ou omitir linhas importantes.'}
+                  />
+                </div>
               </div>
               <Button
                 variant="secondary"
@@ -1099,15 +1093,17 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
       {lines.length > 0 && (
         <div className="flex flex-col gap-3">
           <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
-            <p className="text-sm font-semibold text-white">3. Revise itens reconhecidos</p>
-            <p className="mt-1 text-xs text-gray-500">Linhas confiantes sao autoatribuidas. Linhas fracas ficam para revisao manual.</p>
+            <div className="flex items-center gap-2">
+              <p className="text-sm font-semibold text-white">3. Revise itens reconhecidos</p>
+              <InfoTip text="Linhas confiantes sao autoatribuidas. Linhas fracas ficam para escolha manual." />
+            </div>
           </div>
 
           {lines.map((line) => (
             <div key={line.id} className="rounded-2xl border border-white/8 bg-[#111215] p-4">
               <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[1.2fr_180px_1.2fr] lg:items-end">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Texto lido</p>
+                  <SectionLabel label="Texto lido" info="Edite o nome se a leitura veio com ruido. Isso recalcula a sugestao do item." />
                   <Input
                     value={line.rawLabel}
                     onChange={(event) => {

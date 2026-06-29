@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { formatQuantity } from '../../lib/utils'
-import { Alert, Button, Input, Select } from '../../components/ui'
+import { Alert, Button, InfoTip, Input, SectionLabel, Select } from '../../components/ui'
 import { ItemVisual } from '../../components/items/ItemVisual'
 import { StockItemPicker } from '../../components/items/StockItemPicker'
 
@@ -317,9 +317,10 @@ export function PersonInventoryModal({
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-gray-400">
-        Adicionar itens ou kits ao inventario de <span className="font-medium text-white">{personName}</span>
-      </p>
+      <div className="flex items-center gap-2 text-sm text-gray-400">
+        <span>Inventario de <span className="font-medium text-white">{personName}</span></span>
+        <InfoTip text="Monte uma fila com itens avulsos ou kits. Ao confirmar, o estoque baixa e o inventario da pessoa aumenta na mesma operacao." />
+      </div>
       {inventoryStockItemIds.size > 0 && (
         <div className="rounded-2xl border border-amber-400/15 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
           Itens que ja estao no inventario nao entram nesta lista. Para substituir, ajuste a quantidade atual e depois registre a nova retirada.
@@ -486,8 +487,10 @@ export function PersonInventoryModal({
 
               <div className="rounded-2xl border border-white/8 bg-[#111217]">
                 <div className="border-b border-white/8 px-4 py-3">
-                  <h4 className="text-sm font-semibold text-white">Fila de atribuicao</h4>
-                  <p className="mt-1 text-xs text-gray-500">Painel compacto para montar lotes grandes sem descer a tela inteira.</p>
+                  <div className="flex items-center gap-2">
+                    <h4 className="text-sm font-semibold text-white">Fila de atribuicao</h4>
+                    <InfoTip text="A fila junta itens e kits antes de confirmar. Voce pode remover entradas sem afetar o estoque." />
+                  </div>
                 </div>
                 {pendingEntries.length === 0 ? (
                   <p className="px-4 py-8 text-sm text-gray-500">
@@ -531,7 +534,7 @@ export function PersonInventoryModal({
 
               {summarizedItems.length > 0 && (
                 <div className="rounded-2xl border border-emerald-400/10 bg-emerald-500/5 p-4 text-sm text-gray-300">
-                  <p className="font-medium text-white">Resumo final da movimentacao</p>
+                  <SectionLabel label="Resumo final" info="Quantidade total que sera atribuida ao inventario dessa pessoa." />
                   <div className="mt-3 flex max-h-40 flex-col gap-2 overflow-y-auto">
                     {summarizedItems.map((item) => (
                       <div key={item.stock_item_id} className="flex items-center justify-between gap-3">

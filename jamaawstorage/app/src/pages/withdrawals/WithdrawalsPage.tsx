@@ -3,7 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import type { WithdrawalListItem, WithdrawalStatus } from '../../types'
 import type { Tables } from '../../types/database'
-import { Button, Input, Select, Badge, DataTable, EmptyState, Alert } from '../../components/ui'
+import { Button, Input, Select, Badge, DataTable, EmptyState, Alert, InfoTip } from '../../components/ui'
 import { ClipboardIcon } from '../../components/icons'
 import { formatDateTime } from '../../lib/utils'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
@@ -276,10 +276,10 @@ export function WithdrawalsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Retiradas</h2>
-          <p className="mt-1 text-sm text-gray-400">
-            Registro e acompanhamento de retiradas de EPIs e materiais
-          </p>
+          <div className="flex items-center gap-2">
+            <h2 className="text-2xl font-bold text-white">Retiradas</h2>
+            <InfoTip text="Acompanhe retiradas, filtre por status, solicitante ou periodo, e abra uma retirada para editar ou gerar termos." />
+          </div>
         </div>
         <Button
           onClick={() => navigate('/withdrawals/new')}
@@ -298,6 +298,10 @@ export function WithdrawalsPage() {
       )}
 
       <div className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 p-4">
+        <div className="flex items-center gap-2">
+          <p className="text-sm font-semibold text-white">Filtros</p>
+          <InfoTip text="Os filtros atualizam a lista automaticamente." />
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-48">
             <Input

@@ -10,6 +10,7 @@ import {
   Card,
   EmptyState,
   Modal,
+  SectionLabel,
   Select,
   Spinner,
 } from '../../components/ui'
@@ -868,7 +869,7 @@ export function EditWithdrawalPage() {
 
             <div className="grid gap-4 md:grid-cols-[170px_minmax(0,1fr)]">
               <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
-                <label className="text-sm font-medium text-gray-300">Quantidade</label>
+                <SectionLabel label="Quantidade" info="Altere o total desta linha. Para mandar parte para outro destino, use Separar quantidade." />
                 <input
                   type="number"
                   min={1}
@@ -897,7 +898,7 @@ export function EditWithdrawalPage() {
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex items-center justify-between gap-3">
-                    <label className="text-sm font-medium text-white">Separar quantidade</label>
+                    <SectionLabel label="Separar quantidade" info="Cria uma nova linha com a quantidade escolhida. Depois escolha o destino dessa nova linha." className="mb-0" />
                     <span className="text-xs text-gray-500">Max. {maxSplitQuantity(editingItem)} {editingItem.unit}</span>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">

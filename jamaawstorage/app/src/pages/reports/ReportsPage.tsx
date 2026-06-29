@@ -13,6 +13,7 @@ import {
   DataTable,
   Alert,
   EmptyState,
+  InfoTip,
   StatCard,
   Spinner,
 } from '../../components/ui'
@@ -238,20 +239,20 @@ export function ReportsPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-2xl font-bold text-white">Relatorios</h2>
-        <p className="mt-1 text-sm text-gray-400">
-          Relatorios de retiradas, consumo e estoque
-        </p>
+        <div className="flex items-center gap-2">
+          <h2 className="text-2xl font-bold text-white">Relatorios</h2>
+          <InfoTip text="Relatorios de retiradas, consumo e estoque. Use filtros antes de exportar CSV ou PDF." />
+        </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto rounded-xl bg-gray-900 p-1">
+      <div className="flex gap-1 overflow-x-auto rounded-2xl border border-white/8 bg-gray-900 p-1">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => setActiveTab(tab.key)}
             className={cn(
-              'whitespace-nowrap rounded-lg px-4 py-2 text-sm font-medium transition-colors',
+              'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors',
               activeTab === tab.key
                 ? 'bg-orange-500 text-white'
                 : 'text-gray-400 hover:bg-gray-800 hover:text-white',
@@ -518,6 +519,10 @@ function MovementsTab() {
   return (
     <div className="flex flex-col gap-4">
       <Card variant="bordered" padding="md">
+        <div className="mb-3 flex items-center gap-2">
+          <p className="text-sm font-semibold text-white">Filtros e exportacao</p>
+          <InfoTip text="Os filtros afetam a tabela e os arquivos exportados." />
+        </div>
         <div className="flex flex-wrap items-end gap-3">
           <div className="w-40">
             <Input
@@ -567,7 +572,7 @@ function MovementsTab() {
               onChange={(e) => setItemFilter(e.target.value)}
             />
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="secondary"
               size="sm"
