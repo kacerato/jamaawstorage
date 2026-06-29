@@ -11,7 +11,9 @@ import {
   DataTable,
   EmptyState,
   Input,
+  InfoTip,
   Modal,
+  SectionLabel,
   Select,
   Spinner,
 } from '../../components/ui'
@@ -1112,10 +1114,10 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             <Card variant="bordered" className="border-white/8 bg-white/3">
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div>
-                  <p className="text-sm font-medium text-white">Selecionar itens devolvidos</p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Use a busca nativa do estoque e clique para adicionar varios itens de uma vez.
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium text-white">Selecionar itens devolvidos</p>
+                    <InfoTip text="Busque no estoque e clique para adicionar varios itens na mesma triagem." />
+                  </div>
                 </div>
                 <div className="rounded-full border border-white/8 bg-black/20 px-3 py-1 text-xs text-gray-400">
                   {form.items.length} item(ns)
@@ -1132,10 +1134,10 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
 
             <Card variant="bordered" className="border-white/8 bg-[#101115]">
               <div className="mb-3">
-                <p className="text-sm font-medium text-white">Itens escolhidos</p>
-                <p className="mt-1 text-xs text-gray-500">
-                  Ajuste a quantidade de cada item antes de registrar a triagem.
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-medium text-white">Itens escolhidos</p>
+                  <InfoTip text="Confira quantidade e estado de cada item antes de registrar a triagem." />
+                </div>
               </div>
 
               {formErrors.items && (
@@ -1199,7 +1201,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                               </div>
 
                               <div className="space-y-2">
-                                <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Estado do item</p>
+                                <SectionLabel label="Estado do item" info="Usado volta como material reaproveitavel. Com avaria fica separado para avaliacao ou baixa." />
                                 <div className="grid gap-2">
                                   {([
                                     {

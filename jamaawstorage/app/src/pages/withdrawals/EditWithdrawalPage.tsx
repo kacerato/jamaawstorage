@@ -10,6 +10,7 @@ import {
   Card,
   EmptyState,
   Modal,
+  SectionLabel,
   Select,
   Spinner,
 } from '../../components/ui'
@@ -118,6 +119,7 @@ export function EditWithdrawalPage() {
   const [showItemSelector, setShowItemSelector] = useState(false)
   const [showKitSelector, setShowKitSelector] = useState(false)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
+  const [splitQuantity, setSplitQuantity] = useState('')
 
   useEffect(() => {
     if (!id) return
@@ -267,6 +269,22 @@ export function EditWithdrawalPage() {
 
   const computeMaxAvailable = (item: EditableWithdrawalItem): number => {
     return item.stock_item.current_quantity + (originalQuantities.get(item.stock_item_id) ?? 0)
+  }
+
+  const defaultSplitQuantity = (item: EditableWithdrawalItem): number => {
+    return Math.max(1, Math.floor(item.quantity / 2))
+  }
+
+  const maxSplitQuantity = (item: EditableWithdrawalItem): number => {
+    return Math.max(1, item.quantity - 1)
+  }
+
+  const openItemAdjustModal = (entryId: string, mode: 'edit' | 'split' = 'edit') => {
+    const targetItem = items.find((item) => item.entry_id === entryId)
+    if (!targetItem) return
+
+    setEditingItemId(entryId)
+    setSplitQuantity(mode === 'split' && targetItem.quantity > 1 ? String(defaultSplitQuantity(targetItem)) : '')
   }
 
   const refreshStockSnapshot = async () => {
@@ -438,20 +456,27 @@ export function EditWithdrawalPage() {
     setSaveError(null)
   }
 
-  const handleSplitItem = (entryId: string) => {
-    setItems((current) => {
-      const targetItem = current.find((item) => item.entry_id === entryId)
-      if (!targetItem || targetItem.quantity <= 1) return current
+  const handleSplitItem = (entryId: string, quantityToSplit: number) => {
+    const targetItem = items.find((item) => item.entry_id === entryId)
+    if (!targetItem || targetItem.quantity <= 1) return
 
+    const normalizedQuantity = Math.trunc(quantityToSplit)
+    if (!Number.isFinite(normalizedQuantity) || normalizedQuantity <= 0 || normalizedQuantity >= targetItem.quantity) {
+      setSaveError(`Informe uma quantidade entre 1 e ${targetItem.quantity - 1} para separar.`)
+      return
+    }
+
+    setItems((current) => {
       return current.flatMap((item) => {
         if (item.entry_id !== entryId) return [item]
 
         return [
-          { ...item, quantity: item.quantity - 1 },
-          { ...item, entry_id: createEntryId(), withdrawal_item_id: null, quantity: 1 },
+          { ...item, quantity: item.quantity - normalizedQuantity },
+          { ...item, entry_id: createEntryId(), withdrawal_item_id: null, quantity: normalizedQuantity },
         ]
       })
     })
+    setSplitQuantity('')
     setSaveError(null)
   }
 
@@ -576,7 +601,7 @@ export function EditWithdrawalPage() {
             </Badge>
           </div>
           <p className="mt-1 text-sm text-gray-400">
-            Ajuste itens, destino e observacoes. Toda alteracao continuara registrada na auditoria.
+            Ajuste itens, destinos e observacoes.
           </p>
         </div>
         <Button variant="ghost" onClick={() => navigate(`/withdrawals/${withdrawal.id}`)}>
@@ -615,9 +640,6 @@ export function EditWithdrawalPage() {
                 />
               </div>
             </div>
-            <Alert variant="info" className="mt-4">
-              O destino da retirada agora fica em cada item. Use Ajustar em cada linha para trocar entre colaborador e obra.
-            </Alert>
           </Card>
 
           <Card variant="bordered" padding="lg">
@@ -627,9 +649,6 @@ export function EditWithdrawalPage() {
                   <PackageIcon size={18} className="text-orange-300" />
                   <h3 className="text-lg font-semibold text-white">Itens da Retirada</h3>
                 </div>
-                <p className="mt-1 text-xs text-gray-500">
-                  O saldo considera esta propria retirada, entao voce pode corrigir quantidades sem perder o item atual.
-                </p>
               </div>
               <div className="flex gap-2">
                 <Button
@@ -699,7 +718,7 @@ export function EditWithdrawalPage() {
                           type="button"
                           variant="secondary"
                           size="sm"
-                          onClick={() => setEditingItemId(item.entry_id)}
+                          onClick={() => openItemAdjustModal(item.entry_id)}
                         >
                           Ajustar
                         </Button>
@@ -708,9 +727,9 @@ export function EditWithdrawalPage() {
                           variant="outline"
                           size="sm"
                           disabled={item.quantity <= 1}
-                          onClick={() => handleSplitItem(item.entry_id)}
+                          onClick={() => openItemAdjustModal(item.entry_id, 'split')}
                         >
-                          Dividir
+                          Separar
                         </Button>
                         <Button
                           type="button"
@@ -729,13 +748,10 @@ export function EditWithdrawalPage() {
           </Card>
 
           <Card variant="bordered" padding="lg">
-            <div className="mb-4 flex items-center gap-2">
+            <div className="flex items-center gap-2">
               <SignatureIcon size={18} className="text-orange-300" />
               <h3 className="text-lg font-semibold text-white">Assinaturas e Comprovantes</h3>
             </div>
-            <p className="text-sm text-gray-400">
-              A edicao preserva as assinaturas, foto e anexos ja existentes. Esta tela altera somente o conteudo operacional da retirada.
-            </p>
           </Card>
         </div>
 
@@ -771,9 +787,6 @@ export function EditWithdrawalPage() {
 
           <div className="rounded-2xl border border-white/8 bg-[#111217] p-4">
             <p className="font-medium text-white">Termo de retirada PDF</p>
-            <p className="mt-2 text-sm text-gray-400">
-              Gere com os itens e destinos que estao nesta edicao antes de salvar ou anexar nova assinatura.
-            </p>
             <div className="mt-4 flex flex-col gap-2">
               <Button
                 type="button"
@@ -801,13 +814,6 @@ export function EditWithdrawalPage() {
               {saveError}
             </Alert>
           ) : null}
-
-          <div className="flex flex-col gap-3 rounded-2xl border border-emerald-400/10 bg-emerald-500/5 p-4">
-            <p className="text-sm font-medium text-white">Ao salvar</p>
-            <p className="text-sm text-gray-300">
-              O estoque e o inventario vinculado serao recalculados na mesma transacao. Se houver mais de um destino, o sistema mantem esta retirada com destino separado em cada item.
-            </p>
-          </div>
 
           <div className="flex flex-col gap-3">
             <Button variant="secondary" onClick={() => navigate(`/withdrawals/${withdrawal.id}`)}>
@@ -840,7 +846,10 @@ export function EditWithdrawalPage() {
 
       <Modal
         isOpen={Boolean(editingItem)}
-        onClose={() => setEditingItemId(null)}
+        onClose={() => {
+          setEditingItemId(null)
+          setSplitQuantity('')
+        }}
         title="Ajustar item"
         size="lg"
       >
@@ -858,45 +867,79 @@ export function EditWithdrawalPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-[180px_minmax(0,1fr)]">
-              <div>
-                <label className="text-sm font-medium text-gray-300">Quantidade</label>
+            <div className="grid gap-4 md:grid-cols-[170px_minmax(0,1fr)]">
+              <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <SectionLabel label="Quantidade" info="Altere o total desta linha. Para mandar parte para outro destino, use Separar quantidade." />
                 <input
                   type="number"
                   min={1}
                   value={editingItem.quantity}
                   onChange={(event) => handleUpdateQuantity(editingItem.entry_id, Number(event.target.value))}
-                  className="mt-1.5 w-full rounded-xl border border-gray-700 bg-gray-950 px-4 py-3 text-center text-lg font-semibold text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
+                  className="mt-2 w-full rounded-2xl border border-gray-700 bg-gray-950 px-4 py-3 text-center text-lg font-semibold text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
                 />
-                <p className="mt-2 text-xs text-gray-500">
-                  Saldo livre: {computeMaxAvailable(editingItem)} {editingItem.unit}
-                </p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  <MiniMetric label="Saldo" value={`${computeMaxAvailable(editingItem)} ${editingItem.unit}`} />
+                  <MiniMetric label="Unidade" value={editingItem.unit} />
+                </div>
               </div>
 
-              <Select
-                label="Destino deste item"
-                value={encodeDestination(editingItem.destination_type, editingItem.collaborator_id, editingItem.work_site_id)}
-                onChange={(event) => handleUpdateDestination(editingItem.entry_id, event.target.value)}
-                options={destinationOptions}
-                placeholder="Selecione o destino"
-              />
+              <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+                <Select
+                  label="Destino"
+                  value={encodeDestination(editingItem.destination_type, editingItem.collaborator_id, editingItem.work_site_id)}
+                  onChange={(event) => handleUpdateDestination(editingItem.entry_id, event.target.value)}
+                  options={destinationOptions}
+                  placeholder="Selecione o destino"
+                />
+              </div>
             </div>
 
-            <div className="rounded-2xl border border-orange-400/10 bg-orange-500/5 p-4">
-              <p className="text-sm font-medium text-white">Separar parte da quantidade</p>
-              <p className="mt-1 text-sm text-gray-400">
-                Use dividir para criar uma nova linha com 1 unidade. Depois troque o destino dessa nova linha.
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="mt-3"
-                disabled={editingItem.quantity <= 1}
-                onClick={() => handleSplitItem(editingItem.entry_id)}
-              >
-                Dividir 1 unidade
-              </Button>
+            <div className="rounded-2xl border border-orange-400/15 bg-orange-500/6 p-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                <div className="min-w-0 flex-1">
+                  <div className="mb-2 flex items-center justify-between gap-3">
+                    <SectionLabel label="Separar quantidade" info="Cria uma nova linha com a quantidade escolhida. Depois escolha o destino dessa nova linha." className="mb-0" />
+                    <span className="text-xs text-gray-500">Max. {maxSplitQuantity(editingItem)} {editingItem.unit}</span>
+                  </div>
+                  <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
+                    <input
+                      type="number"
+                      min={1}
+                      max={maxSplitQuantity(editingItem)}
+                      disabled={editingItem.quantity <= 1}
+                      value={splitQuantity}
+                      onChange={(event) => setSplitQuantity(event.target.value)}
+                      placeholder="Qtd"
+                      className="h-10 rounded-xl border border-orange-400/20 bg-black/25 px-3 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-orange-400/70 focus:ring-2 focus:ring-orange-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                    />
+                    <div className="grid grid-cols-3 gap-2">
+                      {[
+                        { label: '1', value: 1 },
+                        { label: 'Metade', value: defaultSplitQuantity(editingItem) },
+                        { label: 'Max', value: maxSplitQuantity(editingItem) },
+                      ].map((option) => (
+                        <button
+                          key={option.label}
+                          type="button"
+                          disabled={editingItem.quantity <= 1}
+                          onClick={() => setSplitQuantity(String(option.value))}
+                          className="h-10 rounded-xl border border-white/8 bg-black/20 px-3 text-xs font-medium text-gray-300 transition-colors hover:border-orange-400/35 hover:bg-orange-500/10 hover:text-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {option.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={editingItem.quantity <= 1 || !splitQuantity}
+                  onClick={() => handleSplitItem(editingItem.entry_id, Number(splitQuantity))}
+                >
+                  Separar
+                </Button>
+              </div>
             </div>
 
             <div className="flex flex-col-reverse gap-3 border-t border-white/8 pt-4 sm:flex-row sm:justify-between">
@@ -907,7 +950,10 @@ export function EditWithdrawalPage() {
               >
                 Remover item
               </Button>
-              <Button type="button" onClick={() => setEditingItemId(null)}>
+              <Button type="button" onClick={() => {
+                setEditingItemId(null)
+                setSplitQuantity('')
+              }}>
                 Concluir ajuste
               </Button>
             </div>

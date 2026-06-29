@@ -16,6 +16,7 @@ import {
   Alert,
   Spinner,
   EmptyState,
+  InfoTip,
 } from '../../components/ui'
 import {
   ClipboardIcon,
@@ -171,6 +172,7 @@ export function WithdrawalDetailPage() {
               <Badge variant={statusBadgeVariant[withdrawal.status]} dot>
                 {statusLabels[withdrawal.status]}
               </Badge>
+              <InfoTip text="Use os PDFs para gerar termos. Editar retirada ajusta itens e destinos mantendo registro de auditoria." />
             </div>
             <p className="mt-1 text-sm text-gray-400">
               {formatDateTime(withdrawal.created_at)}

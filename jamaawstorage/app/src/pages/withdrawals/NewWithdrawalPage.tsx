@@ -12,13 +12,14 @@ import {
   Badge,
   Alert,
   Spinner,
+  InfoTip,
+  SectionLabel,
 } from '../../components/ui'
 import {
   ClipboardIcon,
   UserIcon,
   PackageIcon,
   SignatureIcon,
-  CameraIcon,
   KitIcon,
 } from '../../components/icons'
 import { cn, DEFAULT_IMAGE_UPLOAD_OPTIONS, generateWithdrawalCodePreview, imageFileToDataUrl } from '../../lib/utils'
@@ -1041,16 +1042,16 @@ export function NewWithdrawalPage() {
             />
 
             <div className="flex flex-col gap-2">
-              <label className="text-sm font-medium text-gray-300">Destino padrao para proximos itens</label>
+              <SectionLabel label="Destino padrao" info="Os proximos itens entram nesse destino. Se precisar, voce pode trocar o destino item por item depois." />
               <div className="flex gap-3">
                 <button
                   type="button"
                   onClick={() => setDraftDestinationType('collaborator')}
                   className={cn(
-                    'flex-1 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors',
+                    'flex-1 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors',
                     draftDestinationType === 'collaborator'
-                      ? 'border-orange-500 bg-orange-500/10 text-orange-400'
-                      : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-600',
+                      ? 'border-orange-400/50 bg-orange-500/14 text-orange-100 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.12)]'
+                      : 'border-white/8 bg-gray-900 text-gray-400 hover:border-white/14 hover:bg-white/6',
                   )}
                 >
                   <UserIcon size={18} className="mb-1 mr-2 inline-block" />
@@ -1060,10 +1061,10 @@ export function NewWithdrawalPage() {
                   type="button"
                   onClick={() => setDraftDestinationType('work_site')}
                   className={cn(
-                    'flex-1 rounded-lg border-2 px-4 py-3 text-sm font-medium transition-colors',
+                    'flex-1 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors',
                     draftDestinationType === 'work_site'
-                      ? 'border-orange-500 bg-orange-500/10 text-orange-400'
-                      : 'border-gray-700 bg-gray-900 text-gray-400 hover:border-gray-600',
+                      ? 'border-orange-400/50 bg-orange-500/14 text-orange-100 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.12)]'
+                      : 'border-white/8 bg-gray-900 text-gray-400 hover:border-white/14 hover:bg-white/6',
                   )}
                 >
                   <ClipboardIcon size={18} className="mb-1 mr-2 inline-block" />
@@ -1093,9 +1094,6 @@ export function NewWithdrawalPage() {
                 <p className="text-sm font-medium text-orange-300">
                   {selectedWorkSiteLabel(workSites, defaultWorkSiteId)}
                 </p>
-                <p className="mt-1 text-xs text-gray-500">
-                  Itens para obra entram nesse destino por padrao. Depois voce ainda pode trocar item por item.
-                </p>
                 {stepErrors.workSiteId && (
                   <p className="mt-2 text-sm text-red-400">{stepErrors.workSiteId}</p>
                 )}
@@ -1112,10 +1110,10 @@ export function NewWithdrawalPage() {
       <Card variant="bordered" padding="lg">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-white">Itens da Retirada</h3>
-            <p className="mt-1 text-xs text-gray-500">
-              Mesmo formulario, varios destinos. O sistema mantem uma retirada com destino separado por item.
-            </p>
+            <div className="flex items-center gap-2">
+              <h3 className="text-lg font-semibold text-white">Itens da Retirada</h3>
+              <InfoTip text="Cada item pode ter destino proprio. Isso permite uma unica retirada com colaboradores e obras diferentes." />
+            </div>
           </div>
           <div className="flex gap-2">
             <Button
@@ -1146,9 +1144,7 @@ export function NewWithdrawalPage() {
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <PackageIcon size={40} className="mb-2 text-gray-600" />
-            <p className="text-sm text-gray-400">
-              Nenhum item adicionado. Use os botoes acima para montar a retirada.
-            </p>
+            <p className="text-sm text-gray-400">Nenhum item adicionado.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -1365,7 +1361,7 @@ export function NewWithdrawalPage() {
         <h3 className="mb-4 text-lg font-semibold text-white">Documentacao</h3>
 
         <div className="mb-6 flex flex-col gap-2">
-          <label className="text-sm font-medium text-gray-300">Observacoes</label>
+          <SectionLabel label="Observacoes" info="Opcional. Use para contexto da retirada, obra, turno ou justificativa." />
           <textarea
             value={notes}
             onChange={(event) => setNotes(event.target.value)}
@@ -1376,10 +1372,7 @@ export function NewWithdrawalPage() {
         </div>
 
         <div className="mb-6 flex flex-col gap-2">
-          <label className="text-sm font-medium text-gray-300">
-            <CameraIcon size={16} className="mr-1 inline-block" />
-            Registro fotografico ou comprovante
-          </label>
+          <SectionLabel label="Registro fotografico" info={`Opcional. Envie uma ou varias imagens em JPG/PNG, ate ${DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB por foto.`} />
           <div 
             onDragOver={(e) => { e.preventDefault(); setDragActivePhoto(true) }}
             onDragLeave={(e) => { e.preventDefault(); setDragActivePhoto(false) }}
@@ -1404,9 +1397,6 @@ export function NewWithdrawalPage() {
               disabled={uploadingPhoto}
               className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
             />
-            <p className="mt-2 text-xs text-gray-500">
-              Solte uma ou varias imagens aqui ou clique acima. JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB por foto
-            </p>
             {uploadingPhoto && <p className="mt-2 text-xs text-orange-300">Enviando imagem...</p>}
           </div>
           {photoAttachments.length > 0 && (
@@ -1456,7 +1446,7 @@ export function NewWithdrawalPage() {
         )}
 
         <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-          <div 
+          <div
             className={cn(
               "rounded-2xl border border-dashed p-4 transition-colors",
               dragActiveDoc ? "border-orange-500 bg-orange-500/10" : "border-white/8 bg-white/3"
@@ -1473,12 +1463,7 @@ export function NewWithdrawalPage() {
               }
             }}
           >
-            <label className="text-sm font-medium text-gray-200">
-              Envie uma imagem ou PDF que contenha as assinaturas do supervisor e do responsavel
-            </label>
-            <p className="mt-2 text-xs text-gray-500">
-              O mesmo arquivo sera salvo nos dois campos e o sistema tenta extrair a area de assinatura automaticamente.
-            </p>
+            <SectionLabel label="Arquivo assinado" info="Envie uma imagem ou PDF com as assinaturas. O mesmo arquivo fica vinculado aos campos de supervisor e responsavel." />
 
             <input
               type="file"
@@ -1487,7 +1472,6 @@ export function NewWithdrawalPage() {
               disabled={signatureDocument.uploading}
               className="mt-4 block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
             />
-            <p className="mt-2 text-xs text-gray-500">Solte o arquivo aqui ou clique. Melhor resultado: folha/foto reta, com assinaturas na metade inferior.</p>
             {signatureDocument.uploading && <p className="mt-2 text-xs text-orange-300">Enviando e processando arquivo...</p>}
             {signatureDocument.error && <p className="mt-2 text-xs text-red-400">{signatureDocument.error}</p>}
             {signatureProcessingHint && <p className="mt-2 text-xs text-emerald-300">{signatureProcessingHint}</p>}
