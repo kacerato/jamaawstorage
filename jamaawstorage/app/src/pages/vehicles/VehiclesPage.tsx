@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { Camera, Car, FileText, Fuel, Gauge, Pencil, Plus, QrCode, Trash2, UserRound, Warehouse } from 'lucide-react'
+import { AlertTriangle, Bell, CalendarDays, Camera, Car, CheckCircle2, FileText, Fuel, Gauge, Pencil, Plus, QrCode, Trash2, UserRound, Warehouse, Wrench } from 'lucide-react'
 import type { Tables } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { uploadFileToStorage, uploadImageToStorage } from '../../lib/storage'
@@ -9,6 +9,8 @@ import { Alert, Badge, Button, Card, EmptyState, Input, Modal, Select, Spinner }
 type PersonRow = Tables<'people'>
 type VehicleEventType = 'pickup' | 'return' | 'fuel'
 type FuelLevelRange = 'reserva' | 'baixo' | 'meio' | 'alto' | 'cheio'
+type VehicleMaintenanceAlertType = 'oil_change' | 'scheduled_review' | 'tires' | 'brakes' | 'document' | 'custom'
+type VehicleMaintenanceStatus = 'active' | 'completed' | 'disabled'
 
 const VEHICLE_LOG_IMAGE_OPTIONS = {
   maxFileSizeMb: 18,
@@ -85,6 +87,26 @@ interface VehicleLogRow {
   responsible_person?: Pick<PersonRow, 'id' | 'full_name' | 'employee_id'> | null
 }
 
+interface VehicleMaintenanceAlertRow {
+  id: string
+  vehicle_id: string
+  alert_type: VehicleMaintenanceAlertType
+  title: string
+  due_date: string | null
+  due_odometer_km: number | null
+  advance_days: number
+  advance_km: number
+  repeat_interval_days: number | null
+  repeat_interval_km: number | null
+  status: VehicleMaintenanceStatus
+  completed_at: string | null
+  completed_odometer_km: number | null
+  notes: string | null
+  created_by: string | null
+  created_at: string
+  updated_at: string
+}
+
 interface VehicleFormState {
   code: string
   plate: string
@@ -114,6 +136,18 @@ interface LogFormState {
   ai_summary: string | null
   ai_confidence: number | null
   needs_review: boolean
+}
+
+interface MaintenanceFormState {
+  alert_type: VehicleMaintenanceAlertType
+  title: string
+  due_date: string
+  due_odometer_km: string
+  advance_days: string
+  advance_km: string
+  repeat_interval_days: string
+  repeat_interval_km: string
+  notes: string
 }
 
 interface UntypedQueryBuilder {
@@ -156,6 +190,27 @@ const initialLogForm: LogFormState = {
   needs_review: false,
 }
 
+const initialMaintenanceForm: MaintenanceFormState = {
+  alert_type: 'oil_change',
+  title: 'Troca de oleo',
+  due_date: '',
+  due_odometer_km: '',
+  advance_days: '7',
+  advance_km: '500',
+  repeat_interval_days: '',
+  repeat_interval_km: '3000',
+  notes: '',
+}
+
+const maintenanceTypeOptions: { value: VehicleMaintenanceAlertType; label: string }[] = [
+  { value: 'oil_change', label: 'Troca de oleo' },
+  { value: 'scheduled_review', label: 'Revisao programada' },
+  { value: 'tires', label: 'Pneus' },
+  { value: 'brakes', label: 'Freios' },
+  { value: 'document', label: 'Documento' },
+  { value: 'custom', label: 'Customizado' },
+]
+
 function eventLabel(type: VehicleEventType): string {
   if (type === 'pickup') return 'Saida'
   if (type === 'return') return 'Chegada'
@@ -177,9 +232,74 @@ function fuelRangeLabel(range: FuelLevelRange | '' | null): string {
   return '-'
 }
 
+function maintenanceTypeLabel(type: VehicleMaintenanceAlertType): string {
+  return maintenanceTypeOptions.find((option) => option.value === type)?.label ?? 'Customizado'
+}
+
+function dateInputValueFromDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function todayDateInputValue(): string {
+  return dateInputValueFromDate(new Date())
+}
+
+function addDaysToDateInput(dateInput: string, days: number): string {
+  const date = new Date(`${dateInput}T00:00:00`)
+  date.setDate(date.getDate() + days)
+  return dateInputValueFromDate(date)
+}
+
+function formatDateOnly(dateInput: string | null): string {
+  if (!dateInput) return '-'
+  return new Date(`${dateInput}T00:00:00`).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
 function numericOrNull(value: string): number | null {
   const parsed = Number.parseFloat(value.replace(',', '.'))
   return Number.isFinite(parsed) ? parsed : null
+}
+
+function maintenanceState(alert: VehicleMaintenanceAlertRow, currentOdometerKm: number | null): {
+  label: string
+  variant: 'default' | 'success' | 'warning' | 'danger' | 'info'
+  priority: number
+} {
+  if (alert.status === 'completed') return { label: 'Concluida', variant: 'success', priority: 4 }
+  if (alert.status === 'disabled') return { label: 'Inativa', variant: 'default', priority: 5 }
+
+  const today = new Date(`${todayDateInputValue()}T00:00:00`)
+  const dateDaysLeft = alert.due_date
+    ? Math.ceil((new Date(`${alert.due_date}T00:00:00`).getTime() - today.getTime()) / 86_400_000)
+    : null
+  const kmLeft = alert.due_odometer_km != null && currentOdometerKm != null
+    ? alert.due_odometer_km - currentOdometerKm
+    : null
+
+  if ((dateDaysLeft != null && dateDaysLeft < 0) || (kmLeft != null && kmLeft <= 0)) {
+    return { label: 'Vencida', variant: 'danger', priority: 0 }
+  }
+  if ((dateDaysLeft != null && dateDaysLeft <= alert.advance_days) || (kmLeft != null && kmLeft <= alert.advance_km)) {
+    return { label: 'Proxima', variant: 'warning', priority: 1 }
+  }
+
+  return { label: 'Em dia', variant: 'success', priority: 2 }
+}
+
+function maintenanceTargetSummary(alert: VehicleMaintenanceAlertRow): string {
+  const parts = [
+    alert.due_date ? `Data: ${formatDateOnly(alert.due_date)}` : null,
+    alert.due_odometer_km != null ? `Km: ${alert.due_odometer_km.toLocaleString('pt-BR')}` : null,
+  ].filter(Boolean)
+
+  return parts.length > 0 ? parts.join(' | ') : '-'
 }
 
 function integerOrNull(value: string): number | null {
@@ -191,21 +311,27 @@ export function VehiclesPage() {
   const db = useMemo(() => supabase as unknown as { from: (table: string) => UntypedQueryBuilder }, [])
   const [vehicles, setVehicles] = useState<VehicleRow[]>([])
   const [logs, setLogs] = useState<VehicleLogRow[]>([])
+  const [maintenanceAlerts, setMaintenanceAlerts] = useState<VehicleMaintenanceAlertRow[]>([])
   const [people, setPeople] = useState<PersonRow[]>([])
   const [selectedVehicleId, setSelectedVehicleId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [savingVehicle, setSavingVehicle] = useState(false)
   const [savingLog, setSavingLog] = useState(false)
+  const [savingMaintenance, setSavingMaintenance] = useState(false)
+  const [completingMaintenanceAlertId, setCompletingMaintenanceAlertId] = useState<string | null>(null)
   const [uploadingLogImage, setUploadingLogImage] = useState(false)
   const [analyzingImage, setAnalyzingImage] = useState(false)
   const [analysisMethod, setAnalysisMethod] = useState<string | null>(null)
   const [analysisDurationMs, setAnalysisDurationMs] = useState<number | null>(null)
   const [showVehicleModal, setShowVehicleModal] = useState(false)
   const [showLogModal, setShowLogModal] = useState(false)
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false)
   const [editingVehicleId, setEditingVehicleId] = useState<string | null>(null)
   const [editingLogId, setEditingLogId] = useState<string | null>(null)
+  const [editingMaintenanceAlertId, setEditingMaintenanceAlertId] = useState<string | null>(null)
   const [vehicleForm, setVehicleForm] = useState<VehicleFormState>(initialVehicleForm)
   const [logForm, setLogForm] = useState<LogFormState>(initialLogForm)
+  const [maintenanceForm, setMaintenanceForm] = useState<MaintenanceFormState>(initialMaintenanceForm)
   const [error, setError] = useState<string | null>(null)
   const pendingAnalysisRef = useRef<PendingVehicleAnalysis | null>(null)
 
@@ -219,15 +345,35 @@ export function VehiclesPage() {
     [logs, selectedVehicle?.id],
   )
 
+  const currentOdometerKm = selectedLogs.find((log) => log.odometer_km != null)?.odometer_km ?? null
+
+  const selectedMaintenanceAlerts = useMemo(
+    () => maintenanceAlerts
+      .filter((alert) => alert.vehicle_id === selectedVehicle?.id)
+      .sort((left, right) => {
+        const leftState = maintenanceState(left, currentOdometerKm)
+        const rightState = maintenanceState(right, currentOdometerKm)
+        if (leftState.priority !== rightState.priority) return leftState.priority - rightState.priority
+        return new Date(left.due_date ?? left.created_at).getTime() - new Date(right.due_date ?? right.created_at).getTime()
+      }),
+    [currentOdometerKm, maintenanceAlerts, selectedVehicle?.id],
+  )
+
+  const urgentMaintenanceCount = selectedMaintenanceAlerts.filter((alert) => {
+    const state = maintenanceState(alert, currentOdometerKm)
+    return state.variant === 'danger' || state.variant === 'warning'
+  }).length
+
   const isFuelLog = logForm.event_type === 'fuel'
 
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
     try {
-      const [vehicleResult, logsResult, peopleResult] = await Promise.all([
+      const [vehicleResult, logsResult, maintenanceResult, peopleResult] = await Promise.all([
         (db.from('vehicles').select('*, responsible_person:people!vehicles_responsible_person_id_fkey(id, full_name, employee_id)') as unknown as PromiseLike<{ data: VehicleRow[] | null; error: { message: string } | null }>),
         (db.from('vehicle_usage_logs').select('*, responsible_person:people!vehicle_usage_logs_responsible_person_id_fkey(id, full_name, employee_id)').order('occurred_at', { ascending: false }) as unknown as PromiseLike<{ data: VehicleLogRow[] | null; error: { message: string } | null }>),
+        (db.from('vehicle_maintenance_alerts').select('*').order('created_at', { ascending: false }) as unknown as PromiseLike<{ data: VehicleMaintenanceAlertRow[] | null; error: { message: string } | null }>),
         supabase
           .from('people')
           .select('id, full_name, employee_id, profile_id, role, job_title, sector, cpf, photo_url, document_attachments, is_active, created_at, updated_at')
@@ -237,10 +383,12 @@ export function VehiclesPage() {
 
       if (vehicleResult.error) throw new Error(vehicleResult.error.message)
       if (logsResult.error) throw new Error(logsResult.error.message)
+      if (maintenanceResult.error) throw new Error(maintenanceResult.error.message)
       if (peopleResult.error) throw new Error(peopleResult.error.message)
 
       setVehicles(vehicleResult.data ?? [])
       setLogs(logsResult.data ?? [])
+      setMaintenanceAlerts(maintenanceResult.data ?? [])
       setPeople((peopleResult.data as PersonRow[]) ?? [])
       setSelectedVehicleId((current) => current ?? vehicleResult.data?.[0]?.id ?? null)
     } catch (loadError) {
@@ -329,6 +477,144 @@ export function VehiclesPage() {
     setShowLogModal(false)
     setEditingLogId(null)
     setLogForm(initialLogForm)
+  }
+
+  const makeMaintenancePreset = (): MaintenanceFormState => ({
+    ...initialMaintenanceForm,
+    due_date: addDaysToDateInput(todayDateInputValue(), 90),
+    due_odometer_km: currentOdometerKm != null ? String(Math.round(currentOdometerKm + 3000)) : '',
+  })
+
+  const openCreateMaintenanceModal = () => {
+    setEditingMaintenanceAlertId(null)
+    setMaintenanceForm(makeMaintenancePreset())
+    setShowMaintenanceModal(true)
+  }
+
+  const openEditMaintenanceModal = (alert: VehicleMaintenanceAlertRow) => {
+    setEditingMaintenanceAlertId(alert.id)
+    setMaintenanceForm({
+      alert_type: alert.alert_type,
+      title: alert.title,
+      due_date: alert.due_date ?? '',
+      due_odometer_km: alert.due_odometer_km != null ? String(alert.due_odometer_km) : '',
+      advance_days: String(alert.advance_days),
+      advance_km: String(alert.advance_km),
+      repeat_interval_days: alert.repeat_interval_days != null ? String(alert.repeat_interval_days) : '',
+      repeat_interval_km: alert.repeat_interval_km != null ? String(alert.repeat_interval_km) : '',
+      notes: alert.notes ?? '',
+    })
+    setShowMaintenanceModal(true)
+  }
+
+  const closeMaintenanceModal = () => {
+    setShowMaintenanceModal(false)
+    setEditingMaintenanceAlertId(null)
+    setMaintenanceForm(initialMaintenanceForm)
+  }
+
+  const handleSaveMaintenanceAlert = async () => {
+    if (!selectedVehicle) return
+    if (!maintenanceForm.title.trim()) {
+      setError('Informe o nome do alerta de revisao.')
+      return
+    }
+    if (!maintenanceForm.due_date && !maintenanceForm.due_odometer_km.trim()) {
+      setError('Informe pelo menos uma meta: data da revisao ou kilometragem.')
+      return
+    }
+
+    setSavingMaintenance(true)
+    setError(null)
+    try {
+      const payload = {
+        alert_type: maintenanceForm.alert_type,
+        title: maintenanceForm.title.trim(),
+        due_date: maintenanceForm.due_date || null,
+        due_odometer_km: numericOrNull(maintenanceForm.due_odometer_km),
+        advance_days: integerOrNull(maintenanceForm.advance_days) ?? 0,
+        advance_km: numericOrNull(maintenanceForm.advance_km) ?? 0,
+        repeat_interval_days: integerOrNull(maintenanceForm.repeat_interval_days),
+        repeat_interval_km: numericOrNull(maintenanceForm.repeat_interval_km),
+        notes: maintenanceForm.notes.trim() || null,
+      }
+
+      const result = editingMaintenanceAlertId
+        ? await db.from('vehicle_maintenance_alerts').update(payload).eq('id', editingMaintenanceAlertId)
+        : await (db.from('vehicle_maintenance_alerts').insert({ vehicle_id: selectedVehicle.id, ...payload }) as PromiseLike<{ error: { message: string } | null }>)
+      if (result.error) throw new Error(result.error.message)
+
+      closeMaintenanceModal()
+      await load()
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : 'Nao foi possivel salvar o alerta de revisao.')
+    } finally {
+      setSavingMaintenance(false)
+    }
+  }
+
+  const handleCompleteMaintenanceAlert = async (alert: VehicleMaintenanceAlertRow) => {
+    const confirmed = window.confirm(`Marcar "${alert.title}" como revisao concluida?`)
+    if (!confirmed) return
+
+    setCompletingMaintenanceAlertId(alert.id)
+    setError(null)
+    try {
+      const completedOdometer = currentOdometerKm ?? alert.due_odometer_km
+      const updateResult = await db.from('vehicle_maintenance_alerts').update({
+        status: 'completed',
+        completed_at: new Date().toISOString(),
+        completed_odometer_km: completedOdometer,
+      }).eq('id', alert.id)
+      if (updateResult.error) throw new Error(updateResult.error.message)
+
+      const nextDueDate = alert.repeat_interval_days != null
+        ? addDaysToDateInput(todayDateInputValue(), alert.repeat_interval_days)
+        : null
+      const nextDueOdometer = alert.repeat_interval_km != null && completedOdometer != null
+        ? completedOdometer + alert.repeat_interval_km
+        : null
+
+      if (nextDueDate || nextDueOdometer != null) {
+        const insertResult = await (db.from('vehicle_maintenance_alerts').insert({
+          vehicle_id: alert.vehicle_id,
+          alert_type: alert.alert_type,
+          title: alert.title,
+          due_date: nextDueDate,
+          due_odometer_km: nextDueOdometer,
+          advance_days: alert.advance_days,
+          advance_km: alert.advance_km,
+          repeat_interval_days: alert.repeat_interval_days,
+          repeat_interval_km: alert.repeat_interval_km,
+          notes: alert.notes,
+        }) as PromiseLike<{ error: { message: string } | null }>)
+        if (insertResult.error) throw new Error(insertResult.error.message)
+      }
+
+      await load()
+    } catch (completeError) {
+      setError(completeError instanceof Error ? completeError.message : 'Nao foi possivel concluir a revisao.')
+    } finally {
+      setCompletingMaintenanceAlertId(null)
+    }
+  }
+
+  const handleDeleteMaintenanceAlert = async (alert: VehicleMaintenanceAlertRow) => {
+    const confirmed = window.confirm(`Excluir o alerta "${alert.title}"?`)
+    if (!confirmed) return
+
+    setSavingMaintenance(true)
+    setError(null)
+    try {
+      const result = await db.from('vehicle_maintenance_alerts').delete().eq('id', alert.id)
+      if (result.error) throw new Error(result.error.message)
+
+      await load()
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : 'Nao foi possivel excluir o alerta de revisao.')
+    } finally {
+      setSavingMaintenance(false)
+    }
   }
 
   const handleVehiclePhoto = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -619,6 +905,9 @@ export function VehiclesPage() {
           <Button onClick={openCreateLogModal} disabled={!selectedVehicle} leftIcon={<Camera size={16} />}>
             Registrar uso
           </Button>
+          <Button variant="secondary" onClick={openCreateMaintenanceModal} disabled={!selectedVehicle} leftIcon={<Bell size={16} />}>
+            Novo alerta
+          </Button>
           {selectedVehicle ? (
             <a
               href={`/api/vehicle-marker?code=${encodeURIComponent(selectedVehicle.code)}`}
@@ -641,12 +930,12 @@ export function VehiclesPage() {
           action={{ label: 'Cadastrar carro', onClick: openCreateVehicleModal }}
         />
       ) : (
-        <div className="grid gap-5 xl:grid-cols-[420px_minmax(0,1fr)]">
-          <div className="space-y-4">
+        <div className="grid gap-5 xl:grid-cols-[minmax(300px,380px)_minmax(0,1fr)]">
+          <div className="space-y-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-150px)] xl:overflow-y-auto xl:pr-1">
             {vehicles.map((vehicle) => (
               <button key={vehicle.id} type="button" onClick={() => setSelectedVehicleId(vehicle.id)} className="w-full text-left">
                 <Card variant="bordered" className={`overflow-hidden border-white/8 ${selectedVehicle?.id === vehicle.id ? 'bg-orange-500/10' : 'bg-white/3'}`}>
-                  <div className="grid grid-cols-[112px_minmax(0,1fr)] gap-4">
+                  <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-4">
                     <div className="aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 bg-black/30">
                       {vehicle.photo_url ? (
                         <img src={vehicle.photo_url} alt={vehicle.model} className="h-full w-full object-cover" />
@@ -660,7 +949,7 @@ export function VehiclesPage() {
                       <p className="mt-1 text-sm text-gray-300">{vehicle.model}</p>
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <MiniMetric label="Placa" value={vehicle.plate ?? '-'} />
-                        <MiniMetric label="Ano" value={vehicle.year ? String(vehicle.year) : '-'} />
+                        <MiniMetric label="Alertas" value={String(maintenanceAlerts.filter((alert) => alert.vehicle_id === vehicle.id && alert.status === 'active').length)} />
                       </div>
                       <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
                         <UserRound size={14} />
@@ -674,7 +963,7 @@ export function VehiclesPage() {
           </div>
 
           {selectedVehicle ? (
-            <Card variant="bordered" className="border-white/8 bg-[#101114]">
+            <Card variant="bordered" className="min-w-0 overflow-hidden border-white/8 bg-[#101114]">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <Badge variant="warning">Responsavel: {selectedVehicle.responsible_person?.full_name ?? 'nao definido'}</Badge>
@@ -697,46 +986,100 @@ export function VehiclesPage() {
                 </div>
               </div>
 
-              <div className="mt-6 grid gap-3 md:grid-cols-3">
-                <MetricCard icon={<Gauge size={18} />} label="Ultima km" value={selectedLogs.find((log) => log.odometer_km != null)?.odometer_km?.toLocaleString('pt-BR') ?? '-'} />
+              <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+                <MetricCard icon={<Gauge size={18} />} label="Ultima km" value={currentOdometerKm?.toLocaleString('pt-BR') ?? '-'} />
                 <MetricCard icon={<Fuel size={18} />} label="Combustivel" value={selectedLogs.find((log) => log.fuel_level_percent != null)?.fuel_level_percent != null ? `${selectedLogs.find((log) => log.fuel_level_percent != null)?.fuel_level_percent}%` : '-'} />
+                <MetricCard icon={<Wrench size={18} />} label="Alertas" value={urgentMaintenanceCount > 0 ? `${urgentMaintenanceCount} pendente(s)` : 'Em dia'} />
                 <MetricCard icon={<Camera size={18} />} label="Registros" value={String(selectedLogs.length)} />
+              </div>
+
+              <div className="mt-6 space-y-3">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <h3 className="text-lg font-semibold text-white">Revisoes e alertas</h3>
+                  <Button size="sm" variant="secondary" onClick={openCreateMaintenanceModal} leftIcon={<Plus size={14} />}>
+                    Adicionar alerta
+                  </Button>
+                </div>
+                {selectedMaintenanceAlerts.length === 0 ? (
+                  <p className="rounded-xl border border-white/8 bg-white/3 p-4 text-sm text-gray-400">Nenhum alerta de revisao cadastrado para este carro.</p>
+                ) : (
+                  <div className="grid gap-3 2xl:grid-cols-2">
+                    {selectedMaintenanceAlerts.map((alert) => {
+                      const state = maintenanceState(alert, currentOdometerKm)
+                      const isClosed = alert.status !== 'active'
+                      return (
+                        <div key={alert.id} className="min-w-0 rounded-xl border border-white/8 bg-white/4 p-4">
+                          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-2">
+                                <Badge variant={state.variant}>{state.label}</Badge>
+                                <Badge variant="info">{maintenanceTypeLabel(alert.alert_type)}</Badge>
+                              </div>
+                              <h4 className="mt-2 truncate text-sm font-semibold text-white">{alert.title}</h4>
+                              <p className="mt-1 text-sm text-gray-300">{maintenanceTargetSummary(alert)}</p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" variant="secondary" onClick={() => openEditMaintenanceModal(alert)} leftIcon={<Pencil size={14} />}>
+                                Editar
+                              </Button>
+                              {!isClosed ? (
+                                <Button size="sm" variant="outline" onClick={() => void handleCompleteMaintenanceAlert(alert)} isLoading={completingMaintenanceAlertId === alert.id} leftIcon={<CheckCircle2 size={14} />}>
+                                  Concluir
+                                </Button>
+                              ) : null}
+                              <Button size="sm" variant="danger" onClick={() => void handleDeleteMaintenanceAlert(alert)} leftIcon={<Trash2 size={14} />}>
+                                Excluir
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="mt-3 grid gap-2 text-xs text-gray-400 sm:grid-cols-2">
+                            <span className="inline-flex items-center gap-1.5"><AlertTriangle size={13} /> Aviso: {alert.advance_days} dia(s) / {alert.advance_km.toLocaleString('pt-BR')} km antes</span>
+                            <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} /> Repete: {alert.repeat_interval_days ? `${alert.repeat_interval_days} dia(s)` : '-'} {alert.repeat_interval_km ? `/ ${alert.repeat_interval_km.toLocaleString('pt-BR')} km` : ''}</span>
+                          </div>
+                          {alert.notes ? <p className="mt-3 break-words text-sm text-gray-400">{alert.notes}</p> : null}
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
               </div>
 
               <div className="mt-6 space-y-3">
                 <h3 className="text-lg font-semibold text-white">Historico do carro</h3>
                 {selectedLogs.length === 0 ? (
-                  <p className="rounded-2xl border border-white/8 bg-white/3 p-4 text-sm text-gray-400">Nenhum registro feito para este carro.</p>
+                  <p className="rounded-xl border border-white/8 bg-white/3 p-4 text-sm text-gray-400">Nenhum registro feito para este carro.</p>
                 ) : (
-                  selectedLogs.map((log) => (
-                    <div key={log.id} className="grid gap-4 rounded-2xl border border-white/8 bg-white/4 p-4 md:grid-cols-[92px_minmax(0,1fr)]">
-                      {log.photo_url ? <img src={log.photo_url} alt={eventLabel(log.event_type)} className="h-24 w-full rounded-xl object-cover md:w-24" /> : <div className="flex h-24 items-center justify-center rounded-xl bg-black/30"><Camera size={24} /></div>}
-                      <div>
-                        <div className="flex flex-wrap items-start justify-between gap-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <Badge variant={log.event_type === 'fuel' ? 'warning' : 'info'}>{eventLabel(log.event_type)}</Badge>
-                            {log.needs_review ? <Badge variant="warning">Revisar leitura</Badge> : null}
-                            <span className="text-xs text-gray-500">{formatDateTime(log.occurred_at)}</span>
+                  <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1">
+                    {selectedLogs.map((log) => (
+                      <div key={log.id} className="grid min-w-0 gap-4 rounded-xl border border-white/8 bg-white/4 p-4 md:grid-cols-[92px_minmax(0,1fr)]">
+                        {log.photo_url ? <img src={log.photo_url} alt={eventLabel(log.event_type)} className="h-24 w-full rounded-lg object-cover md:w-24" /> : <div className="flex h-24 items-center justify-center rounded-lg bg-black/30"><Camera size={24} /></div>}
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-start justify-between gap-3">
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={log.event_type === 'fuel' ? 'warning' : 'info'}>{eventLabel(log.event_type)}</Badge>
+                              {log.needs_review ? <Badge variant="warning">Revisar leitura</Badge> : null}
+                              <span className="text-xs text-gray-500">{formatDateTime(log.occurred_at)}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <Button size="sm" variant="secondary" onClick={() => openEditLogModal(log)} leftIcon={<Pencil size={14} />}>
+                                Editar
+                              </Button>
+                              <Button size="sm" variant="danger" onClick={() => void handleDeleteLog(log)} leftIcon={<Trash2 size={14} />}>
+                                Excluir
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex flex-wrap gap-2">
-                            <Button size="sm" variant="secondary" onClick={() => openEditLogModal(log)} leftIcon={<Pencil size={14} />}>
-                              Editar
-                            </Button>
-                            <Button size="sm" variant="danger" onClick={() => void handleDeleteLog(log)} leftIcon={<Trash2 size={14} />}>
-                              Excluir
-                            </Button>
-                          </div>
+                          <p className="mt-2 break-words text-sm text-gray-300">
+                            Km: {log.odometer_km ?? '-'} | Combustivel: {log.fuel_level_percent != null ? `${log.fuel_level_percent}%` : '-'}
+                            {log.fuel_level_range ? ` (${fuelRangeLabel(log.fuel_level_range)})` : ''}
+                            {log.fuel_bars_filled != null && log.fuel_bars_total != null ? ` | ${log.fuel_bars_filled}/${log.fuel_bars_total} barras` : ''}
+                            {log.fuel_liters ? ` | ${log.fuel_liters} L` : ''}
+                          </p>
+                          {log.ai_summary ? <p className="mt-2 break-words text-sm text-gray-400">{log.ai_summary}</p> : null}
                         </div>
-                        <p className="mt-2 text-sm text-gray-300">
-                          Km: {log.odometer_km ?? '-'} • Combustivel: {log.fuel_level_percent != null ? `${log.fuel_level_percent}%` : '-'}
-                          {log.fuel_level_range ? ` (${fuelRangeLabel(log.fuel_level_range)})` : ''}
-                          {log.fuel_bars_filled != null && log.fuel_bars_total != null ? ` • ${log.fuel_bars_filled}/${log.fuel_bars_total} barras` : ''}
-                          {log.fuel_liters ? ` • ${log.fuel_liters} L` : ''}
-                        </p>
-                        {log.ai_summary ? <p className="mt-2 text-sm text-gray-400">{log.ai_summary}</p> : null}
                       </div>
-                    </div>
-                  ))
+                    ))}
+                  </div>
                 )}
               </div>
             </Card>
@@ -773,6 +1116,107 @@ export function VehiclesPage() {
                 {editingVehicleId ? 'Salvar alteracoes' : 'Salvar carro'}
               </Button>
             </div>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal isOpen={showMaintenanceModal && Boolean(selectedVehicle)} onClose={closeMaintenanceModal} title={editingMaintenanceAlertId ? 'Editar alerta de revisao' : 'Novo alerta de revisao'} size="lg">
+        <div className="space-y-4">
+          <div className="grid gap-3 md:grid-cols-2">
+            <Select
+              label="Tipo de alerta"
+              value={maintenanceForm.alert_type}
+              onChange={(event) => {
+                const nextType = event.target.value as VehicleMaintenanceAlertType
+                const nextLabel = maintenanceTypeLabel(nextType)
+                setMaintenanceForm((prev) => ({
+                  ...prev,
+                  alert_type: nextType,
+                  title: !prev.title.trim() || maintenanceTypeOptions.some((option) => option.label === prev.title) ? nextLabel : prev.title,
+                }))
+              }}
+              options={maintenanceTypeOptions}
+            />
+            <Input
+              label="Nome do alerta"
+              value={maintenanceForm.title}
+              onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, title: event.target.value }))}
+            />
+          </div>
+
+          <div className="rounded-xl border border-white/8 bg-white/3 p-4">
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Data da revisao"
+                type="date"
+                value={maintenanceForm.due_date}
+                onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, due_date: event.target.value }))}
+                helperText="Use quando a revisao depende de calendario, documento ou prazo."
+              />
+              <Input
+                label="Km da revisao"
+                inputMode="decimal"
+                value={maintenanceForm.due_odometer_km}
+                onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, due_odometer_km: event.target.value }))}
+                helperText={`Km atual: ${currentOdometerKm?.toLocaleString('pt-BR') ?? 'nao registrado'}`}
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 md:grid-cols-2">
+            <Input
+              label="Avisar dias antes"
+              inputMode="numeric"
+              value={maintenanceForm.advance_days}
+              onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, advance_days: event.target.value }))}
+            />
+            <Input
+              label="Avisar km antes"
+              inputMode="decimal"
+              value={maintenanceForm.advance_km}
+              onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, advance_km: event.target.value }))}
+            />
+          </div>
+
+          <div className="rounded-xl border border-white/8 bg-black/20 p-4">
+            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
+              <Wrench size={16} />
+              Recorrencia apos concluir
+            </div>
+            <div className="grid gap-3 md:grid-cols-2">
+              <Input
+                label="Repetir a cada dias"
+                inputMode="numeric"
+                value={maintenanceForm.repeat_interval_days}
+                onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_days: event.target.value }))}
+                helperText="Ex.: 90 para revisao trimestral."
+              />
+              <Input
+                label="Repetir a cada km"
+                inputMode="decimal"
+                value={maintenanceForm.repeat_interval_km}
+                onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_km: event.target.value }))}
+                helperText="Ex.: 3000 para troca de oleo."
+              />
+            </div>
+          </div>
+
+          <Input
+            label="Observacoes"
+            value={maintenanceForm.notes}
+            onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, notes: event.target.value }))}
+            placeholder="Ex.: trocar oleo, filtro, conferir freio, pneus ou documento."
+          />
+
+          <Alert variant="info">
+            O alerta dispara por data, por kilometragem ou pelos dois. Ao concluir uma revisao recorrente, o sistema cria o proximo alerta automaticamente.
+          </Alert>
+
+          <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
+            <Button variant="secondary" onClick={closeMaintenanceModal}>Cancelar</Button>
+            <Button onClick={() => void handleSaveMaintenanceAlert()} isLoading={savingMaintenance}>
+              {editingMaintenanceAlertId ? 'Salvar alerta' : 'Criar alerta'}
+            </Button>
           </div>
         </div>
       </Modal>
