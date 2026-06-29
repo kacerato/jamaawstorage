@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
-import { AlertTriangle, Bell, CalendarDays, Camera, Car, CheckCircle2, FileText, Fuel, Gauge, Pencil, Plus, QrCode, Trash2, UserRound, Warehouse, Wrench } from 'lucide-react'
+import { AlertTriangle, Bell, CalendarDays, Camera, Car, CheckCircle2, FileText, Fuel, Gauge, Info, Pencil, Plus, QrCode, Trash2, UserRound, Warehouse, Wrench } from 'lucide-react'
 import type { Tables } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { uploadFileToStorage, uploadImageToStorage } from '../../lib/storage'
@@ -11,6 +11,7 @@ type VehicleEventType = 'pickup' | 'return' | 'fuel'
 type FuelLevelRange = 'reserva' | 'baixo' | 'meio' | 'alto' | 'cheio'
 type VehicleMaintenanceAlertType = 'oil_change' | 'scheduled_review' | 'tires' | 'brakes' | 'document' | 'custom'
 type VehicleMaintenanceStatus = 'active' | 'completed' | 'disabled'
+type MaintenanceTargetMode = 'km' | 'date' | 'both'
 
 const VEHICLE_LOG_IMAGE_OPTIONS = {
   maxFileSizeMb: 18,
@@ -211,6 +212,15 @@ const maintenanceTypeOptions: { value: VehicleMaintenanceAlertType; label: strin
   { value: 'custom', label: 'Customizado' },
 ]
 
+const maintenanceTypeVisuals: Record<VehicleMaintenanceAlertType, { icon: React.ReactNode; preset: Partial<MaintenanceFormState> }> = {
+  oil_change: { icon: <Fuel size={18} />, preset: { title: 'Troca de oleo', advance_km: '500', repeat_interval_km: '3000', repeat_interval_days: '' } },
+  scheduled_review: { icon: <Wrench size={18} />, preset: { title: 'Revisao programada', advance_days: '15', advance_km: '500', repeat_interval_days: '90', repeat_interval_km: '' } },
+  tires: { icon: <Gauge size={18} />, preset: { title: 'Pneus', advance_days: '15', advance_km: '500', repeat_interval_days: '', repeat_interval_km: '' } },
+  brakes: { icon: <AlertTriangle size={18} />, preset: { title: 'Freios', advance_days: '15', advance_km: '500', repeat_interval_days: '', repeat_interval_km: '' } },
+  document: { icon: <FileText size={18} />, preset: { title: 'Documento', advance_days: '30', advance_km: '0', repeat_interval_days: '365', repeat_interval_km: '' } },
+  custom: { icon: <Bell size={18} />, preset: { title: 'Alerta customizado', advance_days: '7', advance_km: '500', repeat_interval_days: '', repeat_interval_km: '' } },
+}
+
 function eventLabel(type: VehicleEventType): string {
   if (type === 'pickup') return 'Saida'
   if (type === 'return') return 'Chegada'
@@ -332,6 +342,7 @@ export function VehiclesPage() {
   const [vehicleForm, setVehicleForm] = useState<VehicleFormState>(initialVehicleForm)
   const [logForm, setLogForm] = useState<LogFormState>(initialLogForm)
   const [maintenanceForm, setMaintenanceForm] = useState<MaintenanceFormState>(initialMaintenanceForm)
+  const [maintenanceTargetMode, setMaintenanceTargetMode] = useState<MaintenanceTargetMode>('km')
   const [error, setError] = useState<string | null>(null)
   const pendingAnalysisRef = useRef<PendingVehicleAnalysis | null>(null)
 
@@ -479,21 +490,53 @@ export function VehiclesPage() {
     setLogForm(initialLogForm)
   }
 
+  const inferMaintenanceTargetMode = (form: MaintenanceFormState): MaintenanceTargetMode => {
+    if (form.due_date && form.due_odometer_km.trim()) return 'both'
+    if (form.due_date) return 'date'
+    return 'km'
+  }
+
   const makeMaintenancePreset = (): MaintenanceFormState => ({
     ...initialMaintenanceForm,
-    due_date: addDaysToDateInput(todayDateInputValue(), 90),
     due_odometer_km: currentOdometerKm != null ? String(Math.round(currentOdometerKm + 3000)) : '',
   })
 
+  const applyMaintenanceTargetMode = (mode: MaintenanceTargetMode) => {
+    setMaintenanceTargetMode(mode)
+    setMaintenanceForm((prev) => ({
+      ...prev,
+      due_date: mode === 'km' ? '' : prev.due_date || addDaysToDateInput(todayDateInputValue(), 90),
+      due_odometer_km: mode === 'date' ? '' : prev.due_odometer_km || (currentOdometerKm != null ? String(Math.round(currentOdometerKm + 3000)) : ''),
+      repeat_interval_days: mode === 'km' ? '' : prev.repeat_interval_days,
+      repeat_interval_km: mode === 'date' ? '' : prev.repeat_interval_km,
+    }))
+  }
+
+  const applyMaintenanceType = (alertType: VehicleMaintenanceAlertType) => {
+    const visual = maintenanceTypeVisuals[alertType]
+    setMaintenanceForm((prev) => ({
+      ...prev,
+      ...visual.preset,
+      alert_type: alertType,
+      due_date: alertType === 'document' && !prev.due_date ? addDaysToDateInput(todayDateInputValue(), 365) : prev.due_date,
+      due_odometer_km: alertType === 'document' ? '' : prev.due_odometer_km,
+    }))
+    if (alertType === 'document') {
+      setMaintenanceTargetMode('date')
+    }
+  }
+
   const openCreateMaintenanceModal = () => {
+    const preset = makeMaintenancePreset()
     setEditingMaintenanceAlertId(null)
-    setMaintenanceForm(makeMaintenancePreset())
+    setMaintenanceTargetMode(inferMaintenanceTargetMode(preset))
+    setMaintenanceForm(preset)
     setShowMaintenanceModal(true)
   }
 
   const openEditMaintenanceModal = (alert: VehicleMaintenanceAlertRow) => {
     setEditingMaintenanceAlertId(alert.id)
-    setMaintenanceForm({
+    const nextForm = {
       alert_type: alert.alert_type,
       title: alert.title,
       due_date: alert.due_date ?? '',
@@ -503,7 +546,9 @@ export function VehiclesPage() {
       repeat_interval_days: alert.repeat_interval_days != null ? String(alert.repeat_interval_days) : '',
       repeat_interval_km: alert.repeat_interval_km != null ? String(alert.repeat_interval_km) : '',
       notes: alert.notes ?? '',
-    })
+    }
+    setMaintenanceTargetMode(inferMaintenanceTargetMode(nextForm))
+    setMaintenanceForm(nextForm)
     setShowMaintenanceModal(true)
   }
 
@@ -905,9 +950,6 @@ export function VehiclesPage() {
           <Button onClick={openCreateLogModal} disabled={!selectedVehicle} leftIcon={<Camera size={16} />}>
             Registrar uso
           </Button>
-          <Button variant="secondary" onClick={openCreateMaintenanceModal} disabled={!selectedVehicle} leftIcon={<Bell size={16} />}>
-            Novo alerta
-          </Button>
           {selectedVehicle ? (
             <a
               href={`/api/vehicle-marker?code=${encodeURIComponent(selectedVehicle.code)}`}
@@ -1121,96 +1163,141 @@ export function VehiclesPage() {
       </Modal>
 
       <Modal isOpen={showMaintenanceModal && Boolean(selectedVehicle)} onClose={closeMaintenanceModal} title={editingMaintenanceAlertId ? 'Editar alerta de revisao' : 'Novo alerta de revisao'} size="lg">
-        <div className="space-y-4">
-          <div className="grid gap-3 md:grid-cols-2">
-            <Select
-              label="Tipo de alerta"
-              value={maintenanceForm.alert_type}
-              onChange={(event) => {
-                const nextType = event.target.value as VehicleMaintenanceAlertType
-                const nextLabel = maintenanceTypeLabel(nextType)
-                setMaintenanceForm((prev) => ({
-                  ...prev,
-                  alert_type: nextType,
-                  title: !prev.title.trim() || maintenanceTypeOptions.some((option) => option.label === prev.title) ? nextLabel : prev.title,
-                }))
-              }}
-              options={maintenanceTypeOptions}
-            />
+        <div className="space-y-5">
+          <div>
+            <SectionLabel label="Tipo" info="Escolha o motivo do alerta. Isso preenche valores comuns, mas voce pode ajustar tudo depois." />
+            <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {maintenanceTypeOptions.map((option) => {
+                const visual = maintenanceTypeVisuals[option.value]
+                const selected = maintenanceForm.alert_type === option.value
+                return (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => applyMaintenanceType(option.value)}
+                    className={`flex min-h-16 items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${
+                      selected
+                        ? 'border-orange-400/45 bg-orange-500/14 text-orange-100'
+                        : 'border-white/8 bg-white/3 text-gray-300 hover:bg-white/6'
+                    }`}
+                  >
+                    <span className="rounded-lg border border-white/10 bg-black/20 p-2 text-orange-200">{visual.icon}</span>
+                    <span className="text-sm font-medium text-white">{option.label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div>
+            <SectionLabel label="Nome" info="Use um nome curto para reconhecer o alerta na lista do carro." />
             <Input
-              label="Nome do alerta"
               value={maintenanceForm.title}
               onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, title: event.target.value }))}
             />
           </div>
 
           <div className="rounded-xl border border-white/8 bg-white/3 p-4">
-            <div className="grid gap-3 md:grid-cols-2">
-              <Input
-                label="Data da revisao"
-                type="date"
-                value={maintenanceForm.due_date}
-                onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, due_date: event.target.value }))}
-                helperText="Use quando a revisao depende de calendario, documento ou prazo."
-              />
-              <Input
-                label="Km da revisao"
-                inputMode="decimal"
-                value={maintenanceForm.due_odometer_km}
-                onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, due_odometer_km: event.target.value }))}
-                helperText={`Km atual: ${currentOdometerKm?.toLocaleString('pt-BR') ?? 'nao registrado'}`}
-              />
+            <SectionLabel label="Vence por" info="Km e data podem trabalhar juntos. O alerta fica vencido quando qualquer meta passar." />
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              {([
+                { value: 'km', label: 'Km', icon: <Gauge size={16} /> },
+                { value: 'date', label: 'Data', icon: <CalendarDays size={16} /> },
+                { value: 'both', label: 'Km + data', icon: <Wrench size={16} /> },
+              ] as const).map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  onClick={() => applyMaintenanceTargetMode(option.value)}
+                  className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                    maintenanceTargetMode === option.value
+                      ? 'border-orange-400/45 bg-orange-500/14 text-orange-100'
+                      : 'border-white/8 bg-black/20 text-gray-300 hover:bg-white/6'
+                  }`}
+                >
+                  {option.icon}
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            <div className="mt-4 grid gap-3 md:grid-cols-2">
+              {maintenanceTargetMode !== 'km' ? (
+                <div>
+                  <SectionLabel label="Data limite" info="Use para documento, revisao por calendario ou prazo fixo." />
+                  <Input
+                    type="date"
+                    value={maintenanceForm.due_date}
+                    onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, due_date: event.target.value }))}
+                  />
+                </div>
+              ) : null}
+              {maintenanceTargetMode !== 'date' ? (
+                <div>
+                  <SectionLabel label="Km limite" info={`Km atual considerado: ${currentOdometerKm?.toLocaleString('pt-BR') ?? 'nao registrado'}.`} />
+                  <Input
+                    inputMode="decimal"
+                    value={maintenanceForm.due_odometer_km}
+                    onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, due_odometer_km: event.target.value }))}
+                  />
+                </div>
+              ) : null}
             </div>
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <Input
-              label="Avisar dias antes"
-              inputMode="numeric"
-              value={maintenanceForm.advance_days}
-              onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, advance_days: event.target.value }))}
-            />
-            <Input
-              label="Avisar km antes"
-              inputMode="decimal"
-              value={maintenanceForm.advance_km}
-              onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, advance_km: event.target.value }))}
-            />
+            <div className="rounded-xl border border-white/8 bg-black/20 p-4">
+              <SectionLabel label="Antecedencia" info="Define quando o alerta muda de em dia para proximo." />
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {maintenanceTargetMode !== 'km' ? (
+                  <Input
+                    label="Dias antes"
+                    inputMode="numeric"
+                    value={maintenanceForm.advance_days}
+                    onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, advance_days: event.target.value }))}
+                  />
+                ) : null}
+                {maintenanceTargetMode !== 'date' ? (
+                  <Input
+                    label="Km antes"
+                    inputMode="decimal"
+                    value={maintenanceForm.advance_km}
+                    onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, advance_km: event.target.value }))}
+                  />
+                ) : null}
+              </div>
+            </div>
+
+            <div className="rounded-xl border border-white/8 bg-black/20 p-4">
+              <SectionLabel label="Recorrencia" info="Opcional. Ao concluir, o sistema cria automaticamente o proximo alerta usando esse intervalo." />
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                {maintenanceTargetMode !== 'km' ? (
+                  <Input
+                    label="A cada dias"
+                    inputMode="numeric"
+                    value={maintenanceForm.repeat_interval_days}
+                    onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_days: event.target.value }))}
+                  />
+                ) : null}
+                {maintenanceTargetMode !== 'date' ? (
+                  <Input
+                    label="A cada km"
+                    inputMode="decimal"
+                    value={maintenanceForm.repeat_interval_km}
+                    onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_km: event.target.value }))}
+                  />
+                ) : null}
+              </div>
+            </div>
           </div>
 
-          <div className="rounded-xl border border-white/8 bg-black/20 p-4">
-            <div className="mb-3 flex items-center gap-2 text-sm font-medium text-white">
-              <Wrench size={16} />
-              Recorrencia apos concluir
-            </div>
-            <div className="grid gap-3 md:grid-cols-2">
-              <Input
-                label="Repetir a cada dias"
-                inputMode="numeric"
-                value={maintenanceForm.repeat_interval_days}
-                onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_days: event.target.value }))}
-                helperText="Ex.: 90 para revisao trimestral."
-              />
-              <Input
-                label="Repetir a cada km"
-                inputMode="decimal"
-                value={maintenanceForm.repeat_interval_km}
-                onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_km: event.target.value }))}
-                helperText="Ex.: 3000 para troca de oleo."
-              />
-            </div>
+          <div>
+            <SectionLabel label="Observacoes" info="Opcional. Use para detalhes como filtro, marca do oleo, oficina ou item a conferir." />
+            <Input
+              value={maintenanceForm.notes}
+              onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, notes: event.target.value }))}
+              placeholder="Detalhes opcionais"
+            />
           </div>
-
-          <Input
-            label="Observacoes"
-            value={maintenanceForm.notes}
-            onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, notes: event.target.value }))}
-            placeholder="Ex.: trocar oleo, filtro, conferir freio, pneus ou documento."
-          />
-
-          <Alert variant="info">
-            O alerta dispara por data, por kilometragem ou pelos dois. Ao concluir uma revisao recorrente, o sistema cria o proximo alerta automaticamente.
-          </Alert>
 
           <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
             <Button variant="secondary" onClick={closeMaintenanceModal}>Cancelar</Button>
@@ -1337,6 +1424,32 @@ export function VehiclesPage() {
         </div>
       </Modal>
     </div>
+  )
+}
+
+function SectionLabel({ label, info }: { label: string; info: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-sm font-medium text-gray-300">{label}</span>
+      <InfoTip text={info} />
+    </div>
+  )
+}
+
+function InfoTip({ text }: { text: string }) {
+  return (
+    <span className="group relative inline-flex">
+      <button
+        type="button"
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/5 text-gray-400 transition-colors hover:border-orange-400/40 hover:text-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+        aria-label="Informacao"
+      >
+        <Info size={12} />
+      </button>
+      <span className="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-64 -translate-x-1/2 rounded-lg border border-white/10 bg-[#17181c] p-3 text-xs leading-relaxed text-gray-300 shadow-xl shadow-black/40 group-hover:block group-focus-within:block">
+        {text}
+      </span>
+    </span>
   )
 }
 
