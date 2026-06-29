@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent } from 'react'
+import { createPortal } from 'react-dom'
 import { AlertTriangle, Bell, CalendarDays, Camera, Car, CheckCircle2, FileText, Fuel, Gauge, Info, Pencil, Plus, QrCode, Trash2, UserRound, Warehouse, Wrench } from 'lucide-react'
 import type { Tables } from '../../types/database'
 import { supabase } from '../../lib/supabase'
@@ -1175,13 +1176,13 @@ export function VehiclesPage() {
                     key={option.value}
                     type="button"
                     onClick={() => applyMaintenanceType(option.value)}
-                    className={`flex min-h-16 items-center gap-3 rounded-xl border px-3 py-3 text-left transition-colors ${
+                    className={`flex min-h-16 items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${
                       selected
-                        ? 'border-orange-400/45 bg-orange-500/14 text-orange-100'
-                        : 'border-white/8 bg-white/3 text-gray-300 hover:bg-white/6'
+                        ? 'border-orange-400/50 bg-orange-500/14 text-orange-100 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.12)]'
+                        : 'border-white/8 bg-white/3 text-gray-300 hover:border-white/14 hover:bg-white/6'
                     }`}
                   >
-                    <span className="rounded-lg border border-white/10 bg-black/20 p-2 text-orange-200">{visual.icon}</span>
+                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/20 text-orange-200">{visual.icon}</span>
                     <span className="text-sm font-medium text-white">{option.label}</span>
                   </button>
                 )
@@ -1197,7 +1198,7 @@ export function VehiclesPage() {
             />
           </div>
 
-          <div className="rounded-xl border border-white/8 bg-white/3 p-4">
+          <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
             <SectionLabel label="Vence por" info="Km e data podem trabalhar juntos. O alerta fica vencido quando qualquer meta passar." />
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               {([
@@ -1209,10 +1210,10 @@ export function VehiclesPage() {
                   key={option.value}
                   type="button"
                   onClick={() => applyMaintenanceTargetMode(option.value)}
-                  className={`inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
                     maintenanceTargetMode === option.value
-                      ? 'border-orange-400/45 bg-orange-500/14 text-orange-100'
-                      : 'border-white/8 bg-black/20 text-gray-300 hover:bg-white/6'
+                      ? 'border-orange-400/50 bg-orange-500/14 text-orange-100 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.12)]'
+                      : 'border-white/8 bg-black/20 text-gray-300 hover:border-white/14 hover:bg-white/6'
                   }`}
                 >
                   {option.icon}
@@ -1245,7 +1246,7 @@ export function VehiclesPage() {
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-xl border border-white/8 bg-black/20 p-4">
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
               <SectionLabel label="Antecedencia" info="Define quando o alerta muda de em dia para proximo." />
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {maintenanceTargetMode !== 'km' ? (
@@ -1267,7 +1268,7 @@ export function VehiclesPage() {
               </div>
             </div>
 
-            <div className="rounded-xl border border-white/8 bg-black/20 p-4">
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
               <SectionLabel label="Recorrencia" info="Opcional. Ao concluir, o sistema cria automaticamente o proximo alerta usando esse intervalo." />
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {maintenanceTargetMode !== 'km' ? (
@@ -1429,27 +1430,103 @@ export function VehiclesPage() {
 
 function SectionLabel({ label, info }: { label: string; info: string }) {
   return (
-    <div className="flex items-center gap-2">
-      <span className="text-sm font-medium text-gray-300">{label}</span>
+    <div className="mb-2 flex min-h-6 items-center gap-1.5">
+      <span className="text-sm font-medium leading-none text-gray-300">{label}</span>
       <InfoTip text={info} />
     </div>
   )
 }
 
 function InfoTip({ text }: { text: string }) {
+  const buttonRef = useRef<HTMLButtonElement | null>(null)
+  const [isOpen, setIsOpen] = useState(false)
+  const [position, setPosition] = useState<{ left: number; top: number; placement: 'top' | 'bottom' } | null>(null)
+
+  const updatePosition = useCallback(() => {
+    const button = buttonRef.current
+    if (!button) return
+
+    const rect = button.getBoundingClientRect()
+    const width = 288
+    const margin = 16
+    const left = Math.min(
+      Math.max(rect.left + rect.width / 2 - width / 2, margin),
+      window.innerWidth - width - margin,
+    )
+    const bottomTop = rect.bottom + 8
+    const estimatedHeight = 104
+    const opensAbove = bottomTop + estimatedHeight > window.innerHeight - margin
+
+    setPosition({
+      left,
+      top: opensAbove ? Math.max(rect.top - estimatedHeight - 8, margin) : bottomTop,
+      placement: opensAbove ? 'top' : 'bottom',
+    })
+  }, [])
+
+  useEffect(() => {
+    if (!isOpen) return
+
+    updatePosition()
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (buttonRef.current?.contains(event.target as Node)) return
+      setIsOpen(false)
+    }
+    const handleEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setIsOpen(false)
+    }
+
+    window.addEventListener('resize', updatePosition)
+    window.addEventListener('scroll', updatePosition, true)
+    document.addEventListener('pointerdown', handlePointerDown)
+    document.addEventListener('keydown', handleEscape)
+
+    return () => {
+      window.removeEventListener('resize', updatePosition)
+      window.removeEventListener('scroll', updatePosition, true)
+      document.removeEventListener('pointerdown', handlePointerDown)
+      document.removeEventListener('keydown', handleEscape)
+    }
+  }, [isOpen, updatePosition])
+
   return (
-    <span className="group relative inline-flex">
+    <>
       <button
+        ref={buttonRef}
         type="button"
-        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-white/10 bg-white/5 text-gray-400 transition-colors hover:border-orange-400/40 hover:text-orange-200 focus:outline-none focus:ring-2 focus:ring-orange-500/40"
+        onClick={() => {
+          setIsOpen((current) => !current)
+          window.requestAnimationFrame(updatePosition)
+        }}
+        className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-lg border text-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/35 ${
+          isOpen
+            ? 'border-orange-400/45 bg-orange-500/15 text-orange-200'
+            : 'border-white/10 bg-white/5 hover:border-orange-400/35 hover:bg-white/8 hover:text-orange-200'
+        }`}
         aria-label="Informacao"
+        aria-expanded={isOpen}
       >
         <Info size={12} />
       </button>
-      <span className="pointer-events-none absolute left-1/2 top-7 z-20 hidden w-64 -translate-x-1/2 rounded-lg border border-white/10 bg-[#17181c] p-3 text-xs leading-relaxed text-gray-300 shadow-xl shadow-black/40 group-hover:block group-focus-within:block">
-        {text}
-      </span>
-    </span>
+      {isOpen && position ? createPortal(
+        <div
+          className="fixed z-[80] w-72 rounded-2xl border border-white/10 bg-[#17181c] p-3 text-xs leading-relaxed text-gray-300 shadow-2xl shadow-black/45"
+          style={{ left: position.left, top: position.top }}
+          role="tooltip"
+        >
+          <div
+            className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-white/10 bg-[#17181c] ${
+              position.placement === 'bottom'
+                ? '-top-1.5 border-l border-t'
+                : '-bottom-1.5 border-b border-r'
+            }`}
+          />
+          <p className="relative">{text}</p>
+        </div>,
+        document.body,
+      ) : null}
+    </>
   )
 }
 
