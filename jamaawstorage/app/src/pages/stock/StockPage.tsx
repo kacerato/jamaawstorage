@@ -138,6 +138,7 @@ export function StockPage() {
   const currentTab = searchParams.get('tab')
   const activeTab = currentTab === 'kits' || currentTab === 'movements' ? currentTab : 'items'
   const initialQuery = searchParams.get('q') ?? ''
+  const targetItemId = searchParams.get('item')
 
   const [items, setItems] = useState<StockItemWithLowStock[]>(stockPageCache.items)
   const [loading, setLoading] = useState(stockPageCache.items.length === 0)
@@ -319,11 +320,65 @@ export function StockPage() {
 
   const lowStockCount = items.filter((item) => item.is_low_stock).length
 
+  useEffect(() => {
+    if (!targetItemId || activeTab !== 'items') return
+    if (modalMode === 'detail' && selectedItem?.id === targetItemId) return
+
+    const itemId = targetItemId
+    const itemFromPage = items.find((item) => item.id === targetItemId)
+    if (itemFromPage) {
+      setSelectedItem(itemFromPage)
+      setSubmitError(null)
+      setModalMode('detail')
+      void fetchItemDetails(itemFromPage.id)
+      return
+    }
+
+    let cancelled = false
+
+    async function openItemFromUrl() {
+      const { data, error: itemError } = await supabase
+        .from('stock_items')
+        .select('id, code, name, category, ca_nr, current_quantity, quantity_new, quantity_used, quantity_damaged, minimum_quantity, unit, is_active, svg_icon_key, description, created_at, updated_at')
+        .eq('id', itemId)
+        .maybeSingle()
+
+      if (cancelled) return
+
+      if (itemError || !data) {
+        setSearchParams((prev) => {
+          const next = new URLSearchParams(prev)
+          next.delete('item')
+          return next
+        })
+        return
+      }
+
+      setSelectedItem(data as StockItemRow)
+      setSubmitError(null)
+      setModalMode('detail')
+      void fetchItemDetails(data.id)
+    }
+
+    void openItemFromUrl()
+
+    return () => {
+      cancelled = true
+    }
+  }, [activeTab, fetchItemDetails, items, modalMode, selectedItem?.id, setSearchParams, targetItemId])
+
   const handleCloseModal = () => {
     setModalMode(null)
     setSelectedItem(null)
     setSubmitError(null)
     setItemWithdrawals([])
+    if (searchParams.has('item')) {
+      setSearchParams((prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('item')
+        return next
+      })
+    }
   }
 
   const handleCreateSubmit = async (data: TablesInsert<'stock_items'>) => {
