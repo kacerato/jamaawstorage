@@ -109,9 +109,11 @@ function MiniMetric({
   }
 
   return (
-    <div className={cn('min-w-0 rounded-2xl border px-4 py-3', toneClasses[tone])}>
-      <p className="truncate text-xs font-medium uppercase tracking-[0.16em] text-white/50">{label}</p>
-      <p className="mt-2 truncate text-2xl font-bold">{value}</p>
+    <div className={cn('min-w-0 overflow-hidden rounded-2xl border px-3 py-3 sm:px-4', toneClasses[tone])}>
+      <p className="min-h-[30px] max-w-full break-words text-[10px] font-semibold uppercase leading-[15px] tracking-[0.04em] text-white/50 sm:text-[11px] sm:tracking-[0.08em]">
+        {label}
+      </p>
+      <p className="mt-2 text-2xl font-bold leading-none text-inherit">{value}</p>
     </div>
   )
 }
@@ -159,6 +161,11 @@ function withdrawalDestinationsSummary(withdrawal: RecentWithdrawal): string {
   return withdrawal.destination_type === 'collaborator'
     ? withdrawal.collaborator?.full_name ?? 'Colaborador'
     : withdrawal.work_site?.name ?? 'Obra'
+}
+
+function stockItemTarget(item: Pick<LowStockItem, 'id' | 'code' | 'name'>): string {
+  const query = item.code?.trim() || item.name
+  return `/stock?tab=items&item=${encodeURIComponent(item.id)}&q=${encodeURIComponent(query)}`
 }
 
 export function DashboardPage() {
@@ -254,15 +261,15 @@ export function DashboardPage() {
   const lowStockPreview = lowStockItems.slice(0, 4)
   const recentWithdrawalsPreview = recentWithdrawals.slice(0, 5)
   const criticalStockCount = lowStockItems.filter((item) => item.current_quantity <= 0).length
+  const lowButAvailableStockCount = Math.max(lowStockItems.length - criticalStockCount, 0)
   const healthyStockCount = Math.max(stats.total_items - lowStockItems.length, 0)
-  const pendingWithdrawalsCount = recentWithdrawals.filter((withdrawal) => withdrawal.status === 'pending').length
   const completedWithdrawalsCount = recentWithdrawals.filter((withdrawal) => withdrawal.status === 'completed').length
 
   const stockHealthData = useMemo(() => [
     { name: 'Regular', value: healthyStockCount },
-    { name: 'Baixo', value: Math.max(lowStockItems.length - criticalStockCount, 0) },
+    { name: 'Baixo', value: lowButAvailableStockCount },
     { name: 'Zerado', value: criticalStockCount },
-  ].filter((item) => item.value > 0), [criticalStockCount, healthyStockCount, lowStockItems.length])
+  ].filter((item) => item.value > 0), [criticalStockCount, healthyStockCount, lowButAvailableStockCount])
 
   const stockHealthPercent = stats.total_items > 0
     ? Math.round((healthyStockCount / stats.total_items) * 100)
@@ -272,7 +279,7 @@ export function DashboardPage() {
     0,
     Math.min(
       100,
-      stockHealthPercent - Math.min(pendingWithdrawalsCount * 4, 20) - Math.min(criticalStockCount * 8, 32),
+      stockHealthPercent - Math.min(criticalStockCount * 8, 32) - Math.min(lowButAvailableStockCount * 2, 18),
     ),
   )
 
@@ -338,7 +345,7 @@ export function DashboardPage() {
         <div>
           <h2 className="text-2xl font-bold text-white">Painel de Controle</h2>
           <p className="mt-1 max-w-2xl text-sm text-gray-400">
-            Leitura rapida do almoxarifado: saude do estoque, acoes principais e pontos que precisam de atencao.
+            Leitura rapida do almoxarifado: disponibilidade do estoque, acoes principais e pontos que precisam de atencao.
           </p>
         </div>
         {refreshing && (
@@ -366,11 +373,11 @@ export function DashboardPage() {
                     {highlightLabel}
                   </h3>
                   <p className="mt-3 max-w-xl text-sm leading-6 text-gray-300">
-                    O painel prioriza o que exige decisao primeiro: disponibilidade do estoque, retiradas do dia e pendencias recentes.
+                    O painel prioriza o que exige decisao primeiro: disponibilidade do estoque, retiradas do dia e alertas recentes.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
                   <MiniMetric label="Itens" value={stats.total_items} />
                   <MiniMetric
                     label="Estoque baixo"
@@ -378,17 +385,17 @@ export function DashboardPage() {
                     tone={stats.low_stock_count > 0 ? 'warning' : 'success'}
                   />
                   <MiniMetric label="Retiradas hoje" value={stats.total_withdrawals_today} />
-                  <MiniMetric label="Pessoas ativas" value={stats.active_people_count} />
+                  <MiniMetric label="Colab. ativos" value={stats.active_people_count} />
                 </div>
               </div>
 
-              <div className="relative flex min-h-[320px] items-center justify-center border-t border-white/8 bg-black/10 p-6 lg:border-l lg:border-t-0">
-                <div className="absolute left-5 top-5 rounded-2xl border border-white/10 bg-white/8 px-4 py-3 backdrop-blur">
+              <div className="relative flex min-h-[320px] flex-col items-center justify-center gap-4 border-t border-white/8 bg-black/10 p-4 sm:p-6 lg:border-l lg:border-t-0">
+                <div className="self-start rounded-2xl border border-white/10 bg-white/8 px-4 py-3 backdrop-blur lg:absolute lg:left-5 lg:top-5 lg:self-auto">
                   <p className="text-xs uppercase tracking-[0.18em] text-white/50">Indice</p>
                   <p className="mt-1 text-3xl font-bold text-white">{operationsScore}</p>
                 </div>
 
-                <div className="relative h-[250px] w-full max-w-[310px]">
+                <div className="relative h-[220px] w-full max-w-[260px] sm:h-[250px] sm:max-w-[310px]">
                   {stockHealthData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -416,14 +423,14 @@ export function DashboardPage() {
                     </div>
                   )}
 
-                  <div className="absolute left-1/2 top-1/2 flex h-32 w-32 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/12 bg-[#111318]/92 text-center shadow-[0_18px_60px_rgba(0,0,0,0.42)] backdrop-blur">
-                    <span className="text-xs uppercase tracking-[0.18em] text-white/45">Saude</span>
-                    <span className="mt-1 text-4xl font-bold text-white">{stockHealthPercent}%</span>
-                    <span className="mt-1 text-xs text-gray-400">regular</span>
+                  <div className="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/12 bg-[#111318]/92 text-center shadow-[0_18px_60px_rgba(0,0,0,0.42)] backdrop-blur sm:h-32 sm:w-32">
+                    <span className="text-[10px] uppercase tracking-[0.12em] text-white/45 sm:text-xs sm:tracking-[0.18em]">Disponivel</span>
+                    <span className="mt-1 text-3xl font-bold text-white sm:text-4xl">{stockHealthPercent}%</span>
+                    <span className="mt-1 text-xs text-gray-400">em estoque</span>
                   </div>
                 </div>
 
-                <div className="absolute bottom-5 left-5 right-5 grid grid-cols-3 gap-2 text-xs">
+                <div className="grid w-full grid-cols-1 gap-2 text-xs sm:grid-cols-3 lg:absolute lg:bottom-5 lg:left-5 lg:right-5 lg:w-auto">
                   {stockHealthData.map((entry, index) => (
                     <div key={entry.name} className="min-w-0 rounded-xl border border-white/8 bg-white/6 px-3 py-2">
                       <div className="flex items-center gap-2">
@@ -508,7 +515,7 @@ export function DashboardPage() {
                       <button
                         key={item.id}
                         type="button"
-                        onClick={() => navigate('/stock')}
+                        onClick={() => navigate(stockItemTarget(item))}
                         className="rounded-2xl border border-white/8 bg-white/4 p-4 text-left transition-colors hover:border-orange-300/35 hover:bg-white/7"
                       >
                         <div className="flex items-start justify-between gap-3">
@@ -637,10 +644,10 @@ export function DashboardPage() {
                   <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/16 text-amber-100">
                     <ClipboardIcon size={20} />
                   </span>
-                  <p className="text-3xl font-bold text-white">{pendingWithdrawalsCount}</p>
+                  <p className="text-3xl font-bold text-white">{lowButAvailableStockCount}</p>
                 </div>
-                <p className="mt-3 text-sm font-medium text-amber-100">Retiradas pendentes</p>
-                <p className="mt-1 text-xs leading-5 text-amber-100/62">Conferir solicitacoes recentes antes de novas saidas.</p>
+                <p className="mt-3 text-sm font-medium text-amber-100">Itens abaixo do minimo</p>
+                <p className="mt-1 text-xs leading-5 text-amber-100/62">Ainda possuem saldo, mas ja pedem reposicao.</p>
               </div>
             </div>
           </Card>
@@ -658,7 +665,7 @@ export function DashboardPage() {
               <MiniMetric label="Regular" value={healthyStockCount} tone="success" />
               <MiniMetric label="Baixo" value={lowStockItems.length} tone={lowStockItems.length > 0 ? 'warning' : 'success'} />
               <MiniMetric label="Zerado" value={criticalStockCount} tone={criticalStockCount > 0 ? 'danger' : 'success'} />
-              <MiniMetric label="Concluidas" value={completedWithdrawalsCount} />
+              <MiniMetric label="Retiradas concluidas" value={completedWithdrawalsCount} />
             </div>
           </Card>
 
