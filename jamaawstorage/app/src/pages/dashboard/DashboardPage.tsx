@@ -296,56 +296,55 @@ export function DashboardPage() {
       ? `${lowStockItems.length} item(ns) abaixo do minimo`
       : 'Estoque dentro do minimo'
 
-  const priorityAction = criticalStockCount > 0
-    ? {
-        tone: 'danger' as const,
-        eyebrow: 'Reposicao urgente',
-        title: `${criticalStockCount} item(ns) zerado(s)`,
-        description: 'Comece pelo item sem saldo para evitar retirada sem disponibilidade.',
-        buttonLabel: firstCriticalStockItem ? 'Abrir item critico' : 'Abrir estoque',
-        path: firstCriticalStockItem ? stockItemTarget(firstCriticalStockItem) : '/stock',
-        icon: <AlertIcon size={22} />,
-      }
-    : lowButAvailableStockCount > 0
-      ? {
-          tone: 'warning' as const,
-          eyebrow: 'Reposicao preventiva',
-          title: `${lowButAvailableStockCount} item(ns) abaixo do minimo`,
-          description: 'Revise os itens com saldo baixo antes que virem bloqueio operacional.',
-          buttonLabel: 'Revisar estoque baixo',
-          path: lowStockItems[0] ? stockItemTarget(lowStockItems[0]) : '/stock',
-          icon: <PackageIcon size={22} />,
-        }
-      : {
-          tone: 'success' as const,
-          eyebrow: 'Operacao estavel',
-          title: 'Sem alerta de reposicao',
-          description: 'Use o painel para registrar a proxima retirada ou acompanhar movimentacoes.',
-          buttonLabel: 'Nova retirada',
-          path: '/withdrawals/new',
-          icon: <ClipboardIcon size={22} />,
-        }
-
-  const priorityToneClasses = {
+  const alertToneClasses = {
     danger: {
-      panel: 'border-red-300/22 bg-red-500/10',
-      icon: 'bg-red-500/16 text-red-100',
-      eyebrow: 'text-red-100/70',
-      button: 'border-red-300/28 bg-red-500/14 text-red-100 hover:border-red-300/55 hover:bg-red-500/20',
+      row: 'border-red-300/18 bg-red-500/8 hover:border-red-300/38 hover:bg-red-500/12',
+      icon: 'bg-red-500/14 text-red-100',
+      badge: 'danger' as const,
     },
     warning: {
-      panel: 'border-amber-300/22 bg-amber-500/10',
-      icon: 'bg-amber-500/16 text-amber-100',
-      eyebrow: 'text-amber-100/70',
-      button: 'border-amber-300/28 bg-amber-500/14 text-amber-100 hover:border-amber-300/55 hover:bg-amber-500/20',
+      row: 'border-amber-300/18 bg-amber-500/8 hover:border-amber-300/38 hover:bg-amber-500/12',
+      icon: 'bg-amber-500/14 text-amber-100',
+      badge: 'warning' as const,
     },
     success: {
-      panel: 'border-emerald-300/22 bg-emerald-500/10',
-      icon: 'bg-emerald-500/16 text-emerald-100',
-      eyebrow: 'text-emerald-100/70',
-      button: 'border-emerald-300/28 bg-emerald-500/14 text-emerald-100 hover:border-emerald-300/55 hover:bg-emerald-500/20',
+      row: 'border-emerald-300/18 bg-emerald-500/8 hover:border-emerald-300/38 hover:bg-emerald-500/12',
+      icon: 'bg-emerald-500/14 text-emerald-100',
+      badge: 'success' as const,
     },
-  }[priorityAction.tone]
+  }
+
+  const dashboardAlerts = criticalStockCount > 0 || lowButAvailableStockCount > 0
+    ? [
+        ...(criticalStockCount > 0
+          ? [{
+              tone: 'danger' as const,
+              title: 'Itens zerados',
+              detail: 'Sem saldo',
+              value: criticalStockCount,
+              path: firstCriticalStockItem ? stockItemTarget(firstCriticalStockItem) : '/stock',
+              icon: <AlertIcon size={18} />,
+            }]
+          : []),
+        ...(lowButAvailableStockCount > 0
+          ? [{
+              tone: 'warning' as const,
+              title: 'Abaixo do minimo',
+              detail: 'Repor em breve',
+              value: lowButAvailableStockCount,
+              path: lowStockItems[0] ? stockItemTarget(lowStockItems[0]) : '/stock',
+              icon: <PackageIcon size={18} />,
+            }]
+          : []),
+      ]
+    : [{
+        tone: 'success' as const,
+        title: 'Estoque em dia',
+        detail: 'Sem alerta ativo',
+        value: healthyStockCount,
+        path: '/stock',
+        icon: <PackageIcon size={18} />,
+      }]
 
   const statusBadgeVariant = (
     status: string
@@ -447,13 +446,13 @@ export function DashboardPage() {
                 </div>
               </div>
 
-              <div className="relative flex min-h-[290px] flex-col items-center justify-center gap-4 border-t border-white/8 bg-black/10 p-4 sm:p-6 lg:border-l lg:border-t-0">
+              <div className="relative flex min-h-[270px] flex-col items-center justify-between gap-3 border-t border-white/8 bg-black/10 p-4 sm:p-5 lg:border-l lg:border-t-0">
                 <div className="self-start rounded-xl border border-white/10 bg-white/8 px-4 py-3 backdrop-blur lg:absolute lg:left-5 lg:top-5 lg:self-auto">
                   <p className="text-xs uppercase tracking-[0.14em] text-white/50">Indice</p>
                   <p className="mt-1 text-3xl font-bold text-white">{operationsScore}</p>
                 </div>
 
-                <div className="relative h-[210px] w-full max-w-[250px] sm:h-[238px] sm:max-w-[292px]">
+                <div className="relative mt-8 h-[174px] w-full max-w-[218px] sm:h-[194px] sm:max-w-[244px] lg:mt-10">
                   {stockHealthData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -481,14 +480,14 @@ export function DashboardPage() {
                     </div>
                   )}
 
-                  <div className="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/12 bg-[#111318]/92 text-center shadow-[0_18px_60px_rgba(0,0,0,0.42)] backdrop-blur sm:h-32 sm:w-32">
-                    <span className="text-[10px] uppercase tracking-[0.12em] text-white/45 sm:text-xs sm:tracking-[0.14em]">Disponivel</span>
-                    <span className="mt-1 text-3xl font-bold text-white sm:text-4xl">{stockHealthPercent}%</span>
-                    <span className="mt-1 text-xs text-gray-400">em estoque</span>
+                  <div className="absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/12 bg-[#111318]/94 text-center shadow-[0_14px_42px_rgba(0,0,0,0.38)] backdrop-blur sm:h-28 sm:w-28">
+                    <span className="text-[9px] uppercase tracking-[0.1em] text-white/45 sm:text-[10px]">Disponivel</span>
+                    <span className="mt-0.5 text-2xl font-bold text-white sm:text-3xl">{stockHealthPercent}%</span>
+                    <span className="mt-0.5 text-[11px] text-gray-400">em estoque</span>
                   </div>
                 </div>
 
-                <div className="grid w-full grid-cols-1 gap-2 text-xs sm:grid-cols-3 lg:absolute lg:bottom-5 lg:left-5 lg:right-5 lg:w-auto">
+                <div className="grid w-full grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                   {stockHealthData.map((entry, index) => (
                     <div key={entry.name} className="min-w-0 rounded-xl border border-white/8 bg-white/6 px-3 py-2">
                       <div className="flex items-center gap-2">
@@ -688,47 +687,76 @@ export function DashboardPage() {
             variant="bordered"
             className="rounded-[22px] border-white/10 bg-[#101114]"
           >
-            <SectionHeading
-              eyebrow="Proxima acao"
-              title="Foco operacional"
-              description="Um caminho claro para agir sem repetir o painel inteiro."
-            />
-
-            <div className={cn('mt-5 rounded-[18px] border p-4', priorityToneClasses.panel)}>
-              <div className="flex items-start gap-3">
-                <span className={cn('flex h-11 w-11 shrink-0 items-center justify-center rounded-xl', priorityToneClasses.icon)}>
-                  {priorityAction.icon}
-                </span>
-                <div className="min-w-0">
-                  <p className={cn('text-xs font-semibold uppercase tracking-[0.14em]', priorityToneClasses.eyebrow)}>
-                    {priorityAction.eyebrow}
-                  </p>
-                  <p className="mt-2 text-xl font-semibold leading-7 text-white">{priorityAction.title}</p>
-                  <p className="mt-2 text-sm leading-6 text-white/62">{priorityAction.description}</p>
-                </div>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-200/70">Alertas</p>
+                <h3 className="mt-1 text-lg font-semibold text-white">Estoque</h3>
               </div>
-
-              <button
-                type="button"
-                onClick={() => navigate(priorityAction.path)}
-                className={cn('mt-5 w-full rounded-xl border px-4 py-3 text-sm font-semibold transition-colors', priorityToneClasses.button)}
-              >
-                {priorityAction.buttonLabel}
-              </button>
+              <Badge variant={criticalStockCount > 0 ? 'danger' : lowButAvailableStockCount > 0 ? 'warning' : 'success'} size="sm">
+                {criticalStockCount + lowButAvailableStockCount}
+              </Badge>
             </div>
 
-            <div className="mt-5 divide-y divide-white/8 rounded-[18px] border border-white/8 bg-white/[0.03]">
-              <div className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-sm text-gray-400">Itens monitorados</span>
-                <span className="text-sm font-semibold text-white">{stats.total_items}</span>
+            <div className="mt-4 grid gap-3">
+              {dashboardAlerts.map((alert) => {
+                const toneClasses = alertToneClasses[alert.tone]
+
+                return (
+                  <button
+                    key={`${alert.tone}-${alert.title}`}
+                    type="button"
+                    onClick={() => navigate(alert.path)}
+                    className={cn('flex items-center gap-3 rounded-xl border p-3 text-left transition-colors', toneClasses.row)}
+                  >
+                    <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', toneClasses.icon)}>
+                      {alert.icon}
+                    </span>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold text-white">{alert.title}</span>
+                      <span className="mt-0.5 block truncate text-xs text-gray-400">{alert.detail}</span>
+                    </span>
+                    <Badge variant={toneClasses.badge} size="sm">
+                      {alert.value}
+                    </Badge>
+                  </button>
+                )
+              })}
+            </div>
+
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => navigate('/stock')}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-orange-300/35 hover:text-orange-100"
+              >
+                Estoque
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate('/withdrawals/new')}
+                className="rounded-xl border border-orange-300/22 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-100 transition-colors hover:border-orange-300/45 hover:bg-orange-500/16"
+              >
+                Retirada
+              </button>
+            </div>
+          </Card>
+
+          <Card
+            variant="bordered"
+            className="rounded-[22px] border-white/10 bg-[#101114]"
+          >
+            <div className="grid grid-cols-3 divide-x divide-white/8 overflow-hidden rounded-xl border border-white/8 bg-white/[0.03]">
+              <div className="px-3 py-3">
+                <p className="text-[11px] text-gray-500">Itens</p>
+                <p className="mt-1 text-sm font-semibold text-white">{stats.total_items}</p>
               </div>
-              <div className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-sm text-gray-400">Retiradas hoje</span>
-                <span className="text-sm font-semibold text-white">{stats.total_withdrawals_today}</span>
+              <div className="px-3 py-3">
+                <p className="text-[11px] text-gray-500">Hoje</p>
+                <p className="mt-1 text-sm font-semibold text-white">{stats.total_withdrawals_today}</p>
               </div>
-              <div className="flex items-center justify-between gap-4 px-4 py-3">
-                <span className="text-sm text-gray-400">Colaboradores ativos</span>
-                <span className="text-sm font-semibold text-white">{stats.active_people_count}</span>
+              <div className="px-3 py-3">
+                <p className="text-[11px] text-gray-500">Ativos</p>
+                <p className="mt-1 text-sm font-semibold text-white">{stats.active_people_count}</p>
               </div>
             </div>
           </Card>
