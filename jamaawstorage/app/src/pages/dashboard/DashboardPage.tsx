@@ -314,6 +314,7 @@ export function DashboardPage() {
     dashboardCache.vehicleMaintenanceAlerts,
   )
   const [vehicleUsageLogs, setVehicleUsageLogs] = useState<DashboardVehicleLogRow[]>(dashboardCache.vehicleUsageLogs)
+  const [activeHealthIndex, setActiveHealthIndex] = useState(0)
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -436,6 +437,11 @@ export function DashboardPage() {
   const stockHealthPercent = stats.total_items > 0
     ? Math.round((healthyStockCount / stats.total_items) * 100)
     : 0
+
+  const activeHealthSegment = stockHealthData[activeHealthIndex] ?? stockHealthData[0]
+  const activeHealthPercent = activeHealthSegment && stats.total_items > 0
+    ? Math.round((activeHealthSegment.value / stats.total_items) * 100)
+    : stockHealthPercent
 
   const operationsScore = Math.max(
     0,
@@ -622,9 +628,21 @@ export function DashboardPage() {
                           paddingAngle={4}
                           stroke="rgba(255,255,255,0.08)"
                           strokeWidth={2}
+                          animationBegin={80}
+                          animationDuration={850}
+                          animationEasing="ease-out"
+                          onMouseEnter={(_entry, index) => setActiveHealthIndex(index)}
+                          onClick={(_entry, index) => setActiveHealthIndex(index)}
+                          className="cursor-pointer outline-none"
                         >
                           {stockHealthData.map((entry, index) => (
-                            <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />
+                            <Cell
+                              key={entry.name}
+                              fill={chartColors[index % chartColors.length]}
+                              opacity={activeHealthIndex === index ? 1 : 0.58}
+                              stroke={activeHealthIndex === index ? 'rgba(255,255,255,0.38)' : 'rgba(255,255,255,0.08)'}
+                              strokeWidth={activeHealthIndex === index ? 3 : 2}
+                            />
                           ))}
                         </Pie>
                       </PieChart>
@@ -635,16 +653,33 @@ export function DashboardPage() {
                     </div>
                   )}
 
-                  <div className="absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/12 bg-[#111318]/94 text-center shadow-[0_14px_42px_rgba(0,0,0,0.38)] backdrop-blur sm:h-28 sm:w-28">
-                    <span className="text-[9px] uppercase tracking-[0.1em] text-white/45 sm:text-[10px]">Disponivel</span>
-                    <span className="mt-0.5 text-2xl font-bold text-white sm:text-3xl">{stockHealthPercent}%</span>
-                    <span className="mt-0.5 text-[11px] text-gray-400">em estoque</span>
+                  <div className="pointer-events-none absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/12 bg-[#111318]/94 text-center shadow-[0_14px_42px_rgba(0,0,0,0.38)] backdrop-blur transition-all duration-300 sm:h-28 sm:w-28">
+                    <span className="max-w-[76px] truncate text-[9px] uppercase tracking-[0.1em] text-white/45 sm:max-w-[88px] sm:text-[10px]">
+                      {activeHealthSegment?.name ?? 'Disponivel'}
+                    </span>
+                    <span className="mt-0.5 text-2xl font-bold text-white transition-all duration-300 sm:text-3xl">{activeHealthPercent}%</span>
+                    <span className="mt-0.5 text-[11px] text-gray-400">
+                      {activeHealthSegment ? `${activeHealthSegment.value} item(ns)` : 'em estoque'}
+                    </span>
                   </div>
                 </div>
 
                 <div className="grid w-full grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                   {stockHealthData.map((entry, index) => (
-                    <div key={entry.name} className="min-w-0 rounded-xl border border-white/8 bg-white/6 px-3 py-2">
+                    <button
+                      key={entry.name}
+                      type="button"
+                      onMouseEnter={() => setActiveHealthIndex(index)}
+                      onFocus={() => setActiveHealthIndex(index)}
+                      onClick={() => setActiveHealthIndex(index)}
+                      className={cn(
+                        'min-w-0 rounded-xl border px-3 py-2 text-left transition-all duration-200 hover:-translate-y-0.5',
+                        activeHealthIndex === index
+                          ? 'border-white/20 bg-white/10 shadow-[0_12px_28px_rgba(0,0,0,0.22)]'
+                          : 'border-white/8 bg-white/6 hover:border-white/14 hover:bg-white/8',
+                      )}
+                      aria-pressed={activeHealthIndex === index}
+                    >
                       <div className="flex items-center gap-2">
                         <span
                           className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -653,7 +688,7 @@ export function DashboardPage() {
                         <span className="truncate text-white/60">{entry.name}</span>
                       </div>
                       <p className="mt-1 font-semibold text-white">{entry.value}</p>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
