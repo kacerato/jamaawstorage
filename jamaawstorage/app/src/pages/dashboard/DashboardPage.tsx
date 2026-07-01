@@ -18,12 +18,44 @@ import {
   UsersIcon,
   ChartIcon,
 } from '../../components/icons'
+import { CalendarDays, Wrench } from 'lucide-react'
 
 interface DashboardStatsData {
   total_items: number
   low_stock_count: number
   total_withdrawals_today: number
   active_people_count: number
+}
+
+type VehicleMaintenanceAlertType = 'oil_change' | 'scheduled_review' | 'tires' | 'brakes' | 'document' | 'custom'
+type VehicleMaintenanceStatus = 'active' | 'completed' | 'disabled'
+
+interface DashboardVehicleRow {
+  id: string
+  code: string
+  plate: string | null
+  model: string
+  is_active: boolean
+}
+
+interface DashboardVehicleLogRow {
+  vehicle_id: string
+  occurred_at: string
+  odometer_km: number | null
+}
+
+interface DashboardVehicleMaintenanceAlertRow {
+  id: string
+  vehicle_id: string
+  alert_type: VehicleMaintenanceAlertType
+  title: string
+  due_date: string | null
+  due_odometer_km: number | null
+  advance_days: number
+  advance_km: number
+  status: VehicleMaintenanceStatus
+  updated_at: string
+  vehicle?: DashboardVehicleRow | null
 }
 
 interface LowStockItem extends Tables<'stock_items'> {
@@ -48,6 +80,8 @@ const dashboardCache: {
   stats: DashboardStatsData
   lowStockItems: LowStockItem[]
   recentWithdrawals: RecentWithdrawal[]
+  vehicleMaintenanceAlerts: DashboardVehicleMaintenanceAlertRow[]
+  vehicleUsageLogs: DashboardVehicleLogRow[]
 } = {
   stats: {
     total_items: 0,
@@ -57,40 +91,56 @@ const dashboardCache: {
   },
   lowStockItems: [],
   recentWithdrawals: [],
+  vehicleMaintenanceAlerts: [],
+  vehicleUsageLogs: [],
+}
+
+interface UntypedQueryBuilder {
+  select: (query?: string) => UntypedQueryBuilder
+  eq: (column: string, value: unknown) => UntypedQueryBuilder
+  order: (column: string, options?: unknown) => UntypedQueryBuilder
+  limit: (count: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
 }
 
 const chartColors = ['#22c55e', '#f97316', '#ef4444']
 
-const actionCards = [
+const commandActions = [
   {
     title: 'Nova retirada',
     description: 'Registrar saida de materiais',
     path: '/withdrawals/new',
     icon: <ClipboardIcon size={22} />,
-    className: 'border-orange-400/24 bg-orange-500/12 text-orange-100 hover:border-orange-300/50',
+    tone: 'primary',
   },
   {
     title: 'Estoque',
     description: 'Buscar e ajustar itens',
     path: '/stock',
     icon: <PackageIcon size={22} />,
-    className: 'border-emerald-400/24 bg-emerald-500/12 text-emerald-100 hover:border-emerald-300/50',
+    tone: 'stock',
   },
   {
     title: 'Colaboradores',
     description: 'Consultar responsaveis',
     path: '/people',
     icon: <UsersIcon size={22} />,
-    className: 'border-sky-400/24 bg-sky-500/12 text-sky-100 hover:border-sky-300/50',
+    tone: 'people',
   },
   {
     title: 'Relatorios',
     description: 'Exportar indicadores',
     path: '/reports',
     icon: <ChartIcon size={22} />,
-    className: 'border-violet-400/24 bg-violet-500/12 text-violet-100 hover:border-violet-300/50',
+    tone: 'reports',
   },
-]
+] as const
+
+const commandActionToneClasses: Record<(typeof commandActions)[number]['tone'], string> = {
+  primary: 'border-orange-300/28 bg-orange-500/12 text-orange-100 hover:border-orange-300/55 hover:bg-orange-500/16',
+  stock: 'border-emerald-300/22 bg-emerald-500/8 text-emerald-100 hover:border-emerald-300/45 hover:bg-emerald-500/12',
+  people: 'border-sky-300/22 bg-sky-500/8 text-sky-100 hover:border-sky-300/45 hover:bg-sky-500/12',
+  reports: 'border-violet-300/22 bg-violet-500/8 text-violet-100 hover:border-violet-300/45 hover:bg-violet-500/12',
+}
 
 function MiniMetric({
   label,
@@ -136,6 +186,87 @@ function SectionHeading({
   )
 }
 
+function dateInputValueFromDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function todayDateInputValue(): string {
+  return dateInputValueFromDate(new Date())
+}
+
+function formatDateOnly(dateInput: string | null): string {
+  if (!dateInput) return '-'
+  return new Date(`${dateInput}T00:00:00`).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
+function maintenanceTypeLabel(type: VehicleMaintenanceAlertType): string {
+  const labels: Record<VehicleMaintenanceAlertType, string> = {
+    oil_change: 'Troca de oleo',
+    scheduled_review: 'Revisao',
+    tires: 'Pneus',
+    brakes: 'Freios',
+    document: 'Documento',
+    custom: 'Alerta',
+  }
+
+  return labels[type]
+}
+
+function vehicleMaintenanceIcon(type: VehicleMaintenanceAlertType) {
+  if (type === 'document') return <CalendarDays size={18} />
+  if (type === 'brakes') return <AlertIcon size={18} />
+  return <Wrench size={18} />
+}
+
+function vehicleDisplayName(vehicle: DashboardVehicleRow | null | undefined): string {
+  if (!vehicle) return 'Carro'
+  const plate = vehicle.plate ? ` / ${vehicle.plate}` : ''
+  return `${vehicle.model}${plate}`
+}
+
+function vehicleMaintenanceState(
+  alert: DashboardVehicleMaintenanceAlertRow,
+  currentOdometerKm: number | null,
+): {
+  label: string
+  variant: 'success' | 'warning' | 'danger'
+  priority: number
+} {
+  const today = new Date(`${todayDateInputValue()}T00:00:00`)
+  const dateDaysLeft = alert.due_date
+    ? Math.ceil((new Date(`${alert.due_date}T00:00:00`).getTime() - today.getTime()) / 86_400_000)
+    : null
+  const kmLeft = alert.due_odometer_km != null && currentOdometerKm != null
+    ? alert.due_odometer_km - currentOdometerKm
+    : null
+
+  if ((dateDaysLeft != null && dateDaysLeft < 0) || (kmLeft != null && kmLeft <= 0)) {
+    return { label: 'Vencida', variant: 'danger', priority: 0 }
+  }
+
+  if ((dateDaysLeft != null && dateDaysLeft <= alert.advance_days) || (kmLeft != null && kmLeft <= alert.advance_km)) {
+    return { label: 'Proxima', variant: 'warning', priority: 1 }
+  }
+
+  return { label: 'Em dia', variant: 'success', priority: 2 }
+}
+
+function vehicleAlertTargetSummary(alert: DashboardVehicleMaintenanceAlertRow): string {
+  const parts = [
+    alert.due_date ? formatDateOnly(alert.due_date) : null,
+    alert.due_odometer_km != null ? `${alert.due_odometer_km.toLocaleString('pt-BR')} km` : null,
+  ].filter(Boolean)
+
+  return parts.length > 0 ? parts.join(' / ') : 'Sem prazo'
+}
+
 function withdrawalItemDestinationLabel(
   item: RecentWithdrawal['withdrawal_items'][number],
   withdrawal: RecentWithdrawal,
@@ -170,6 +301,7 @@ function stockItemTarget(item: Pick<LowStockItem, 'id' | 'code' | 'name'>): stri
 
 export function DashboardPage() {
   const navigate = useNavigate()
+  const db = useMemo(() => supabase as unknown as { from: (table: string) => UntypedQueryBuilder }, [])
   const [loading, setLoading] = useState(
     dashboardCache.lowStockItems.length === 0 && dashboardCache.recentWithdrawals.length === 0
   )
@@ -178,6 +310,11 @@ export function DashboardPage() {
   const [stats, setStats] = useState<DashboardStatsData>(dashboardCache.stats)
   const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>(dashboardCache.lowStockItems)
   const [recentWithdrawals, setRecentWithdrawals] = useState<RecentWithdrawal[]>(dashboardCache.recentWithdrawals)
+  const [vehicleMaintenanceAlerts, setVehicleMaintenanceAlerts] = useState<DashboardVehicleMaintenanceAlertRow[]>(
+    dashboardCache.vehicleMaintenanceAlerts,
+  )
+  const [vehicleUsageLogs, setVehicleUsageLogs] = useState<DashboardVehicleLogRow[]>(dashboardCache.vehicleUsageLogs)
+  const [activeHealthIndex, setActiveHealthIndex] = useState(0)
 
   useEffect(() => {
     async function fetchDashboardData() {
@@ -201,6 +338,8 @@ export function DashboardPage() {
           withdrawalsResult,
           peopleResult,
           recentWithdrawalsResult,
+          vehicleMaintenanceResult,
+          vehicleLogsResult,
         ] = await Promise.all([
           supabase
             .from('stock_items')
@@ -219,10 +358,29 @@ export function DashboardPage() {
             .select('*, requested_by_person:people!withdrawals_requested_by_fkey(*), collaborator:people!withdrawals_collaborator_id_fkey(id, full_name), work_site:work_sites!withdrawals_work_site_id_fkey(id, name), withdrawal_items(id, destination_type, collaborator_id, work_site_id, collaborator:people!withdrawal_items_collaborator_id_fkey(id, full_name), work_site:work_sites!withdrawal_items_work_site_id_fkey(id, name))')
             .order('created_at', { ascending: false })
             .limit(10),
+          db
+            .from('vehicle_maintenance_alerts')
+            .select('*, vehicle:vehicles(id, code, plate, model, is_active)')
+            .eq('status', 'active')
+            .order('updated_at', { ascending: false })
+            .limit(20),
+          db
+            .from('vehicle_usage_logs')
+            .select('vehicle_id, occurred_at, odometer_km')
+            .order('occurred_at', { ascending: false })
+            .limit(200),
         ])
 
         if (stockResult.error) {
           setError(stockResult.error.message)
+          return
+        }
+        if (vehicleMaintenanceResult.error) {
+          setError(vehicleMaintenanceResult.error.message)
+          return
+        }
+        if (vehicleLogsResult.error) {
+          setError(vehicleLogsResult.error.message)
           return
         }
 
@@ -232,6 +390,8 @@ export function DashboardPage() {
 
         const nextLowStockItems = lowItems.map((item) => ({ ...item, is_low_stock: true }))
         const typedWithdrawals = (recentWithdrawalsResult.data ?? []) as unknown as RecentWithdrawal[]
+        const typedVehicleMaintenanceAlerts = (vehicleMaintenanceResult.data ?? []) as unknown as DashboardVehicleMaintenanceAlertRow[]
+        const typedVehicleUsageLogs = (vehicleLogsResult.data ?? []) as unknown as DashboardVehicleLogRow[]
         const nextStats = {
           total_items: stockResult.count ?? 0,
           low_stock_count: nextLowStockItems.length,
@@ -241,10 +401,14 @@ export function DashboardPage() {
 
         dashboardCache.lowStockItems = nextLowStockItems
         dashboardCache.recentWithdrawals = typedWithdrawals
+        dashboardCache.vehicleMaintenanceAlerts = typedVehicleMaintenanceAlerts
+        dashboardCache.vehicleUsageLogs = typedVehicleUsageLogs
         dashboardCache.stats = nextStats
 
         setLowStockItems(nextLowStockItems)
         setRecentWithdrawals(typedWithdrawals)
+        setVehicleMaintenanceAlerts(typedVehicleMaintenanceAlerts)
+        setVehicleUsageLogs(typedVehicleUsageLogs)
         setStats(nextStats)
       } catch (err) {
         console.error('Dashboard Error:', err)
@@ -256,14 +420,13 @@ export function DashboardPage() {
     }
 
     void fetchDashboardData()
-  }, [])
+  }, [db])
 
   const lowStockPreview = lowStockItems.slice(0, 4)
   const recentWithdrawalsPreview = recentWithdrawals.slice(0, 5)
   const criticalStockCount = lowStockItems.filter((item) => item.current_quantity <= 0).length
   const lowButAvailableStockCount = Math.max(lowStockItems.length - criticalStockCount, 0)
   const healthyStockCount = Math.max(stats.total_items - lowStockItems.length, 0)
-  const completedWithdrawalsCount = recentWithdrawals.filter((withdrawal) => withdrawal.status === 'completed').length
 
   const stockHealthData = useMemo(() => [
     { name: 'Regular', value: healthyStockCount },
@@ -274,6 +437,11 @@ export function DashboardPage() {
   const stockHealthPercent = stats.total_items > 0
     ? Math.round((healthyStockCount / stats.total_items) * 100)
     : 0
+
+  const activeHealthSegment = stockHealthData[activeHealthIndex] ?? stockHealthData[0]
+  const activeHealthPercent = activeHealthSegment && stats.total_items > 0
+    ? Math.round((activeHealthSegment.value / stats.total_items) * 100)
+    : stockHealthPercent
 
   const operationsScore = Math.max(
     0,
@@ -288,6 +456,56 @@ export function DashboardPage() {
     : lowStockItems.length > 0
       ? `${lowStockItems.length} item(ns) abaixo do minimo`
       : 'Estoque dentro do minimo'
+
+  const alertToneClasses = {
+    danger: {
+      row: 'border-red-300/18 bg-red-500/8 hover:border-red-300/38 hover:bg-red-500/12',
+      icon: 'bg-red-500/14 text-red-100',
+      badge: 'danger' as const,
+    },
+    warning: {
+      row: 'border-amber-300/18 bg-amber-500/8 hover:border-amber-300/38 hover:bg-amber-500/12',
+      icon: 'bg-amber-500/14 text-amber-100',
+      badge: 'warning' as const,
+    },
+    success: {
+      row: 'border-emerald-300/18 bg-emerald-500/8 hover:border-emerald-300/38 hover:bg-emerald-500/12',
+      icon: 'bg-emerald-500/14 text-emerald-100',
+      badge: 'success' as const,
+    },
+  }
+
+  const currentOdometerByVehicle = useMemo(() => {
+    const map = new Map<string, number>()
+
+    vehicleUsageLogs.forEach((log) => {
+      if (map.has(log.vehicle_id) || log.odometer_km == null) return
+      map.set(log.vehicle_id, Number(log.odometer_km))
+    })
+
+    return map
+  }, [vehicleUsageLogs])
+
+  const vehicleAlertItems = useMemo(() => vehicleMaintenanceAlerts
+    .filter((alert) => alert.vehicle?.is_active !== false)
+    .map((alert) => {
+      const currentOdometerKm = currentOdometerByVehicle.get(alert.vehicle_id) ?? null
+      const state = vehicleMaintenanceState(alert, currentOdometerKm)
+
+      return {
+        alert,
+        state,
+      }
+    })
+    .filter((item) => item.state.priority <= 1)
+    .sort((left, right) => {
+      const priorityDiff = left.state.priority - right.state.priority
+      if (priorityDiff !== 0) return priorityDiff
+      return new Date(right.alert.updated_at).getTime() - new Date(left.alert.updated_at).getTime()
+    })
+    .slice(0, 4), [currentOdometerByVehicle, vehicleMaintenanceAlerts])
+
+  const vehicleAlertCount = vehicleAlertItems.length
 
   const statusBadgeVariant = (
     status: string
@@ -356,16 +574,16 @@ export function DashboardPage() {
         )}
       </div>
 
-      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(290px,0.7fr)]">
+      <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.58fr)_minmax(280px,0.62fr)]">
         <div className="flex min-w-0 flex-col gap-5">
           <Card
             padding="none"
-            className="overflow-hidden rounded-[28px] border border-white/10 bg-[radial-gradient(circle_at_72%_34%,rgba(249,115,22,0.18),transparent_35%),linear-gradient(135deg,#121318_0%,#0b0f14_52%,#101827_100%)] shadow-[0_28px_80px_rgba(0,0,0,0.28)]"
+            className="overflow-hidden rounded-[22px] border border-white/10 bg-[radial-gradient(circle_at_76%_30%,rgba(249,115,22,0.14),transparent_30%),linear-gradient(135deg,#111318_0%,#090d12_56%,#101827_100%)] shadow-[0_28px_80px_rgba(0,0,0,0.24)]"
           >
-            <div className="grid min-h-[360px] grid-cols-1 lg:grid-cols-[minmax(0,1.1fr)_360px]">
+            <div className="grid min-h-[330px] grid-cols-1 lg:grid-cols-[minmax(0,1.16fr)_330px]">
               <div className="flex flex-col justify-between gap-8 p-6 lg:p-8">
                 <div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/6 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.18em] text-orange-100">
+                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/6 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-orange-100">
                     <span className="h-2 w-2 rounded-full bg-orange-400" />
                     Operacao agora
                   </div>
@@ -373,7 +591,7 @@ export function DashboardPage() {
                     {highlightLabel}
                   </h3>
                   <p className="mt-3 max-w-xl text-sm leading-6 text-gray-300">
-                    O painel prioriza o que exige decisao primeiro: disponibilidade do estoque, retiradas do dia e alertas recentes.
+                    Uma leitura direta do que precisa de decisao: saldo disponivel, retiradas do dia e alertas que podem travar a operacao.
                   </p>
                 </div>
 
@@ -389,13 +607,13 @@ export function DashboardPage() {
                 </div>
               </div>
 
-              <div className="relative flex min-h-[320px] flex-col items-center justify-center gap-4 border-t border-white/8 bg-black/10 p-4 sm:p-6 lg:border-l lg:border-t-0">
-                <div className="self-start rounded-2xl border border-white/10 bg-white/8 px-4 py-3 backdrop-blur lg:absolute lg:left-5 lg:top-5 lg:self-auto">
-                  <p className="text-xs uppercase tracking-[0.18em] text-white/50">Indice</p>
+              <div className="relative flex min-h-[270px] flex-col items-center justify-between gap-3 border-t border-white/8 bg-black/10 p-4 sm:p-5 lg:border-l lg:border-t-0">
+                <div className="self-start rounded-xl border border-white/10 bg-white/8 px-4 py-3 backdrop-blur lg:absolute lg:left-5 lg:top-5 lg:self-auto">
+                  <p className="text-xs uppercase tracking-[0.14em] text-white/50">Indice</p>
                   <p className="mt-1 text-3xl font-bold text-white">{operationsScore}</p>
                 </div>
 
-                <div className="relative h-[220px] w-full max-w-[260px] sm:h-[250px] sm:max-w-[310px]">
+                <div className="relative mt-8 h-[174px] w-full max-w-[218px] sm:h-[194px] sm:max-w-[244px] lg:mt-10">
                   {stockHealthData.length > 0 ? (
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -410,9 +628,21 @@ export function DashboardPage() {
                           paddingAngle={4}
                           stroke="rgba(255,255,255,0.08)"
                           strokeWidth={2}
+                          animationBegin={80}
+                          animationDuration={850}
+                          animationEasing="ease-out"
+                          onMouseEnter={(_entry, index) => setActiveHealthIndex(index)}
+                          onClick={(_entry, index) => setActiveHealthIndex(index)}
+                          className="cursor-pointer outline-none"
                         >
                           {stockHealthData.map((entry, index) => (
-                            <Cell key={entry.name} fill={chartColors[index % chartColors.length]} />
+                            <Cell
+                              key={entry.name}
+                              fill={chartColors[index % chartColors.length]}
+                              opacity={activeHealthIndex === index ? 1 : 0.58}
+                              stroke={activeHealthIndex === index ? 'rgba(255,255,255,0.38)' : 'rgba(255,255,255,0.08)'}
+                              strokeWidth={activeHealthIndex === index ? 3 : 2}
+                            />
                           ))}
                         </Pie>
                       </PieChart>
@@ -423,16 +653,33 @@ export function DashboardPage() {
                     </div>
                   )}
 
-                  <div className="absolute left-1/2 top-1/2 flex h-28 w-28 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/12 bg-[#111318]/92 text-center shadow-[0_18px_60px_rgba(0,0,0,0.42)] backdrop-blur sm:h-32 sm:w-32">
-                    <span className="text-[10px] uppercase tracking-[0.12em] text-white/45 sm:text-xs sm:tracking-[0.18em]">Disponivel</span>
-                    <span className="mt-1 text-3xl font-bold text-white sm:text-4xl">{stockHealthPercent}%</span>
-                    <span className="mt-1 text-xs text-gray-400">em estoque</span>
+                  <div className="pointer-events-none absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/12 bg-[#111318]/94 text-center shadow-[0_14px_42px_rgba(0,0,0,0.38)] backdrop-blur transition-all duration-300 sm:h-28 sm:w-28">
+                    <span className="max-w-[76px] truncate text-[9px] uppercase tracking-[0.1em] text-white/45 sm:max-w-[88px] sm:text-[10px]">
+                      {activeHealthSegment?.name ?? 'Disponivel'}
+                    </span>
+                    <span className="mt-0.5 text-2xl font-bold text-white transition-all duration-300 sm:text-3xl">{activeHealthPercent}%</span>
+                    <span className="mt-0.5 text-[11px] text-gray-400">
+                      {activeHealthSegment ? `${activeHealthSegment.value} item(ns)` : 'em estoque'}
+                    </span>
                   </div>
                 </div>
 
-                <div className="grid w-full grid-cols-1 gap-2 text-xs sm:grid-cols-3 lg:absolute lg:bottom-5 lg:left-5 lg:right-5 lg:w-auto">
+                <div className="grid w-full grid-cols-1 gap-2 text-xs sm:grid-cols-3">
                   {stockHealthData.map((entry, index) => (
-                    <div key={entry.name} className="min-w-0 rounded-xl border border-white/8 bg-white/6 px-3 py-2">
+                    <button
+                      key={entry.name}
+                      type="button"
+                      onMouseEnter={() => setActiveHealthIndex(index)}
+                      onFocus={() => setActiveHealthIndex(index)}
+                      onClick={() => setActiveHealthIndex(index)}
+                      className={cn(
+                        'min-w-0 rounded-xl border px-3 py-2 text-left transition-all duration-200 hover:-translate-y-0.5',
+                        activeHealthIndex === index
+                          ? 'border-white/20 bg-white/10 shadow-[0_12px_28px_rgba(0,0,0,0.22)]'
+                          : 'border-white/8 bg-white/6 hover:border-white/14 hover:bg-white/8',
+                      )}
+                      aria-pressed={activeHealthIndex === index}
+                    >
                       <div className="flex items-center gap-2">
                         <span
                           className="h-2.5 w-2.5 shrink-0 rounded-full"
@@ -441,30 +688,30 @@ export function DashboardPage() {
                         <span className="truncate text-white/60">{entry.name}</span>
                       </div>
                       <p className="mt-1 font-semibold text-white">{entry.value}</p>
-                    </div>
+                    </button>
                   ))}
                 </div>
               </div>
             </div>
           </Card>
 
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {actionCards.map((action) => (
+          <div className="grid grid-cols-1 gap-2 rounded-[18px] border border-white/10 bg-[#0f1115] p-2 sm:grid-cols-2 xl:grid-cols-4">
+            {commandActions.map((action) => (
               <button
                 key={action.path}
                 type="button"
                 onClick={() => navigate(action.path)}
                 className={cn(
-                  'group flex min-h-[128px] flex-col justify-between rounded-[24px] border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_45px_rgba(0,0,0,0.22)]',
-                  action.className,
+                  'group flex min-h-[76px] items-center gap-3 rounded-[14px] border px-3 py-3 text-left transition-all hover:-translate-y-0.5',
+                  commandActionToneClasses[action.tone],
                 )}
               >
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/12 bg-black/16 text-white">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-black/16 text-white">
                   {action.icon}
                 </span>
-                <span>
+                <span className="min-w-0">
                   <span className="block text-base font-semibold text-white">{action.title}</span>
-                  <span className="mt-1 block text-sm leading-5 text-white/64">{action.description}</span>
+                  <span className="mt-0.5 block truncate text-sm leading-5 text-white/62">{action.description}</span>
                 </span>
               </button>
             ))}
@@ -481,12 +728,21 @@ export function DashboardPage() {
                   title="Estoque baixo"
                   description="Itens que estao no limite ou abaixo do minimo."
                 />
-                <Badge
-                  variant={lowStockItems.length > 0 ? 'warning' : 'success'}
-                  size="sm"
-                >
-                  {lowStockItems.length}
-                </Badge>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge
+                    variant={lowStockItems.length > 0 ? 'warning' : 'success'}
+                    size="sm"
+                  >
+                    {lowStockItems.length}
+                  </Badge>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/stock')}
+                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-orange-300/40 hover:text-orange-100"
+                  >
+                    Estoque
+                  </button>
+                </div>
               </div>
 
               {lowStockItems.length === 0 ? (
@@ -616,75 +872,73 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <aside className="grid auto-rows-min gap-5">
+        <aside className="grid auto-rows-min gap-5 xl:sticky xl:top-24">
           <Card
             variant="bordered"
-            className="rounded-[24px] border-white/10 bg-[#101114]"
+            className="rounded-[22px] border-white/10 bg-[#101114]"
           >
-            <SectionHeading
-              eyebrow="Coluna lateral"
-              title="Prioridade"
-              description="Resumo fino para decidir o proximo passo."
-            />
-
-            <div className="mt-5 grid gap-3">
-              <div className="rounded-2xl border border-red-300/18 bg-red-500/8 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-red-500/16 text-red-100">
-                    <AlertIcon size={20} />
-                  </span>
-                  <p className="text-3xl font-bold text-white">{criticalStockCount}</p>
-                </div>
-                <p className="mt-3 text-sm font-medium text-red-100">Itens zerados</p>
-                <p className="mt-1 text-xs leading-5 text-red-100/62">Reposicao urgente quando houver demanda operacional.</p>
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-200/70">Alertas</p>
+                <h3 className="mt-1 text-lg font-semibold text-white">Carros</h3>
               </div>
+              <Badge variant={vehicleAlertItems.some((item) => item.state.variant === 'danger') ? 'danger' : vehicleAlertCount > 0 ? 'warning' : 'success'} size="sm">
+                {vehicleAlertCount}
+              </Badge>
+            </div>
 
-              <div className="rounded-2xl border border-amber-300/18 bg-amber-500/8 p-4">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-amber-500/16 text-amber-100">
-                    <ClipboardIcon size={20} />
-                  </span>
-                  <p className="text-3xl font-bold text-white">{lowButAvailableStockCount}</p>
+            <div className="mt-4 grid gap-3">
+              {vehicleAlertItems.length === 0 ? (
+                <div className="rounded-xl border border-emerald-300/16 bg-emerald-500/8 p-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/14 text-emerald-100">
+                      <Wrench size={18} />
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-sm font-semibold text-white">Sem revisão pendente</span>
+                      <span className="mt-0.5 block text-xs text-gray-400">Nenhum alerta vencido ou próximo</span>
+                    </span>
+                  </div>
                 </div>
-                <p className="mt-3 text-sm font-medium text-amber-100">Itens abaixo do minimo</p>
-                <p className="mt-1 text-xs leading-5 text-amber-100/62">Ainda possuem saldo, mas ja pedem reposicao.</p>
-              </div>
+              ) : (
+                vehicleAlertItems.map(({ alert, state }) => {
+                  const toneClasses = alertToneClasses[state.variant]
+
+                  return (
+                    <button
+                      key={alert.id}
+                      type="button"
+                      onClick={() => navigate('/vehicles')}
+                      className={cn('flex items-center gap-3 rounded-xl border p-3 text-left transition-colors', toneClasses.row)}
+                    >
+                      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', toneClasses.icon)}>
+                        {vehicleMaintenanceIcon(alert.alert_type)}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold text-white">{alert.title}</span>
+                        <span className="mt-0.5 block truncate text-xs text-gray-400">
+                          {maintenanceTypeLabel(alert.alert_type)} / {vehicleDisplayName(alert.vehicle)}
+                        </span>
+                        <span className="mt-0.5 block truncate text-xs text-gray-500">{vehicleAlertTargetSummary(alert)}</span>
+                      </span>
+                      <Badge variant={toneClasses.badge} size="sm">
+                        {state.label}
+                      </Badge>
+                    </button>
+                  )
+                })
+              )}
             </div>
-          </Card>
 
-          <Card
-            variant="bordered"
-            className="rounded-[24px] border-white/10 bg-[#101114]"
-          >
-            <SectionHeading
-              eyebrow="Rodape interno"
-              title="Sinais rapidos"
-            />
-
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <MiniMetric label="Regular" value={healthyStockCount} tone="success" />
-              <MiniMetric label="Baixo" value={lowStockItems.length} tone={lowStockItems.length > 0 ? 'warning' : 'success'} />
-              <MiniMetric label="Zerado" value={criticalStockCount} tone={criticalStockCount > 0 ? 'danger' : 'success'} />
-              <MiniMetric label="Retiradas concluidas" value={completedWithdrawalsCount} />
+            <div className="mt-4">
+              <button
+                type="button"
+                onClick={() => navigate('/vehicles')}
+                className="w-full rounded-xl border border-orange-300/22 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-100 transition-colors hover:border-orange-300/45 hover:bg-orange-500/16"
+              >
+                Abrir carros
+              </button>
             </div>
-          </Card>
-
-          <Card
-            variant="bordered"
-            className="rounded-[24px] border-white/10 bg-[#101114]"
-          >
-            <SectionHeading
-              eyebrow="Atalho"
-              title="Painel limpo"
-              description="Acoes ficam separadas de alertas para reduzir ruido visual."
-            />
-            <button
-              type="button"
-              onClick={() => navigate('/stock')}
-              className="mt-5 w-full rounded-2xl border border-orange-300/24 bg-orange-500/10 px-4 py-3 text-sm font-semibold text-orange-100 transition-colors hover:border-orange-300/45 hover:bg-orange-500/16"
-            >
-              Abrir estoque completo
-            </button>
           </Card>
         </aside>
       </div>
