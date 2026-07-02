@@ -57,7 +57,7 @@ type InventoryWithdrawalTrace = {
 
 type TabType = 'profile' | 'inventory' | 'withdrawals' | 'consumption'
 type DatePeriod = 'week' | 'month' | 'custom'
-type InventoryActionMode = 'delete' | 'return_to_stock' | null
+type InventoryActionMode = 'adjust' | 'return_to_stock' | null
 
 interface CustomDateRange {
   from: string
@@ -365,7 +365,7 @@ export function PersonDetailPage() {
 
   const openInventoryActionModal = (inventoryItem: PersonWithDetails['inventory'][0]) => {
     setSelectedInventoryItem(inventoryItem)
-    setInventoryActionQuantity('1')
+    setInventoryActionQuantity(String(inventoryItem.quantity))
     setInventoryAdjustmentReason('')
     setInventoryActionMode(null)
     setShowInventoryActionModal(true)
@@ -379,21 +379,27 @@ export function PersonDetailPage() {
   const handleInventoryAction = async (mode: Exclude<InventoryActionMode, null>) => {
     if (!selectedInventoryItem || !person) return
 
-    const quantity = Number.parseInt(inventoryActionQuantity, 10)
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      setError('Informe uma quantidade valida para baixar do inventario.')
+    const nextQuantity = Number.parseInt(inventoryActionQuantity, 10)
+    if (!Number.isFinite(nextQuantity) || nextQuantity < 0) {
+      setError('Informe uma quantidade final valida para o inventario.')
       return
     }
 
-    if (quantity > selectedInventoryItem.quantity) {
-      setError(`Quantidade acima do inventario atual. Maximo: ${selectedInventoryItem.quantity}.`)
+    if (nextQuantity > selectedInventoryItem.quantity) {
+      setError(`A quantidade final nao pode passar do saldo atual. Maximo: ${selectedInventoryItem.quantity}.`)
       return
     }
 
+    if (nextQuantity === selectedInventoryItem.quantity) {
+      setError('A quantidade final precisa ser diferente da quantidade atual.')
+      return
+    }
+
+    const removedQuantity = selectedInventoryItem.quantity - nextQuantity
     const reason = inventoryAdjustmentReason.trim()
 
-    if (mode === 'delete' && !reason) {
-      setError('Informe o motivo da baixa do inventario.')
+    if (mode === 'adjust' && !reason) {
+      setError('Informe o motivo do ajuste do inventario.')
       return
     }
 
@@ -401,18 +407,18 @@ export function PersonDetailPage() {
     setInventoryActionMode(mode)
     setError(null)
 
-    const { error: actionError } = mode === 'delete'
+    const { error: actionError } = mode === 'adjust'
       ? await supabase.rpc('adjust_inventory_item_quantity', {
           p_person_id: person.id,
           p_stock_item_id: selectedInventoryItem.stock_item_id,
-          p_next_quantity: Math.max(selectedInventoryItem.quantity - quantity, 0),
+          p_next_quantity: nextQuantity,
           p_reason: reason,
         })
       : await supabase.rpc('remove_inventory_item_from_person', {
           p_person_id: person.id,
           p_stock_item_id: selectedInventoryItem.stock_item_id,
-          p_quantity: quantity,
-          p_destination: mode,
+          p_quantity: removedQuantity,
+          p_destination: 'return_to_stock',
         })
 
     if (actionError) {
@@ -514,6 +520,16 @@ export function PersonDetailPage() {
   }
 
   const isLeader = person.role === 'leader'
+  const selectedInventoryCurrentQuantity = selectedInventoryItem?.quantity ?? 0
+  const selectedInventoryNextQuantity = Number.parseInt(inventoryActionQuantity, 10)
+  const selectedInventoryDifference = Number.isFinite(selectedInventoryNextQuantity)
+    ? selectedInventoryCurrentQuantity - selectedInventoryNextQuantity
+    : 0
+  const hasInventoryQuantityChange =
+    Number.isFinite(selectedInventoryNextQuantity) &&
+    selectedInventoryNextQuantity >= 0 &&
+    selectedInventoryNextQuantity <= selectedInventoryCurrentQuantity &&
+    selectedInventoryDifference > 0
 
   const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = isLeader
     ? [
@@ -596,7 +612,7 @@ export function PersonDetailPage() {
           }}
           className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/16"
         >
-          Baixar
+          Ajustar
         </button>
       ),
     },
@@ -786,7 +802,7 @@ export function PersonDetailPage() {
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-300/80">Documentos anexados</h4>
               <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>
-                Renomear ou remover
+                Editar
               </Button>
             </div>
             {person.document_attachments.length > 0 ? (
@@ -1033,37 +1049,71 @@ export function PersonDetailPage() {
           setInventoryActionMode(null)
           setInventoryAdjustmentReason('')
         }}
-        title="Baixar item do inventario"
-        size="sm"
+        title="Ajustar item do inventario"
+        size="md"
       >
         {selectedInventoryItem && (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-5">
             <div className="rounded-2xl border border-white/8 bg-[#111217] p-4">
-              <div className="flex items-center gap-3">
-                <ItemVisual iconKey={selectedInventoryItem.stock_items.svg_icon_key} size={34} />
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-white">{selectedInventoryItem.stock_items.name}</p>
-                  <p className="mt-1 text-xs text-gray-500">
-                    Disponivel no colaborador: {formatQuantity(selectedInventoryItem.quantity, selectedInventoryItem.stock_items.unit)}
+              <div className="flex items-start gap-3">
+                <ItemVisual iconKey={selectedInventoryItem.stock_items.svg_icon_key} size={38} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-semibold text-white">{selectedInventoryItem.stock_items.name}</p>
+                  <p className="mt-1 text-xs text-gray-500">{selectedInventoryItem.stock_items.code} / {selectedInventoryItem.stock_items.unit}</p>
+                </div>
+                <div className="rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-right">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-gray-500">Atual</p>
+                  <p className="mt-1 text-lg font-semibold text-white">
+                    {formatQuantity(selectedInventoryItem.quantity, selectedInventoryItem.stock_items.unit)}
                   </p>
                 </div>
               </div>
             </div>
 
-            <Input
-              label="Quantidade para baixar"
-              type="number"
-              min={1}
-              max={selectedInventoryItem.quantity}
-              value={inventoryActionQuantity}
-              onChange={(event) => setInventoryActionQuantity(event.target.value)}
-            />
+            <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_160px]">
+              <Input
+                label="Quantidade final no colaborador"
+                type="number"
+                min={0}
+                max={selectedInventoryItem.quantity}
+                value={inventoryActionQuantity}
+                onChange={(event) => setInventoryActionQuantity(event.target.value)}
+              />
+              <div className="rounded-2xl border border-orange-300/18 bg-orange-500/8 px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-orange-200/70">Diferença</p>
+                <p className={cn(
+                  'mt-2 text-2xl font-semibold',
+                  selectedInventoryDifference > 0 ? 'text-orange-100' : 'text-gray-500',
+                )}>
+                  {Number.isFinite(selectedInventoryNextQuantity)
+                    ? formatQuantity(Math.max(selectedInventoryDifference, 0), selectedInventoryItem.stock_items.unit)
+                    : '-'}
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setInventoryActionQuantity('0')}
+                className="rounded-xl border border-red-300/18 bg-red-500/8 px-3 py-2 text-sm font-medium text-red-100 transition-colors hover:border-red-300/36 hover:bg-red-500/12"
+              >
+                Zerar item
+              </button>
+              <button
+                type="button"
+                onClick={() => setInventoryActionQuantity(String(selectedInventoryItem.quantity))}
+                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-white/18 hover:bg-white/8"
+              >
+                Manter atual
+              </button>
+            </div>
 
             <Select
-              label="Motivo da baixa"
+              label="Motivo do ajuste"
               value={inventoryAdjustmentReason}
               onChange={(event) => setInventoryAdjustmentReason(event.target.value)}
-              placeholder="Selecione o motivo"
+              placeholder="Selecione se nao vai devolver ao estoque"
               options={[
                 { value: 'Item danificado/rasgado', label: 'Item danificado/rasgado' },
                 { value: 'Item perdido', label: 'Item perdido' },
@@ -1072,23 +1122,31 @@ export function PersonDetailPage() {
               ]}
             />
 
-            <div className="grid gap-3">
+            <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
+              <p className="text-sm font-medium text-white">Como aplicar a diferença?</p>
+              <p className="mt-1 text-xs leading-5 text-gray-400">
+                Use ajuste quando a diferença saiu do inventario por perda, dano ou correcao. Use devolver quando o saldo deve voltar para o estoque principal.
+              </p>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
               <Button
                 type="button"
                 variant="secondary"
                 onClick={() => void handleInventoryAction('return_to_stock')}
                 isLoading={inventorySubmitting && inventoryActionMode === 'return_to_stock'}
+                disabled={!hasInventoryQuantityChange}
               >
-                Devolver ao estoque
+                Devolver diferença
               </Button>
               <Button
                 type="button"
                 variant="danger"
-                onClick={() => void handleInventoryAction('delete')}
-                isLoading={inventorySubmitting && inventoryActionMode === 'delete'}
-                disabled={!inventoryAdjustmentReason}
+                onClick={() => void handleInventoryAction('adjust')}
+                isLoading={inventorySubmitting && inventoryActionMode === 'adjust'}
+                disabled={!hasInventoryQuantityChange || !inventoryAdjustmentReason}
               >
-                Baixar do inventario
+                Salvar ajuste
               </Button>
             </div>
           </div>
