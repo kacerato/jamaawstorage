@@ -199,7 +199,7 @@ const initialMaintenanceForm: MaintenanceFormState = {
   advance_days: '7',
   advance_km: '500',
   repeat_interval_days: '',
-  repeat_interval_km: '3000',
+  repeat_interval_km: '10000',
   notes: '',
 }
 
@@ -213,7 +213,7 @@ const maintenanceTypeOptions: { value: VehicleMaintenanceAlertType; label: strin
 ]
 
 const maintenanceTypeVisuals: Record<VehicleMaintenanceAlertType, { icon: React.ReactNode; preset: Partial<MaintenanceFormState> }> = {
-  oil_change: { icon: <Fuel size={18} />, preset: { title: 'Troca de oleo', advance_km: '500', repeat_interval_km: '3000', repeat_interval_days: '' } },
+  oil_change: { icon: <Fuel size={18} />, preset: { title: 'Troca de oleo', advance_km: '500', repeat_interval_km: '10000', repeat_interval_days: '' } },
   scheduled_review: { icon: <Wrench size={18} />, preset: { title: 'Revisao programada', advance_days: '15', advance_km: '500', repeat_interval_days: '90', repeat_interval_km: '' } },
   tires: { icon: <Gauge size={18} />, preset: { title: 'Pneus', advance_days: '15', advance_km: '500', repeat_interval_days: '', repeat_interval_km: '' } },
   brakes: { icon: <AlertTriangle size={18} />, preset: { title: 'Freios', advance_days: '15', advance_km: '500', repeat_interval_days: '', repeat_interval_km: '' } },
@@ -344,6 +344,7 @@ export function VehiclesPage() {
   const [maintenanceForm, setMaintenanceForm] = useState<MaintenanceFormState>(initialMaintenanceForm)
   const [maintenanceTargetMode, setMaintenanceTargetMode] = useState<MaintenanceTargetMode>('km')
   const [error, setError] = useState<string | null>(null)
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(null)
   const pendingAnalysisRef = useRef<PendingVehicleAnalysis | null>(null)
 
   const selectedVehicle = useMemo(
@@ -498,7 +499,7 @@ export function VehiclesPage() {
 
   const makeMaintenancePreset = (): MaintenanceFormState => ({
     ...initialMaintenanceForm,
-    due_odometer_km: currentOdometerKm != null ? String(Math.round(currentOdometerKm + 3000)) : '',
+    due_odometer_km: '',
   })
 
   const applyMaintenanceTargetMode = (mode: MaintenanceTargetMode) => {
@@ -506,7 +507,7 @@ export function VehiclesPage() {
     setMaintenanceForm((prev) => ({
       ...prev,
       due_date: mode === 'km' ? '' : prev.due_date || addDaysToDateInput(todayDateInputValue(), 90),
-      due_odometer_km: mode === 'date' ? '' : prev.due_odometer_km || (currentOdometerKm != null ? String(Math.round(currentOdometerKm + 3000)) : ''),
+      due_odometer_km: mode === 'date' ? '' : prev.due_odometer_km,
       repeat_interval_days: mode === 'km' ? '' : prev.repeat_interval_days,
       repeat_interval_km: mode === 'date' ? '' : prev.repeat_interval_km,
     }))
@@ -529,6 +530,8 @@ export function VehiclesPage() {
   const openCreateMaintenanceModal = () => {
     const preset = makeMaintenancePreset()
     setEditingMaintenanceAlertId(null)
+    setMaintenanceError(null)
+    setError(null)
     setMaintenanceTargetMode(inferMaintenanceTargetMode(preset))
     setMaintenanceForm(preset)
     setShowMaintenanceModal(true)
@@ -536,6 +539,8 @@ export function VehiclesPage() {
 
   const openEditMaintenanceModal = (alert: VehicleMaintenanceAlertRow) => {
     setEditingMaintenanceAlertId(alert.id)
+    setMaintenanceError(null)
+    setError(null)
     const nextForm = {
       alert_type: alert.alert_type,
       title: alert.title,
@@ -556,31 +561,45 @@ export function VehiclesPage() {
     setShowMaintenanceModal(false)
     setEditingMaintenanceAlertId(null)
     setMaintenanceForm(initialMaintenanceForm)
+    setMaintenanceError(null)
   }
 
   const handleSaveMaintenanceAlert = async () => {
     if (!selectedVehicle) return
     if (!maintenanceForm.title.trim()) {
-      setError('Informe o nome do alerta de revisao.')
+      setMaintenanceError('Informe o nome do alerta de revisao.')
       return
     }
-    if (!maintenanceForm.due_date && !maintenanceForm.due_odometer_km.trim()) {
-      setError('Informe pelo menos uma meta: data da revisao ou kilometragem.')
+
+    const repeatIntervalDays = integerOrNull(maintenanceForm.repeat_interval_days)
+    const repeatIntervalKm = numericOrNull(maintenanceForm.repeat_interval_km)
+    const nextDueDate = maintenanceForm.due_date ||
+      (repeatIntervalDays != null ? addDaysToDateInput(todayDateInputValue(), repeatIntervalDays) : null)
+    const nextDueOdometer = numericOrNull(maintenanceForm.due_odometer_km) ??
+      (repeatIntervalKm != null && currentOdometerKm != null ? currentOdometerKm + repeatIntervalKm : null)
+
+    if (!nextDueDate && nextDueOdometer == null) {
+      setMaintenanceError(
+        repeatIntervalKm != null && currentOdometerKm == null
+          ? 'Para criar alerta recorrente por km, registre a km atual do carro ou informe a proxima km limite.'
+          : 'Informe uma proxima meta ou uma recorrencia por data/km.',
+      )
       return
     }
 
     setSavingMaintenance(true)
+    setMaintenanceError(null)
     setError(null)
     try {
       const payload = {
         alert_type: maintenanceForm.alert_type,
         title: maintenanceForm.title.trim(),
-        due_date: maintenanceForm.due_date || null,
-        due_odometer_km: numericOrNull(maintenanceForm.due_odometer_km),
+        due_date: nextDueDate,
+        due_odometer_km: nextDueOdometer,
         advance_days: integerOrNull(maintenanceForm.advance_days) ?? 0,
         advance_km: numericOrNull(maintenanceForm.advance_km) ?? 0,
-        repeat_interval_days: integerOrNull(maintenanceForm.repeat_interval_days),
-        repeat_interval_km: numericOrNull(maintenanceForm.repeat_interval_km),
+        repeat_interval_days: repeatIntervalDays,
+        repeat_interval_km: repeatIntervalKm,
         notes: maintenanceForm.notes.trim() || null,
       }
 
@@ -592,7 +611,7 @@ export function VehiclesPage() {
       closeMaintenanceModal()
       await load()
     } catch (saveError) {
-      setError(saveError instanceof Error ? saveError.message : 'Nao foi possivel salvar o alerta de revisao.')
+      setMaintenanceError(saveError instanceof Error ? saveError.message : 'Nao foi possivel salvar o alerta de revisao.')
     } finally {
       setSavingMaintenance(false)
     }
@@ -1164,6 +1183,12 @@ export function VehiclesPage() {
 
       <Modal isOpen={showMaintenanceModal && Boolean(selectedVehicle)} onClose={closeMaintenanceModal} title={editingMaintenanceAlertId ? 'Editar alerta de revisao' : 'Novo alerta de revisao'} size="lg">
         <div className="space-y-5">
+          {maintenanceError ? (
+            <Alert variant="danger" title="Revise o alerta" dismissible onDismiss={() => setMaintenanceError(null)}>
+              {maintenanceError}
+            </Alert>
+          ) : null}
+
           <div>
             <SectionLabel label="Tipo" info="Escolha o motivo do alerta. Isso preenche valores comuns, mas voce pode ajustar tudo depois." />
             <div className="mt-2 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
@@ -1233,9 +1258,10 @@ export function VehiclesPage() {
               ) : null}
               {maintenanceTargetMode !== 'date' ? (
                 <div>
-                  <SectionLabel label="Km limite" info={`Km atual considerado: ${currentOdometerKm?.toLocaleString('pt-BR') ?? 'nao registrado'}.`} />
+                  <SectionLabel label="Proxima km limite" info={`Opcional. Se ficar vazio e houver recorrencia por km, o sistema calcula pela km atual: ${currentOdometerKm?.toLocaleString('pt-BR') ?? 'nao registrada'}.`} />
                   <Input
                     inputMode="decimal"
+                    placeholder={currentOdometerKm != null && numericOrNull(maintenanceForm.repeat_interval_km) != null ? String(currentOdometerKm + (numericOrNull(maintenanceForm.repeat_interval_km) ?? 0)) : 'Ex: 10000'}
                     value={maintenanceForm.due_odometer_km}
                     onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, due_odometer_km: event.target.value }))}
                   />
@@ -1279,16 +1305,42 @@ export function VehiclesPage() {
                   />
                 ) : null}
                 {maintenanceTargetMode !== 'date' ? (
-                  <Input
-                    label="A cada km"
-                    inputMode="decimal"
-                    value={maintenanceForm.repeat_interval_km}
-                    onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_km: event.target.value }))}
-                  />
+                  <div>
+                    <Input
+                      label="A cada km"
+                      inputMode="decimal"
+                      value={maintenanceForm.repeat_interval_km}
+                      onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_km: event.target.value }))}
+                    />
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {[3000, 5000, 10000].map((km) => (
+                        <button
+                          key={km}
+                          type="button"
+                          onClick={() => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_km: String(km) }))}
+                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-gray-300 transition-colors hover:border-orange-300/35 hover:text-orange-100"
+                        >
+                          {km.toLocaleString('pt-BR')} km
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 ) : null}
               </div>
             </div>
           </div>
+
+          {maintenanceTargetMode !== 'date' && numericOrNull(maintenanceForm.repeat_interval_km) != null ? (
+            <div className="rounded-2xl border border-orange-300/18 bg-orange-500/8 p-4 text-sm text-orange-100">
+              {maintenanceForm.due_odometer_km.trim() ? (
+                <>Este alerta vai vencer em {numericOrNull(maintenanceForm.due_odometer_km)?.toLocaleString('pt-BR')} km e, ao concluir, repetira a cada {numericOrNull(maintenanceForm.repeat_interval_km)?.toLocaleString('pt-BR')} km.</>
+              ) : currentOdometerKm != null ? (
+                <>Com a km atual de {currentOdometerKm.toLocaleString('pt-BR')} km, a proxima meta sera {(currentOdometerKm + (numericOrNull(maintenanceForm.repeat_interval_km) ?? 0)).toLocaleString('pt-BR')} km.</>
+              ) : (
+                <>Para calcular automaticamente, registre a km atual do carro ou informe a proxima km limite acima.</>
+              )}
+            </div>
+          ) : null}
 
           <div>
             <SectionLabel label="Observacoes" info="Opcional. Use para detalhes como filtro, marca do oleo, oficina ou item a conferir." />
