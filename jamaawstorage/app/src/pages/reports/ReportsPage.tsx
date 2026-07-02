@@ -37,7 +37,6 @@ type TabKey =
   | 'inventory'
   | 'stock'
   | 'abc'
-  | 'lowstock'
   | 'leader'
 
 const TABS: { key: TabKey; label: string }[] = [
@@ -45,7 +44,6 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'inventory', label: 'Inventario de Colaboradores' },
   { key: 'stock', label: 'Estoque Geral' },
   { key: 'abc', label: 'Curva ABC de Saida' },
-  { key: 'lowstock', label: 'Itens Abaixo do Minimo' },
   { key: 'leader', label: 'Consumo por Solicitante' },
 ]
 
@@ -103,11 +101,6 @@ interface AbcItem {
   classification: 'A' | 'B' | 'C'
 }
 
-interface LowStockItem extends StockItemRow {
-  deficit: number
-  severity: 'critical' | 'warning'
-}
-
 interface LeaderConsumptionItem {
   name: string
   quantity: number
@@ -135,9 +128,6 @@ const reportsCache = {
   },
   abc: {
     items: [] as AbcItem[],
-  },
-  lowStock: {
-    items: [] as LowStockItem[],
   },
   leader: {
     leaders: [] as PersonRow[],
@@ -267,7 +257,6 @@ export function ReportsPage() {
       {activeTab === 'inventory' && <InventoryTab />}
       {activeTab === 'stock' && <StockOverviewTab />}
       {activeTab === 'abc' && <AbcCurveTab />}
-      {activeTab === 'lowstock' && <LowStockTab />}
       {activeTab === 'leader' && <LeaderConsumptionTab />}
     </div>
   )
@@ -1562,244 +1551,6 @@ function AbcCurveTab() {
           />
         </>
       )}
-    </div>
-  )
-}
-
-function LowStockTab() {
-  const [lowStockItems, setLowStockItems] = useState<LowStockItem[]>(reportsCache.lowStock.items)
-  const [loading, setLoading] = useState(reportsCache.lowStock.items.length === 0)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    async function fetchLowStock() {
-      if (reportsCache.lowStock.items.length === 0) {
-        setLoading(true)
-      }
-      setError(null)
-
-      const { data, error: fetchError } = await supabase.rpc('check_low_stock')
-
-      if (fetchError) {
-        setError(fetchError.message)
-        setLowStockItems([])
-      } else {
-        const items = ((data as StockItemRow[] | null) ?? []).map((item): LowStockItem => {
-          const deficit = item.minimum_quantity - item.current_quantity
-          const severity = item.current_quantity === 0 ? 'critical' : 'warning'
-          return { ...item, deficit, severity }
-        })
-        reportsCache.lowStock.items = items
-        setLowStockItems(items)
-      }
-      setLoading(false)
-    }
-    void fetchLowStock()
-  }, [])
-
-  type LowStockRowForTable = LowStockItem & Record<string, unknown>
-
-  const tableData = useMemo<LowStockRowForTable[]>(
-    () => lowStockItems as LowStockRowForTable[],
-    [lowStockItems],
-  )
-
-  const columns = useMemo(
-    () => [
-      {
-        key: 'name' as const,
-        header: 'Item',
-        sortable: true,
-        render: (_v: unknown, row: LowStockRowForTable) => {
-          const item = row as unknown as LowStockItem
-          return (
-            <div className="flex items-center gap-2">
-              {item.severity === 'critical' && (
-                <span className="inline-block h-2 w-2 rounded-full bg-red-500" />
-              )}
-              {item.severity === 'warning' && (
-                <span className="inline-block h-2 w-2 rounded-full bg-orange-500" />
-              )}
-              <span className="font-medium text-white">{item.name}</span>
-            </div>
-          )
-        },
-      },
-      {
-        key: 'category' as const,
-        header: 'Categoria',
-        sortable: true,
-        render: (value: unknown) => (value as string | null) ?? '-',
-      },
-      {
-        key: 'quantity' as const,
-        header: 'Total',
-        className: 'text-right',
-        render: (_v: unknown, row: LowStockRowForTable) => {
-          const item = row as unknown as LowStockItem
-          return (
-            <span
-              className={cn(
-                'inline-block w-[88px] text-right font-medium tabular-nums',
-                item.severity === 'critical' ? 'text-red-400' : 'text-orange-400',
-              )}
-            >
-              {item.current_quantity}
-            </span>
-          )
-        },
-      },
-      {
-        key: 'quantity_new' as const,
-        header: 'Novo',
-        className: 'text-right',
-        render: (value: unknown) => (
-          <span className="inline-block w-[72px] text-right text-emerald-300 tabular-nums">{value as number}</span>
-        ),
-      },
-      {
-        key: 'quantity_used' as const,
-        header: 'Usado',
-        className: 'text-right',
-        render: (value: unknown) => (
-          <span className="inline-block w-[72px] text-right text-sky-300 tabular-nums">{value as number}</span>
-        ),
-      },
-      {
-        key: 'quantity_damaged' as const,
-        header: 'Avaria',
-        className: 'text-right',
-        render: (value: unknown) => (
-          <span className="inline-block w-[72px] text-right text-red-300 tabular-nums">{value as number}</span>
-        ),
-      },
-      {
-        key: 'minimum_quantity' as const,
-        header: 'Qtd Minima',
-        className: 'text-right',
-        render: (value: unknown) => (
-          <span className="inline-block w-[88px] text-right text-gray-300 tabular-nums">{value as number}</span>
-        ),
-      },
-      {
-        key: 'deficit' as const,
-        header: 'Deficit',
-        className: 'text-right',
-        render: (_v: unknown, row: LowStockRowForTable) => {
-          const item = row as unknown as LowStockItem
-          return (
-            <span
-              className={cn(
-                'inline-block w-[88px] text-right font-medium tabular-nums',
-                item.severity === 'critical' ? 'text-red-400' : 'text-orange-400',
-              )}
-            >
-              -{item.deficit}
-            </span>
-          )
-        },
-      },
-      {
-        key: 'severity' as const,
-        header: 'Status',
-        render: (_v: unknown, row: LowStockRowForTable) => {
-          const item = row as unknown as LowStockItem
-          return (
-            <Badge variant={item.severity === 'critical' ? 'danger' : 'warning'} dot size="sm">
-              {item.severity === 'critical' ? 'Critico' : 'Atencao'}
-            </Badge>
-          )
-        },
-      },
-    ],
-    [],
-  )
-
-  const handleExportCSV = () => {
-    const rows = lowStockItems.map((item) => ({
-      Item: item.name,
-      Categoria: item.category ?? '',
-      'Qtd Atual': item.current_quantity,
-      Novo: item.quantity_new,
-      Usado: item.quantity_used,
-      Avaria: item.quantity_damaged,
-      'Qtd Minima': item.minimum_quantity,
-      Deficit: item.deficit,
-      Severidade: item.severity === 'critical' ? 'Critico' : 'Atencao',
-    }))
-    exportToCSV(rows, 'itens-abaixo-minimo.csv')
-  }
-
-  const handleExportPDF = () => {
-    const rows = lowStockItems.map((item) => ({
-      Item: item.name,
-      Categoria: item.category ?? '',
-      'Qtd Atual': item.current_quantity,
-      Novo: item.quantity_new,
-      Usado: item.quantity_used,
-      Avaria: item.quantity_damaged,
-      'Qtd Minima': item.minimum_quantity,
-      Deficit: item.deficit,
-      Severidade: item.severity === 'critical' ? 'Critico' : 'Atencao',
-    }))
-    exportToPDF(rows, 'Itens Abaixo do Minimo', 'Panorama de reposicao imediata do estoque.', 'itens-abaixo-minimo.pdf')
-  }
-
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <Spinner size="lg" />
-        <p className="mt-4 text-sm text-gray-400">Verificando estoque...</p>
-      </div>
-    )
-  }
-
-  if (error) {
-    return <Alert variant="danger" title="Erro ao carregar">{error}</Alert>
-  }
-
-  if (lowStockItems.length === 0) {
-    return (
-      <EmptyState
-        icon={<PackageIcon size={48} />}
-        title="Nenhum item abaixo do minimo"
-        description="Todos os itens estao com estoque adequado"
-      />
-    )
-  }
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-        <Alert variant="warning" title="Itens com estoque abaixo do minimo" className="min-w-0 flex-1">
-          {lowStockItems.length} item(ns) encontrados abaixo da quantidade minima
-        </Alert>
-        <div className="flex flex-wrap gap-2 xl:ml-4 xl:justify-end">
-          <Button variant="outline" size="sm" onClick={handleExportCSV}>
-            Exportar CSV
-          </Button>
-          <Button variant="outline" size="sm" onClick={handleExportPDF}>
-            Exportar PDF
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        <StatCard
-          title="Total Abaixo do Minimo"
-          value={lowStockItems.length}
-          icon={<AlertIcon size={20} />}
-          variant="danger"
-        />
-      </div>
-
-      <DataTable<LowStockRowForTable>
-        columns={columns}
-        data={tableData}
-        keyExtractor={(row) => (row as unknown as LowStockItem).id}
-        isLoading={false}
-        emptyMessage="Nenhum item abaixo do minimo"
-      />
     </div>
   )
 }
