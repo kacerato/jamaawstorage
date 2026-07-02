@@ -5,6 +5,8 @@ import type { Tables } from '../types/database'
 type NotificationType =
   | 'stock_critical'
   | 'stock_low'
+  | 'vehicle_maintenance_due'
+  | 'vehicle_maintenance_upcoming'
   | 'stock_return_pending'
   | 'stock_return_held'
   | 'withdrawal_pending'
@@ -24,12 +26,14 @@ export interface NotificationItem {
 
 const priorityOrder: Record<NotificationType, number> = {
   stock_critical: 0,
-  stock_return_pending: 1,
-  stock_return_held: 2,
-  withdrawal_pending: 3,
-  stock_low: 4,
-  withdrawal_completed: 5,
-  item_added: 6,
+  vehicle_maintenance_due: 1,
+  stock_return_pending: 2,
+  stock_return_held: 3,
+  withdrawal_pending: 4,
+  vehicle_maintenance_upcoming: 5,
+  stock_low: 6,
+  withdrawal_completed: 7,
+  item_added: 8,
 }
 
 const LAST_SEEN_STORAGE_KEY = 'jamaaw-notifications-last-seen-at'
@@ -57,6 +61,107 @@ type ReturnNotificationRow = {
 
 type RecentItemRow = Pick<Tables<'stock_items'>, 'id' | 'name' | 'code' | 'created_at' | 'svg_icon_key'>
 
+type VehicleMaintenanceAlertType = 'oil_change' | 'scheduled_review' | 'tires' | 'brakes' | 'document' | 'custom'
+
+type VehicleMaintenanceNotificationRow = {
+  id: string
+  vehicle_id: string
+  alert_type: VehicleMaintenanceAlertType
+  title: string
+  due_date: string | null
+  due_odometer_km: number | null
+  advance_days: number
+  advance_km: number
+  status: 'active' | 'completed' | 'disabled'
+  updated_at: string
+  vehicle: {
+    id: string
+    code: string
+    plate: string | null
+    model: string
+    is_active: boolean
+  } | null
+}
+
+type VehicleUsageLogNotificationRow = {
+  vehicle_id: string
+  occurred_at: string
+  odometer_km: number | null
+}
+
+interface UntypedQueryBuilder {
+  select: (query?: string) => UntypedQueryBuilder
+  eq: (column: string, value: unknown) => UntypedQueryBuilder
+  order: (column: string, options?: unknown) => UntypedQueryBuilder
+  limit: (count: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
+}
+
+function dateInputValueFromDate(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${year}-${month}-${day}`
+}
+
+function formatDateOnly(dateInput: string): string {
+  return new Date(`${dateInput}T00:00:00`).toLocaleDateString('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
+}
+
+function maintenanceTypeLabel(type: VehicleMaintenanceAlertType): string {
+  const labels: Record<VehicleMaintenanceAlertType, string> = {
+    oil_change: 'Troca de oleo',
+    scheduled_review: 'Revisao',
+    tires: 'Pneus',
+    brakes: 'Freios',
+    document: 'Documento',
+    custom: 'Alerta',
+  }
+
+  return labels[type]
+}
+
+function vehicleDisplayName(vehicle: VehicleMaintenanceNotificationRow['vehicle']): string {
+  if (!vehicle) return 'Carro'
+  const plate = vehicle.plate ? ` / ${vehicle.plate}` : ''
+  return `${vehicle.model}${plate}`
+}
+
+function vehicleMaintenanceState(
+  alert: VehicleMaintenanceNotificationRow,
+  currentOdometerKm: number | null,
+): { label: string; type: Extract<NotificationType, 'vehicle_maintenance_due' | 'vehicle_maintenance_upcoming'> | null } {
+  const today = new Date(`${dateInputValueFromDate(new Date())}T00:00:00`)
+  const dateDaysLeft = alert.due_date
+    ? Math.ceil((new Date(`${alert.due_date}T00:00:00`).getTime() - today.getTime()) / 86_400_000)
+    : null
+  const kmLeft = alert.due_odometer_km != null && currentOdometerKm != null
+    ? alert.due_odometer_km - currentOdometerKm
+    : null
+
+  if ((dateDaysLeft != null && dateDaysLeft < 0) || (kmLeft != null && kmLeft <= 0)) {
+    return { label: 'Vencida', type: 'vehicle_maintenance_due' }
+  }
+
+  if ((dateDaysLeft != null && dateDaysLeft <= alert.advance_days) || (kmLeft != null && kmLeft <= alert.advance_km)) {
+    return { label: 'Proxima', type: 'vehicle_maintenance_upcoming' }
+  }
+
+  return { label: 'Em dia', type: null }
+}
+
+function vehicleMaintenanceTarget(alert: VehicleMaintenanceNotificationRow): string {
+  const parts = [
+    alert.due_date ? formatDateOnly(alert.due_date) : null,
+    alert.due_odometer_km != null ? `${alert.due_odometer_km.toLocaleString('pt-BR')} km` : null,
+  ].filter(Boolean)
+
+  return parts.length > 0 ? parts.join(' / ') : 'sem prazo'
+}
+
 function readLastSeenAt(): string | null {
   try {
     const raw = window.localStorage.getItem(LAST_SEEN_STORAGE_KEY)
@@ -67,6 +172,7 @@ function readLastSeenAt(): string | null {
 }
 
 export function useNotifications() {
+  const db = useMemo(() => supabase as unknown as { from: (table: string) => UntypedQueryBuilder }, [])
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [lowStockItems, setLowStockItems] = useState<Tables<'stock_items'>[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,7 +185,15 @@ export function useNotifications() {
 
     try {
       const recentThreshold = new Date(Date.now() - 48 * 3600 * 1000).toISOString()
-      const [lowStockResult, returnRequestsResult, pendingWithdrawalsResult, recentWithdrawalsResult, recentItemsResult] = await Promise.all([
+      const [
+        lowStockResult,
+        returnRequestsResult,
+        pendingWithdrawalsResult,
+        recentWithdrawalsResult,
+        recentItemsResult,
+        vehicleMaintenanceResult,
+        vehicleLogsResult,
+      ] = await Promise.all([
         supabase.rpc('check_low_stock'),
         supabase
           .from('stock_return_requests')
@@ -106,6 +220,17 @@ export function useNotifications() {
           .gte('created_at', recentThreshold)
           .order('created_at', { ascending: false })
           .limit(3),
+        db
+          .from('vehicle_maintenance_alerts')
+          .select('*, vehicle:vehicles(id, code, plate, model, is_active)')
+          .eq('status', 'active')
+          .order('updated_at', { ascending: false })
+          .limit(20),
+        db
+          .from('vehicle_usage_logs')
+          .select('vehicle_id, occurred_at, odometer_km')
+          .order('occurred_at', { ascending: false })
+          .limit(200),
       ])
 
       if (lowStockResult.error) throw lowStockResult.error
@@ -113,12 +238,40 @@ export function useNotifications() {
       if (pendingWithdrawalsResult.error) throw pendingWithdrawalsResult.error
       if (recentWithdrawalsResult.error) throw recentWithdrawalsResult.error
       if (recentItemsResult.error) throw recentItemsResult.error
+      if (vehicleMaintenanceResult.error) throw new Error(vehicleMaintenanceResult.error.message)
+      if (vehicleLogsResult.error) throw new Error(vehicleLogsResult.error.message)
 
       const lowStockData = (lowStockResult.data ?? []) as Tables<'stock_items'>[]
       const returnRequests = (returnRequestsResult.data ?? []) as ReturnNotificationRow[]
       const pendingWithdrawals = (pendingWithdrawalsResult.data ?? []) as PendingWithdrawalRow[]
       const recentWithdrawals = (recentWithdrawalsResult.data ?? []) as PendingWithdrawalRow[]
       const recentItems = (recentItemsResult.data ?? []) as RecentItemRow[]
+      const vehicleMaintenanceAlerts = (vehicleMaintenanceResult.data ?? []) as unknown as VehicleMaintenanceNotificationRow[]
+      const vehicleLogs = (vehicleLogsResult.data ?? []) as unknown as VehicleUsageLogNotificationRow[]
+      const currentOdometerByVehicle = new Map<string, number>()
+
+      vehicleLogs.forEach((log) => {
+        if (currentOdometerByVehicle.has(log.vehicle_id) || log.odometer_km == null) return
+        currentOdometerByVehicle.set(log.vehicle_id, Number(log.odometer_km))
+      })
+
+      const vehicleNotifications: NotificationItem[] = []
+
+      vehicleMaintenanceAlerts
+        .filter((alert) => alert.vehicle?.is_active !== false)
+        .forEach((alert) => {
+          const state = vehicleMaintenanceState(alert, currentOdometerByVehicle.get(alert.vehicle_id) ?? null)
+          if (!state.type) return
+
+          vehicleNotifications.push({
+            id: `vehicle-maintenance-${state.type}-${alert.id}`,
+            type: state.type,
+            title: `${state.label}: ${alert.title}`,
+            description: `${maintenanceTypeLabel(alert.alert_type)} - ${vehicleDisplayName(alert.vehicle)} - ${vehicleMaintenanceTarget(alert)}`,
+            createdAt: alert.updated_at,
+            linkPath: '/vehicles',
+          })
+        })
 
       setLowStockItems(lowStockData)
 
@@ -153,6 +306,7 @@ export function useNotifications() {
             itemIconKey: request.stock_item?.svg_icon_key,
           }
         }),
+        ...vehicleNotifications,
         ...pendingWithdrawals.map((withdrawal) => ({
           id: `withdrawal-pending-${withdrawal.id}`,
           type: 'withdrawal_pending' as const,
@@ -194,7 +348,7 @@ export function useNotifications() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [db])
 
   const markAllAsRead = useCallback(() => {
     const nextLastSeenAt = new Date().toISOString()
@@ -225,6 +379,44 @@ export function useNotifications() {
   }, [refetch])
 
   useEffect(() => {
+    const syncLastSeen = (nextValue: string | null) => {
+      setLastSeenAt((current) => (current === nextValue ? current : nextValue))
+    }
+
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === LAST_SEEN_STORAGE_KEY) {
+        syncLastSeen(event.newValue && event.newValue.trim() ? event.newValue : null)
+      }
+    }
+
+    const handleFocus = () => {
+      syncLastSeen(readLastSeenAt())
+      void refetch()
+    }
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') handleFocus()
+    }
+
+    window.addEventListener('storage', handleStorage)
+    window.addEventListener('focus', handleFocus)
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refetch()
+      }
+    }, 60_000)
+
+    return () => {
+      window.removeEventListener('storage', handleStorage)
+      window.removeEventListener('focus', handleFocus)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.clearInterval(interval)
+    }
+  }, [refetch])
+
+  useEffect(() => {
     const channel = supabase
       .channel('notifications-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_items' }, () => {
@@ -237,6 +429,15 @@ export function useNotifications() {
         void refetch()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_return_requests' }, () => {
+        void refetch()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_maintenance_alerts' }, () => {
+        void refetch()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_usage_logs' }, () => {
+        void refetch()
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicles' }, () => {
         void refetch()
       })
       .subscribe()

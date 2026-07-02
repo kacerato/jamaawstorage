@@ -385,8 +385,8 @@ export function PersonDetailPage() {
       return
     }
 
-    if (nextQuantity > selectedInventoryItem.quantity) {
-      setError(`A quantidade final nao pode passar do saldo atual. Maximo: ${selectedInventoryItem.quantity}.`)
+    if (mode === 'return_to_stock' && nextQuantity > selectedInventoryItem.quantity) {
+      setError('Para devolver ao estoque, a quantidade final precisa ser menor que o saldo atual.')
       return
     }
 
@@ -395,7 +395,7 @@ export function PersonDetailPage() {
       return
     }
 
-    const removedQuantity = selectedInventoryItem.quantity - nextQuantity
+    const removedQuantity = Math.max(selectedInventoryItem.quantity - nextQuantity, 0)
     const reason = inventoryAdjustmentReason.trim()
 
     if (mode === 'adjust' && !reason) {
@@ -522,14 +522,17 @@ export function PersonDetailPage() {
   const isLeader = person.role === 'leader'
   const selectedInventoryCurrentQuantity = selectedInventoryItem?.quantity ?? 0
   const selectedInventoryNextQuantity = Number.parseInt(inventoryActionQuantity, 10)
-  const selectedInventoryDifference = Number.isFinite(selectedInventoryNextQuantity)
+  const selectedInventoryDelta = Number.isFinite(selectedInventoryNextQuantity)
+    ? selectedInventoryNextQuantity - selectedInventoryCurrentQuantity
+    : 0
+  const selectedInventoryRemovedQuantity = Number.isFinite(selectedInventoryNextQuantity)
     ? selectedInventoryCurrentQuantity - selectedInventoryNextQuantity
     : 0
-  const hasInventoryQuantityChange =
+  const hasInventoryValidQuantity =
     Number.isFinite(selectedInventoryNextQuantity) &&
     selectedInventoryNextQuantity >= 0 &&
-    selectedInventoryNextQuantity <= selectedInventoryCurrentQuantity &&
-    selectedInventoryDifference > 0
+    selectedInventoryNextQuantity !== selectedInventoryCurrentQuantity
+  const canReturnInventoryDifference = hasInventoryValidQuantity && selectedInventoryRemovedQuantity > 0
 
   const tabs: { key: TabType; label: string; icon: React.ReactNode }[] = isLeader
     ? [
@@ -696,22 +699,22 @@ export function PersonDetailPage() {
         </Alert>
       )}
 
-      <Card variant="bordered" padding="lg">
-        <div className="flex flex-col items-start gap-6 sm:flex-row sm:items-center sm:justify-between">
+      <Card variant="bordered" padding="md">
+        <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-center gap-4">
             {person.photo_url ? (
               <img
                 src={person.photo_url}
                 alt={person.full_name}
-                className="h-16 w-16 rounded-full object-cover ring-2 ring-gray-700"
+                className="h-14 w-14 rounded-full object-cover ring-2 ring-gray-700"
               />
             ) : (
-              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-gray-800 text-xl font-bold text-gray-300 ring-2 ring-gray-700">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-800 text-lg font-bold text-gray-300 ring-2 ring-gray-700">
                 {getInitials(person.full_name)}
               </div>
             )}
             <div>
-              <h3 className="text-xl font-bold text-white">{person.full_name}</h3>
+              <h3 className="text-lg font-bold text-white">{person.full_name}</h3>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 {person.employee_id && (
                   <span className="text-sm text-gray-400">Matricula: {person.employee_id}</span>
@@ -785,9 +788,14 @@ export function PersonDetailPage() {
       </div>
 
       {activeTab === 'profile' && (
-        <Card variant="bordered" padding="lg">
-          <h3 className="mb-4 text-lg font-semibold text-white">Dados Cadastrais</h3>
-          <div className="grid gap-4 sm:grid-cols-2">
+        <Card variant="bordered" padding="md">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-base font-semibold text-white">Dados Cadastrais</h3>
+            <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>
+              Editar
+            </Button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <DetailField label="Nome Completo" value={person.full_name} />
             <DetailField label="Matricula" value={person.employee_id ?? '-'} />
             <DetailField label="CPF" value={formatCpf(person.cpf)} />
@@ -798,22 +806,19 @@ export function PersonDetailPage() {
             <DetailField label="Atualizado em" value={formatDateTime(person.updated_at)} />
           </div>
 
-          <div className="mt-6">
+          <div className="mt-5 border-t border-white/8 pt-4">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-300/80">Documentos anexados</h4>
-              <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>
-                Editar
-              </Button>
             </div>
             {person.document_attachments.length > 0 ? (
-              <div className="mt-3 grid gap-3">
+              <div className="mt-3 grid gap-2 lg:grid-cols-2">
                 {person.document_attachments.map((document, index) => (
                   <a
                     key={`${document.url}-${index}`}
                     href={buildPublicStorageUrl(document.url)}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/4 px-4 py-3 text-sm text-gray-200 transition-colors hover:border-orange-400/30 hover:bg-white/6"
+                    className="flex min-w-0 items-center justify-between rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm text-gray-200 transition-colors hover:border-orange-400/30 hover:bg-white/6"
                   >
                     <span className="truncate">{document.name}</span>
                     <span className="ml-3 shrink-0 text-orange-300">Abrir</span>
@@ -821,7 +826,7 @@ export function PersonDetailPage() {
                 ))}
               </div>
             ) : (
-              <div className="mt-3 rounded-2xl border border-dashed border-white/10 bg-white/3 px-4 py-4 text-sm text-gray-500">
+              <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-white/3 px-3 py-3 text-sm text-gray-500">
                 Nenhum documento anexado para este colaborador.
               </div>
             )}
@@ -1075,18 +1080,17 @@ export function PersonDetailPage() {
                 label="Quantidade final no colaborador"
                 type="number"
                 min={0}
-                max={selectedInventoryItem.quantity}
                 value={inventoryActionQuantity}
                 onChange={(event) => setInventoryActionQuantity(event.target.value)}
               />
               <div className="rounded-2xl border border-orange-300/18 bg-orange-500/8 px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-orange-200/70">Diferença</p>
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-orange-200/70">Alteração</p>
                 <p className={cn(
                   'mt-2 text-2xl font-semibold',
-                  selectedInventoryDifference > 0 ? 'text-orange-100' : 'text-gray-500',
+                  selectedInventoryDelta !== 0 ? 'text-orange-100' : 'text-gray-500',
                 )}>
                   {Number.isFinite(selectedInventoryNextQuantity)
-                    ? formatQuantity(Math.max(selectedInventoryDifference, 0), selectedInventoryItem.stock_items.unit)
+                    ? `${selectedInventoryDelta > 0 ? '+' : ''}${formatQuantity(selectedInventoryDelta, selectedInventoryItem.stock_items.unit)}`
                     : '-'}
                 </p>
               </div>
@@ -1125,7 +1129,7 @@ export function PersonDetailPage() {
             <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
               <p className="text-sm font-medium text-white">Como aplicar a diferença?</p>
               <p className="mt-1 text-xs leading-5 text-gray-400">
-                Use ajuste quando a diferença saiu do inventario por perda, dano ou correcao. Use devolver quando o saldo deve voltar para o estoque principal.
+                Use ajuste para corrigir, aumentar ou reduzir o saldo do colaborador. Use devolver quando a quantidade removida deve voltar para o estoque principal.
               </p>
             </div>
 
@@ -1135,7 +1139,7 @@ export function PersonDetailPage() {
                 variant="secondary"
                 onClick={() => void handleInventoryAction('return_to_stock')}
                 isLoading={inventorySubmitting && inventoryActionMode === 'return_to_stock'}
-                disabled={!hasInventoryQuantityChange}
+                disabled={!canReturnInventoryDifference}
               >
                 Devolver diferença
               </Button>
@@ -1144,7 +1148,7 @@ export function PersonDetailPage() {
                 variant="danger"
                 onClick={() => void handleInventoryAction('adjust')}
                 isLoading={inventorySubmitting && inventoryActionMode === 'adjust'}
-                disabled={!hasInventoryQuantityChange || !inventoryAdjustmentReason}
+                disabled={!hasInventoryValidQuantity || !inventoryAdjustmentReason}
               >
                 Salvar ajuste
               </Button>
