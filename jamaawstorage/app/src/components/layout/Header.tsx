@@ -7,6 +7,7 @@ import { ProfileModal } from './ProfileModal'
 import type { NotificationItem } from '../../hooks/useNotifications'
 import { ItemVisual } from '../items/ItemVisual'
 import { AlertIcon, ClipboardIcon, WarehouseIcon } from '../icons'
+import { Wrench } from 'lucide-react'
 
 interface RouteTitle {
   path: string
@@ -82,6 +83,10 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
         return <WarehouseIcon size={14} className="text-sky-100" />
       case 'stock_return_held':
         return <ClipboardIcon size={14} className="text-amber-100" />
+      case 'vehicle_maintenance_due':
+        return <Wrench size={14} className="text-red-200" />
+      case 'vehicle_maintenance_upcoming':
+        return <Wrench size={14} className="text-amber-100" />
       case 'withdrawal_pending':
         return <ClipboardIcon size={14} className="text-amber-100" />
       case 'withdrawal_completed':
@@ -101,6 +106,10 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
         return 'Devolucao'
       case 'stock_return_held':
         return 'Triagem'
+      case 'vehicle_maintenance_due':
+        return 'Carro'
+      case 'vehicle_maintenance_upcoming':
+        return 'Revisao'
       case 'withdrawal_pending':
         return 'Pendente'
       case 'withdrawal_completed':
@@ -119,6 +128,10 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
       case 'stock_return_pending':
         return 'from-sky-500/30 to-sky-500/5 border-sky-400/20 text-sky-100'
       case 'stock_return_held':
+        return 'from-amber-500/30 to-amber-500/5 border-amber-400/20 text-amber-100'
+      case 'vehicle_maintenance_due':
+        return 'from-red-500/30 to-red-500/5 border-red-400/20 text-red-200'
+      case 'vehicle_maintenance_upcoming':
         return 'from-amber-500/30 to-amber-500/5 border-amber-400/20 text-amber-100'
       case 'withdrawal_pending':
         return 'from-amber-500/30 to-amber-500/5 border-amber-400/20 text-amber-100'
