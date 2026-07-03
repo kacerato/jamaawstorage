@@ -47,6 +47,7 @@ export function WithdrawalDetailPage() {
   const [searchParams] = useSearchParams()
   const shouldAutoPrint = searchParams.get('printTerm') === '1'
   const wasUpdated = searchParams.get('updated') === '1'
+  const wasReopened = searchParams.get('reopened') === '1'
   const autoPrintHandledRef = useRef(false)
 
   const [withdrawal, setWithdrawal] = useState<WithdrawalRow | null>(null)
@@ -57,6 +58,9 @@ export function WithdrawalDetailPage() {
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
   const [cancelError, setCancelError] = useState<string | null>(null)
+  const [showReopenModal, setShowReopenModal] = useState(false)
+  const [reopening, setReopening] = useState(false)
+  const [reopenError, setReopenError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!id) return
@@ -126,6 +130,29 @@ export function WithdrawalDetailPage() {
     setShowCancelModal(false)
   }
 
+  const handleReopen = async () => {
+    if (!withdrawal) return
+    setReopening(true)
+    setReopenError(null)
+
+    const { error: reopenRequestError } = await supabase.rpc('reopen_rejected_withdrawal', {
+      p_withdrawal_id: withdrawal.id,
+    })
+
+    if (reopenRequestError) {
+      setReopenError(reopenRequestError.message)
+      setReopening(false)
+      return
+    }
+
+    setWithdrawal((prev) =>
+      prev ? { ...prev, status: 'completed' as WithdrawalStatus } : prev,
+    )
+    setReopening(false)
+    setShowReopenModal(false)
+    navigate(`/withdrawals/${withdrawal.id}?reopened=1`, { replace: true })
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -151,6 +178,7 @@ export function WithdrawalDetailPage() {
 
   const canCancel = withdrawal.status === 'completed' || withdrawal.status === 'approved' || withdrawal.status === 'pending'
   const canEdit = withdrawal.status === 'completed' || withdrawal.status === 'approved'
+  const canReopen = withdrawal.status === 'rejected'
   const hasSupervisorSignature = !!withdrawal.supervisor_signature
   const hasRequesterSignature = !!withdrawal.requester_signature
   const bothSignaturesPresent = hasSupervisorSignature && hasRequesterSignature
@@ -202,6 +230,14 @@ export function WithdrawalDetailPage() {
               Editar Retirada
             </Button>
           )}
+          {canReopen && (
+            <Button
+              variant="primary"
+              onClick={() => setShowReopenModal(true)}
+            >
+              Reabrir Retirada
+            </Button>
+          )}
           {canCancel && (
             <Button
               variant="danger"
@@ -216,6 +252,12 @@ export function WithdrawalDetailPage() {
       {wasUpdated && (
         <Alert variant="success" title="Retirada atualizada">
           As alteracoes foram salvas e registradas na auditoria.
+        </Alert>
+      )}
+
+      {wasReopened && (
+        <Alert variant="success" title="Retirada reaberta">
+          A retirada voltou para concluida e o estoque foi baixado novamente.
         </Alert>
       )}
 
@@ -424,6 +466,38 @@ export function WithdrawalDetailPage() {
               isLoading={cancelling}
             >
               Sim, Cancelar
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={showReopenModal}
+        onClose={() => setShowReopenModal(false)}
+        title="Reabrir Retirada"
+        size="sm"
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-gray-300">
+            Esta retirada voltara para concluida. O sistema vai baixar novamente os itens do estoque e recriar o inventario do colaborador quando houver destino pessoal.
+          </p>
+          {reopenError && (
+            <Alert variant="danger">{reopenError}</Alert>
+          )}
+          <div className="flex items-center justify-end gap-2">
+            <Button
+              variant="secondary"
+              onClick={() => setShowReopenModal(false)}
+              disabled={reopening}
+            >
+              Manter rejeitada
+            </Button>
+            <Button
+              variant="primary"
+              onClick={handleReopen}
+              isLoading={reopening}
+            >
+              Sim, Reabrir
             </Button>
           </div>
         </div>

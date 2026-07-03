@@ -1305,39 +1305,23 @@ export function VehiclesPage() {
                   />
                 ) : null}
                 {maintenanceTargetMode !== 'date' ? (
-                  <div>
-                    <Input
-                      label="A cada km"
-                      inputMode="decimal"
-                      value={maintenanceForm.repeat_interval_km}
-                      onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_km: event.target.value }))}
-                    />
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      {[3000, 5000, 10000].map((km) => (
-                        <button
-                          key={km}
-                          type="button"
-                          onClick={() => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_km: String(km) }))}
-                          className="rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-xs text-gray-300 transition-colors hover:border-orange-300/35 hover:text-orange-100"
-                        >
-                          {km.toLocaleString('pt-BR')} km
-                        </button>
-                      ))}
-                    </div>
-                  </div>
+                  <Input
+                    label="A cada km"
+                    inputMode="decimal"
+                    value={maintenanceForm.repeat_interval_km}
+                    onChange={(event) => setMaintenanceForm((prev) => ({ ...prev, repeat_interval_km: event.target.value }))}
+                  />
                 ) : null}
               </div>
             </div>
           </div>
 
-          {maintenanceTargetMode !== 'date' && numericOrNull(maintenanceForm.repeat_interval_km) != null ? (
+          {maintenanceTargetMode !== 'date' && numericOrNull(maintenanceForm.repeat_interval_km) != null && (maintenanceForm.due_odometer_km.trim() || currentOdometerKm != null) ? (
             <div className="rounded-2xl border border-orange-300/18 bg-orange-500/8 p-4 text-sm text-orange-100">
               {maintenanceForm.due_odometer_km.trim() ? (
                 <>Este alerta vai vencer em {numericOrNull(maintenanceForm.due_odometer_km)?.toLocaleString('pt-BR')} km e, ao concluir, repetira a cada {numericOrNull(maintenanceForm.repeat_interval_km)?.toLocaleString('pt-BR')} km.</>
-              ) : currentOdometerKm != null ? (
-                <>Com a km atual de {currentOdometerKm.toLocaleString('pt-BR')} km, a proxima meta sera {(currentOdometerKm + (numericOrNull(maintenanceForm.repeat_interval_km) ?? 0)).toLocaleString('pt-BR')} km.</>
               ) : (
-                <>Para calcular automaticamente, registre a km atual do carro ou informe a proxima km limite acima.</>
+                <>Com a km atual de {currentOdometerKm!.toLocaleString('pt-BR')} km, a proxima meta sera {(currentOdometerKm! + (numericOrNull(maintenanceForm.repeat_interval_km) ?? 0)).toLocaleString('pt-BR')} km.</>
               )}
             </div>
           ) : null}

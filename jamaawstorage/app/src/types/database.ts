@@ -800,6 +800,12 @@ export interface Database {
     }
     Returns: string
   }
+  reopen_rejected_withdrawal: {
+    Args: {
+      p_withdrawal_id: string
+    }
+    Returns: string
+  }
   activate_supervisor_profile: {
     Args: {
       p_user_id: string
