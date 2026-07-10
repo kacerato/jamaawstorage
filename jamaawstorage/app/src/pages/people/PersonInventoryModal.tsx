@@ -32,6 +32,7 @@ interface KitItemOption {
 interface KitOption {
   id: string
   name: string
+  is_active: boolean
   kit_items: KitItemOption[]
 }
 
@@ -56,15 +57,33 @@ function getKitAvailability(kit: KitOption): {
   maxAssemblies: number
   blockingItems: string[]
 } {
+  if (!kit.is_active) {
+    return { maxAssemblies: 0, blockingItems: ['Kit inativo'] }
+  }
+
   if (!kit.kit_items.length) {
     return { maxAssemblies: 0, blockingItems: ['Kit vazio'] }
   }
 
   const perItemAvailability = kit.kit_items.map((kitItem) => {
     const stockItem = kitItem.stock_items
-    if (!stockItem || !stockItem.is_active) {
+    if (!stockItem) {
       return {
-        name: stockItem?.name ?? 'Item inativo',
+        name: 'Item removido ou inacessivel',
+        maxAssemblies: 0,
+      }
+    }
+
+    if (!stockItem.is_active) {
+      return {
+        name: `${stockItem.name} (inativo)`,
+        maxAssemblies: 0,
+      }
+    }
+
+    if (!Number.isFinite(kitItem.quantity) || kitItem.quantity <= 0) {
+      return {
+        name: `${stockItem.name} (quantidade invalida no kit)`,
         maxAssemblies: 0,
       }
     }
@@ -148,8 +167,7 @@ export function PersonInventoryModal({
         .order('name'),
       supabase
         .from('kits')
-        .select('id, name, kit_items(stock_item_id, quantity, stock_items(id, name, unit, current_quantity, minimum_quantity, category, svg_icon_key, is_active))')
-        .eq('is_active', true)
+        .select('id, name, is_active, kit_items(stock_item_id, quantity, stock_items(id, name, unit, current_quantity, minimum_quantity, category, svg_icon_key, is_active))')
         .order('name'),
     ])
 
@@ -168,7 +186,7 @@ export function PersonInventoryModal({
     setStockItems((stockRes.data ?? []) as StockItemOption[])
     setKits(((kitsRes.data ?? []) as KitOption[]).map((kit) => ({
       ...kit,
-      kit_items: (kit.kit_items ?? []).filter((kitItem) => kitItem.stock_items?.is_active),
+      kit_items: kit.kit_items ?? [],
     })))
     setLoading(false)
   }, [personId])
@@ -187,23 +205,29 @@ export function PersonInventoryModal({
     () => stockItems.filter((item) => item.current_quantity > 0),
     [stockItems],
   )
-  const availableKits = useMemo(
-    () => kits.filter((kit) => getKitAvailability(kit).maxAssemblies > 0),
-    [kits],
-  )
-
   const selectedItem = availableItems.find((item) => item.id === selectedItemId)
-  const selectedKit = availableKits.find((kit) => kit.id === selectedKitId)
+  const selectedKit = kits.find((kit) => kit.id === selectedKitId)
   const parsedQuantity = Number(quantity)
   const selectedKitAvailability = selectedKit ? getKitAvailability(selectedKit) : null
 
-  const kitOptions = availableKits.map((kit) => {
+  const kitOptions = kits.map((kit) => {
     const availability = getKitAvailability(kit)
+    const isAvailable = availability.maxAssemblies > 0
     return {
       value: kit.id,
-      label: `${kit.name} (${availability.maxAssemblies} kit(s) disponivel(is))`,
+      label: isAvailable
+        ? `${kit.name} (${availability.maxAssemblies} kit(s) disponivel(is))`
+        : `${kit.name} - indisponivel: ${availability.blockingItems.join(', ')}`,
+      disabled: !isAvailable,
     }
   })
+
+  const unavailableKits = useMemo(
+    () => kits
+      .map((kit) => ({ kit, availability: getKitAvailability(kit) }))
+      .filter(({ availability }) => availability.maxAssemblies <= 0),
+    [kits],
+  )
 
   const summarizedItems = useMemo(() => {
     const grouped = new Map<string, PendingInventoryItem>()
@@ -315,7 +339,7 @@ export function PersonInventoryModal({
         <div className="flex items-center justify-center py-8">
           <div className="h-6 w-6 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
         </div>
-      ) : availableItems.length === 0 && availableKits.length === 0 ? (
+      ) : availableItems.length === 0 && kits.length === 0 ? (
         <p className="py-4 text-center text-sm text-gray-400">
           Nenhum item ou kit ativo com saldo disponivel no estoque.
         </p>
@@ -358,13 +382,33 @@ export function PersonInventoryModal({
                         />
                       </div>
                     ) : (
-                      <Select
-                        label="Kit"
-                        value={selectedKitId}
-                        onChange={(e) => setSelectedKitId(e.target.value)}
-                        options={kitOptions}
-                        placeholder="Selecione um kit"
-                      />
+                      <div className="flex flex-col gap-2">
+                        <Select
+                          label="Kit"
+                          value={selectedKitId}
+                          onChange={(e) => {
+                            setSelectedKitId(e.target.value)
+                            setError(null)
+                          }}
+                          options={kitOptions}
+                          placeholder="Selecione um kit"
+                        />
+                        {kits.length === 0 && (
+                          <p className="text-xs text-gray-500">Nenhum kit cadastrado.</p>
+                        )}
+                        {unavailableKits.length > 0 && (
+                          <div className="rounded-xl border border-amber-400/15 bg-amber-500/8 px-3 py-2 text-xs text-amber-100">
+                            <p className="font-medium">Kits temporariamente indisponiveis:</p>
+                            <ul className="mt-1 space-y-1">
+                              {unavailableKits.map(({ kit, availability }) => (
+                                <li key={kit.id}>
+                                  {kit.name}: {availability.blockingItems.join(', ')}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -386,7 +430,11 @@ export function PersonInventoryModal({
                     disabled={
                       draftType === 'item'
                         ? !selectedItemId || !quantity || parsedQuantity <= 0
-                        : !selectedKitId || !quantity || parsedQuantity <= 0
+                        : !selectedKitId
+                          || !quantity
+                          || parsedQuantity <= 0
+                          || !selectedKitAvailability
+                          || selectedKitAvailability.maxAssemblies <= 0
                     }
                   >
                     Adicionar a fila
