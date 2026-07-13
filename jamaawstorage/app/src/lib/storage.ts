@@ -5,6 +5,8 @@ import {
 } from './utils'
 
 const FILE_BUCKET = 'app-files'
+const WITHDRAWAL_DOCUMENT_BUCKET = 'withdrawal-signed-documents'
+const MAX_WITHDRAWAL_PDF_SIZE = 12 * 1024 * 1024
 
 function buildFilePath(scope: string, entityId: string, extension = 'jpg'): string {
   const safeScope = scope.replace(/[^a-z0-9/_-]/gi, '-').toLowerCase()
@@ -158,4 +160,72 @@ export async function uploadDataUrlToStorage({
     entityId,
     extension,
   })
+}
+
+export async function validateWithdrawalPdf(file: File): Promise<void> {
+  if (file.type !== 'application/pdf' || !file.name.toLowerCase().endsWith('.pdf')) {
+    throw new Error('Selecione um arquivo PDF valido.')
+  }
+
+  if (file.size <= 0 || file.size > MAX_WITHDRAWAL_PDF_SIZE) {
+    throw new Error('O PDF deve ter no maximo 12 MB.')
+  }
+
+  const header = new TextDecoder('ascii').decode(await file.slice(0, 5).arrayBuffer())
+  if (header !== '%PDF-') {
+    throw new Error('O arquivo selecionado nao possui uma estrutura PDF valida.')
+  }
+}
+
+async function calculateSha256(file: File): Promise<string | null> {
+  if (!globalThis.crypto?.subtle) return null
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', await file.arrayBuffer())
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, '0'))
+    .join('')
+}
+
+export async function uploadWithdrawalSignedPdf({
+  file,
+  withdrawalId,
+  requirementId,
+}: {
+  file: File
+  withdrawalId: string
+  requirementId: string
+}): Promise<{ storagePath: string; sha256: string | null }> {
+  await validateWithdrawalPdf(file)
+
+  const uniqueSuffix = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+  const storagePath = `${withdrawalId}/${requirementId}/${Date.now()}-${uniqueSuffix}.pdf`
+  const sha256 = await calculateSha256(file)
+  const { error } = await supabase.storage
+    .from(WITHDRAWAL_DOCUMENT_BUCKET)
+    .upload(storagePath, file, {
+      contentType: 'application/pdf',
+      cacheControl: '3600',
+      upsert: false,
+    })
+
+  if (error) throw new Error(error.message)
+  return { storagePath, sha256 }
+}
+
+export async function removeWithdrawalSignedPdf(storagePath: string): Promise<void> {
+  const { error } = await supabase.storage
+    .from(WITHDRAWAL_DOCUMENT_BUCKET)
+    .remove([storagePath])
+  if (error) throw new Error(error.message)
+}
+
+export async function createWithdrawalDocumentSignedUrl(storagePath: string): Promise<string> {
+  const { data, error } = await supabase.storage
+    .from(WITHDRAWAL_DOCUMENT_BUCKET)
+    .createSignedUrl(storagePath, 60 * 10)
+  if (error || !data?.signedUrl) {
+    throw new Error(error?.message ?? 'Nao foi possivel abrir o PDF.')
+  }
+  return data.signedUrl
 }

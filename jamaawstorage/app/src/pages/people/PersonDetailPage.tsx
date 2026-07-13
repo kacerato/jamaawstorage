@@ -20,6 +20,13 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { startOfWeek, startOfMonth, subWeeks, subMonths, parseISO, isAfter } from 'date-fns'
+import {
+  activeRequirementDocument,
+  openWithdrawalPdf,
+  registerWithdrawalPdf,
+  requirementStatusLabels,
+  type WithdrawalDocumentRequirement,
+} from '../withdrawals/withdrawalDocuments'
 
 type PersonWithDetails = Omit<Tables<'people'>, 'document_attachments'> & {
   document_attachments: PersonAttachment[]
@@ -55,7 +62,11 @@ type InventoryWithdrawalTrace = {
   notes: string | null
 }
 
-type TabType = 'profile' | 'inventory' | 'withdrawals' | 'consumption'
+type PersonDocumentRequirement = WithdrawalDocumentRequirement & {
+  withdrawal?: Pick<Tables<'withdrawals'>, 'id' | 'code' | 'created_at' | 'status'> | null
+}
+
+type TabType = 'profile' | 'inventory' | 'withdrawals' | 'consumption' | 'documents'
 type DatePeriod = 'week' | 'month' | 'custom'
 type InventoryActionMode = 'adjust' | 'return_to_stock' | null
 
@@ -96,6 +107,10 @@ export function PersonDetailPage() {
   const [inventoryTraces, setInventoryTraces] = useState<Record<string, InventoryWithdrawalTrace[]>>({})
   const [activeInventoryInfoId, setActiveInventoryInfoId] = useState<string | null>(null)
   const [pinnedInventoryInfoId, setPinnedInventoryInfoId] = useState<string | null>(null)
+  const [documentRequirements, setDocumentRequirements] = useState<PersonDocumentRequirement[]>([])
+  const [documentsLoading, setDocumentsLoading] = useState(false)
+  const [documentError, setDocumentError] = useState<string | null>(null)
+  const [uploadingRequirementId, setUploadingRequirementId] = useState<string | null>(null)
 
   const [datePeriod, setDatePeriod] = useState<DatePeriod>('month')
   const [customDateRange, setCustomDateRange] = useState<CustomDateRange>({
@@ -281,9 +296,48 @@ export function PersonDetailPage() {
     setWithdrawalsLoading(false)
   }, [id, person])
 
+  const fetchPersonDocuments = useCallback(async () => {
+    if (!id) return
+    setDocumentsLoading(true)
+    const { data, error: fetchError } = await supabase
+      .from('withdrawal_document_requirements')
+      .select('*, documents:withdrawal_person_documents(*), withdrawal:withdrawals(id, code, created_at, status)')
+      .eq('person_id', id)
+      .neq('status', 'not_required')
+      .order('created_at', { ascending: false })
+
+    if (fetchError) {
+      setDocumentError(fetchError.message)
+      setDocumentsLoading(false)
+      return
+    }
+
+    setDocumentRequirements((data ?? []) as PersonDocumentRequirement[])
+    setDocumentError(null)
+    setDocumentsLoading(false)
+  }, [id])
+
   useEffect(() => {
     setTimeout(() => void fetchPerson(), 0)
   }, [fetchPerson])
+
+  useEffect(() => {
+    setTimeout(() => void fetchPersonDocuments(), 0)
+  }, [fetchPersonDocuments])
+
+  const handlePersonDocumentUpload = async (requirement: PersonDocumentRequirement, file?: File) => {
+    if (!file) return
+    setUploadingRequirementId(requirement.id)
+    setDocumentError(null)
+    try {
+      await registerWithdrawalPdf({ requirement, file })
+      await fetchPersonDocuments()
+    } catch (uploadError) {
+      setDocumentError(uploadError instanceof Error ? uploadError.message : 'Nao foi possivel anexar o PDF.')
+    } finally {
+      setUploadingRequirementId(null)
+    }
+  }
 
   useEffect(() => {
     if (person && person.role === 'leader') {
@@ -538,10 +592,12 @@ export function PersonDetailPage() {
     ? [
         { key: 'withdrawals', label: 'Retiradas Realizadas', icon: <ClipboardIcon size={16} /> },
         { key: 'consumption', label: 'Resumo de Consumo', icon: <ChartIcon size={16} /> },
+        { key: 'documents', label: 'Documentos', icon: <SignatureIcon size={16} /> },
         { key: 'profile', label: 'Dados Cadastrais', icon: <UserIcon size={16} /> },
       ]
     : [
         { key: 'inventory', label: 'Inventario Individual', icon: <PackageIcon size={16} /> },
+        { key: 'documents', label: 'Documentos', icon: <SignatureIcon size={16} /> },
         { key: 'profile', label: 'Dados Cadastrais', icon: <UserIcon size={16} /> },
       ]
 
@@ -806,12 +862,23 @@ export function PersonDetailPage() {
             <DetailField label="Atualizado em" value={formatDateTime(person.updated_at)} />
           </div>
 
-          <div className="mt-5 border-t border-white/8 pt-4">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <h4 className="text-sm font-semibold uppercase tracking-[0.2em] text-orange-300/80">Documentos anexados</h4>
+        </Card>
+      )}
+
+      {activeTab === 'documents' && (
+        <div className="flex flex-col gap-4">
+          {documentError && <Alert variant="danger">{documentError}</Alert>}
+
+          <Card variant="bordered" padding="md">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <h3 className="text-base font-semibold text-white">Documentos pessoais</h3>
+                <p className="mt-1 text-sm text-gray-400">Arquivos cadastrais vinculados a esta pessoa.</p>
+              </div>
+              <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>Gerenciar</Button>
             </div>
             {person.document_attachments.length > 0 ? (
-              <div className="mt-3 grid gap-2 lg:grid-cols-2">
+              <div className="mt-4 grid gap-2 lg:grid-cols-2">
                 {person.document_attachments.map((document, index) => (
                   <a
                     key={`${document.url}-${index}`}
@@ -826,12 +893,96 @@ export function PersonDetailPage() {
                 ))}
               </div>
             ) : (
-              <div className="mt-3 rounded-xl border border-dashed border-white/10 bg-white/3 px-3 py-3 text-sm text-gray-500">
-                Nenhum documento anexado para este colaborador.
+              <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/3 px-3 py-4 text-sm text-gray-500">
+                Nenhum documento pessoal anexado.
               </div>
             )}
-          </div>
-        </Card>
+          </Card>
+
+          <Card variant="bordered" padding="md">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="text-base font-semibold text-white">Termos de retirada assinados</h3>
+                <p className="mt-1 text-sm text-gray-400">Pendencias e PDFs individuais desta pessoa.</p>
+              </div>
+              <div className="flex gap-2 text-xs">
+                <span className="rounded-full bg-amber-500/10 px-3 py-1 text-amber-200">
+                  {documentRequirements.filter((item) => item.status === 'pending').length} pendente(s)
+                </span>
+                <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-200">
+                  {documentRequirements.filter((item) => item.status === 'attached').length} anexado(s)
+                </span>
+              </div>
+            </div>
+
+            {documentsLoading ? (
+              <div className="flex justify-center py-8"><Spinner size="md" /></div>
+            ) : documentRequirements.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-white/10 bg-white/3 px-3 py-5 text-sm text-gray-500">
+                Nenhum termo individual encontrado para esta pessoa.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {documentRequirements.map((requirement) => {
+                  const activeDocument = activeRequirementDocument(requirement)
+                  const isUploading = uploadingRequirementId === requirement.id
+                  return (
+                    <div key={requirement.id} className="rounded-2xl border border-white/8 bg-white/3 p-4">
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => navigate(`/withdrawals/${requirement.withdrawal_id}`)}
+                              className="font-mono text-sm font-medium text-orange-300 hover:text-orange-200"
+                            >
+                              {requirement.withdrawal?.code ?? 'Retirada'}
+                            </button>
+                            <Badge variant={requirement.status === 'attached' ? 'success' : requirement.status === 'rejected' ? 'danger' : 'default'} size="sm">
+                              {requirementStatusLabels[requirement.status]}
+                            </Badge>
+                          </div>
+                          <p className="mt-1 text-sm text-gray-300">{requirement.destination_label_snapshot}</p>
+                          <p className="mt-1 text-xs text-gray-500">
+                            {formatDateTime(requirement.withdrawal?.created_at ?? requirement.created_at)}
+                            {activeDocument ? ` • ${activeDocument.file_name} • versao ${activeDocument.version}` : ''}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {activeDocument && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              onClick={() => void openWithdrawalPdf(activeDocument.storage_path).catch((openError) => {
+                                setDocumentError(openError instanceof Error ? openError.message : 'Nao foi possivel abrir o PDF.')
+                              })}
+                            >
+                              Abrir PDF
+                            </Button>
+                          )}
+                          <label className="cursor-pointer rounded-lg bg-orange-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-orange-600">
+                            {isUploading ? 'Enviando...' : activeDocument ? 'Substituir PDF' : 'Anexar agora'}
+                            <input
+                              type="file"
+                              accept=".pdf,application/pdf"
+                              disabled={isUploading}
+                              className="sr-only"
+                              onChange={(event) => {
+                                void handlePersonDocumentUpload(requirement, event.target.files?.[0])
+                                event.target.value = ''
+                              }}
+                            />
+                          </label>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </Card>
+        </div>
       )}
 
       {activeTab === 'inventory' && !isLeader && (

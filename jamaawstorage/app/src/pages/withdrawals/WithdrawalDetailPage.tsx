@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import type { WithdrawalWithDetails, WithdrawalStatus } from '../../types'
@@ -24,6 +24,13 @@ import {
   CameraIcon,
 } from '../../components/icons'
 import { formatDateTime } from '../../lib/utils'
+import {
+  activeRequirementDocument,
+  openWithdrawalPdf,
+  registerWithdrawalPdf,
+  requirementStatusLabels,
+  type WithdrawalDocumentRequirement,
+} from './withdrawalDocuments'
 
 type WithdrawalRow = WithdrawalWithDetails
 
@@ -48,12 +55,16 @@ export function WithdrawalDetailPage() {
   const shouldAutoPrint = searchParams.get('printTerm') === '1'
   const wasUpdated = searchParams.get('updated') === '1'
   const wasReopened = searchParams.get('reopened') === '1'
+  const documentsWarning = searchParams.get('documentsWarning')
   const autoPrintHandledRef = useRef(false)
 
   const [withdrawal, setWithdrawal] = useState<WithdrawalRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updateLogCount, setUpdateLogCount] = useState(0)
+  const [documentRequirements, setDocumentRequirements] = useState<WithdrawalDocumentRequirement[]>([])
+  const [documentError, setDocumentError] = useState<string | null>(null)
+  const [uploadingRequirementId, setUploadingRequirementId] = useState<string | null>(null)
 
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -61,6 +72,24 @@ export function WithdrawalDetailPage() {
   const [showReopenModal, setShowReopenModal] = useState(false)
   const [reopening, setReopening] = useState(false)
   const [reopenError, setReopenError] = useState<string | null>(null)
+
+  const fetchDocumentRequirements = useCallback(async () => {
+    if (!id) return
+    const { data, error: requirementsError } = await supabase
+      .from('withdrawal_document_requirements')
+      .select('*, documents:withdrawal_person_documents(*)')
+      .eq('withdrawal_id', id)
+      .neq('status', 'not_required')
+      .order('created_at')
+
+    if (requirementsError) {
+      setDocumentError(requirementsError.message)
+      return
+    }
+
+    setDocumentRequirements((data ?? []) as WithdrawalDocumentRequirement[])
+    setDocumentError(null)
+  }, [id])
 
   useEffect(() => {
     if (!id) return
@@ -84,6 +113,8 @@ export function WithdrawalDetailPage() {
         setLoading(false)
       })
 
+    void fetchDocumentRequirements()
+
     supabase
       .from('audit_logs')
       .select('id', { count: 'exact', head: true })
@@ -97,7 +128,21 @@ export function WithdrawalDetailPage() {
       })
 
     return () => { cancelled = true }
-  }, [id])
+  }, [fetchDocumentRequirements, id])
+
+  const handleDocumentUpload = async (requirement: WithdrawalDocumentRequirement, file?: File) => {
+    if (!file) return
+    setUploadingRequirementId(requirement.id)
+    setDocumentError(null)
+    try {
+      await registerWithdrawalPdf({ requirement, file })
+      await fetchDocumentRequirements()
+    } catch (uploadError) {
+      setDocumentError(uploadError instanceof Error ? uploadError.message : 'Nao foi possivel anexar o PDF.')
+    } finally {
+      setUploadingRequirementId(null)
+    }
+  }
 
   useEffect(() => {
     if (!withdrawal || !shouldAutoPrint || autoPrintHandledRef.current) return
@@ -184,6 +229,7 @@ export function WithdrawalDetailPage() {
   const bothSignaturesPresent = hasSupervisorSignature && hasRequesterSignature
   const sharedSignatureAttachment = resolveSharedSignatureAttachment(withdrawal)
   const photoUrls = getWithdrawalPhotoUrls(withdrawal)
+  const attachedDocumentCount = documentRequirements.filter((requirement) => requirement.status === 'attached').length
 
   const destinationLabel = withdrawalDestinationsSummary(withdrawal)
 
@@ -258,6 +304,12 @@ export function WithdrawalDetailPage() {
       {wasReopened && (
         <Alert variant="success" title="Retirada reaberta">
           A retirada voltou para concluida e o estoque foi baixado novamente.
+        </Alert>
+      )}
+
+      {documentsWarning && (
+        <Alert variant="warning" title="Retirada criada; existem documentos pendentes">
+          {documentsWarning}
         </Alert>
       )}
 
@@ -374,9 +426,93 @@ export function WithdrawalDetailPage() {
       </Card>
 
       <Card variant="bordered" padding="lg">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">
+              <SignatureIcon size={18} className="mr-2 inline-block" />
+              PDFs assinados por pessoa
+            </h3>
+            <p className="mt-1 text-sm text-gray-400">
+              {attachedDocumentCount}/{documentRequirements.length} documento(s) anexado(s)
+            </p>
+          </div>
+          <Badge variant={documentRequirements.length > 0 && attachedDocumentCount === documentRequirements.length ? 'success' : attachedDocumentCount > 0 ? 'warning' : 'default'}>
+            {documentRequirements.length > 0 && attachedDocumentCount === documentRequirements.length
+              ? 'Completo'
+              : attachedDocumentCount > 0
+                ? 'Parcial'
+                : 'Pendente'}
+          </Badge>
+        </div>
+
+        {documentError && <Alert variant="danger" className="mb-4">{documentError}</Alert>}
+
+        {documentRequirements.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-white/10 bg-white/3 px-4 py-5 text-sm text-gray-500">
+            Nenhuma pendencia individual foi encontrada. Se esta retirada e anterior a atualizacao, os anexos legados continuam abaixo.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {documentRequirements.map((requirement) => {
+              const activeDocument = activeRequirementDocument(requirement)
+              const isUploading = uploadingRequirementId === requirement.id
+              return (
+                <div key={requirement.id} className="rounded-2xl border border-white/8 bg-white/3 p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-white">{requirement.person_name_snapshot}</p>
+                        <Badge variant={requirement.status === 'attached' ? 'success' : requirement.status === 'rejected' ? 'danger' : 'default'} size="sm">
+                          {requirementStatusLabels[requirement.status]}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">{requirement.destination_label_snapshot}</p>
+                      {activeDocument && (
+                        <p className="mt-1 text-xs text-gray-400">
+                          {activeDocument.file_name} • versao {activeDocument.version} • {formatDateTime(activeDocument.uploaded_at)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {activeDocument && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void openWithdrawalPdf(activeDocument.storage_path).catch((openError) => {
+                            setDocumentError(openError instanceof Error ? openError.message : 'Nao foi possivel abrir o PDF.')
+                          })}
+                        >
+                          Abrir PDF
+                        </Button>
+                      )}
+                      <label className="cursor-pointer rounded-lg bg-orange-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-orange-600">
+                        {isUploading ? 'Enviando...' : activeDocument ? 'Substituir PDF' : 'Anexar PDF assinado'}
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          disabled={isUploading}
+                          className="sr-only"
+                          onChange={(event) => {
+                            void handleDocumentUpload(requirement, event.target.files?.[0])
+                            event.target.value = ''
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
+
+      {(withdrawal.supervisor_signature || withdrawal.requester_signature || withdrawal.witness_signature || sharedSignatureAttachment.url) && (
+      <Card variant="bordered" padding="lg">
         <h3 className="mb-4 text-lg font-semibold text-white">
           <SignatureIcon size={18} className="mr-2 inline-block" />
-          Assinaturas
+          Assinaturas e anexos legados
           {bothSignaturesPresent && (
             <Badge variant="success" size="sm" className="ml-2">
               OK Completas
@@ -438,6 +574,7 @@ export function WithdrawalDetailPage() {
           </div>
         )}
       </Card>
+      )}
 
       <Modal
         isOpen={showCancelModal}
