@@ -161,6 +161,7 @@ export interface Database {
           held_quantity: number
           item_condition: 'used' | 'damaged'
           approved_condition: 'new' | 'used' | 'damaged' | null
+          origin_withdrawal_item_id: string | null
           source_type: StockReturnSourceType
           source_person_id: string | null
           source_work_site_id: string | null
@@ -186,6 +187,7 @@ export interface Database {
           held_quantity?: number
           item_condition?: 'used' | 'damaged'
           approved_condition?: 'new' | 'used' | 'damaged' | null
+          origin_withdrawal_item_id?: string | null
           source_type: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
@@ -211,6 +213,7 @@ export interface Database {
           held_quantity?: number
           item_condition?: 'used' | 'damaged'
           approved_condition?: 'new' | 'used' | 'damaged' | null
+          origin_withdrawal_item_id?: string | null
           source_type?: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
@@ -522,6 +525,13 @@ export interface Database {
             columns: ["withdrawal_id"]
             isOneToOne: false
             referencedRelation: "withdrawals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_return_requests_origin_withdrawal_item_id_fkey"
+            columns: ["origin_withdrawal_item_id"]
+            isOneToOne: false
+            referencedRelation: "withdrawal_items"
             referencedColumns: ["id"]
           },
           {
