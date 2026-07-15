@@ -68,6 +68,8 @@ function resolveSharedSignatureAttachment(withdrawal) {
 
 function buildMessage(withdrawal, channelUrl) {
   const totalUnits = (withdrawal.withdrawal_items || []).reduce((sum, item) => sum + (item.quantity || 0), 0)
+  const documentRequirements = (withdrawal.document_requirements || []).filter((item) => item.status !== 'not_required')
+  const attachedDocuments = documentRequirements.filter((item) => item.status === 'attached').length
   const sharedAttachment = resolveSharedSignatureAttachment(withdrawal)
   const sharedAttachmentLine = sharedAttachment.name
     ? `\n<b>Documento de assinaturas:</b> ${escapeHtml(sharedAttachment.name)}`
@@ -88,9 +90,10 @@ function buildMessage(withdrawal, channelUrl) {
     '<b>Itens</b>',
     buildItemsList(withdrawal),
     '',
-    `<b>Print assinatura supervisor:</b> ${withdrawal.supervisor_signature ? 'Sim' : 'Nao'}`,
-    `<b>Print assinatura responsavel:</b> ${withdrawal.requester_signature ? 'Sim' : 'Nao'}`,
+    `<b>PDFs assinados:</b> ${attachedDocuments}/${documentRequirements.length}`,
     `<b>Foto retirada:</b> ${withdrawal.photo_url ? 'Sim' : 'Nao'}`,
+    withdrawal.supervisor_signature ? '<b>Assinatura legada do supervisor:</b> Sim' : '',
+    withdrawal.requester_signature ? '<b>Assinatura legada do responsavel:</b> Sim' : '',
     sharedAttachmentLine,
     channelUrl ? `\n<a href="${channelUrl}">Canal da operacao</a>` : '',
   ].filter(Boolean).join('\n')

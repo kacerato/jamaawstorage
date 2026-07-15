@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import type { WithdrawalWithDetails, WithdrawalStatus } from '../../types'
@@ -17,6 +17,7 @@ import {
   Spinner,
   EmptyState,
   InfoTip,
+  Input,
 } from '../../components/ui'
 import {
   ClipboardIcon,
@@ -24,8 +25,16 @@ import {
   CameraIcon,
 } from '../../components/icons'
 import { formatDateTime } from '../../lib/utils'
+import {
+  activeRequirementDocument,
+  openWithdrawalPdf,
+  registerWithdrawalPdf,
+  requirementStatusLabels,
+  type WithdrawalDocumentRequirement,
+} from './withdrawalDocuments'
 
 type WithdrawalRow = WithdrawalWithDetails
+type WithdrawalItem = WithdrawalRow['withdrawal_items'][number]
 
 const statusBadgeVariant: Record<WithdrawalStatus, 'success' | 'warning' | 'danger' | 'default'> = {
   completed: 'success',
@@ -48,12 +57,16 @@ export function WithdrawalDetailPage() {
   const shouldAutoPrint = searchParams.get('printTerm') === '1'
   const wasUpdated = searchParams.get('updated') === '1'
   const wasReopened = searchParams.get('reopened') === '1'
+  const documentsWarning = searchParams.get('documentsWarning')
   const autoPrintHandledRef = useRef(false)
 
   const [withdrawal, setWithdrawal] = useState<WithdrawalRow | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [updateLogCount, setUpdateLogCount] = useState(0)
+  const [documentRequirements, setDocumentRequirements] = useState<WithdrawalDocumentRequirement[]>([])
+  const [documentError, setDocumentError] = useState<string | null>(null)
+  const [uploadingRequirementId, setUploadingRequirementId] = useState<string | null>(null)
 
   const [showCancelModal, setShowCancelModal] = useState(false)
   const [cancelling, setCancelling] = useState(false)
@@ -61,6 +74,56 @@ export function WithdrawalDetailPage() {
   const [showReopenModal, setShowReopenModal] = useState(false)
   const [reopening, setReopening] = useState(false)
   const [reopenError, setReopenError] = useState<string | null>(null)
+  const [returnedQuantities, setReturnedQuantities] = useState<Record<string, number>>({})
+  const [returningItem, setReturningItem] = useState<WithdrawalItem | null>(null)
+  const [returnQuantity, setReturnQuantity] = useState('1')
+  const [returnCondition, setReturnCondition] = useState<'used' | 'damaged'>('used')
+  const [returning, setReturning] = useState(false)
+  const [returnError, setReturnError] = useState<string | null>(null)
+
+  const fetchReturnedQuantities = useCallback(async (items: WithdrawalItem[]) => {
+    if (items.length === 0) {
+      setReturnedQuantities({})
+      return
+    }
+
+    const { data, error: returnsError } = await supabase
+      .from('stock_return_requests')
+      .select('origin_withdrawal_item_id, quantity')
+      .in('origin_withdrawal_item_id', items.map((item) => item.id))
+
+    if (returnsError) {
+      setReturnError(returnsError.message)
+      return
+    }
+
+    const nextTotals = (data ?? []).reduce<Record<string, number>>((totals, entry) => {
+      if (entry.origin_withdrawal_item_id) {
+        totals[entry.origin_withdrawal_item_id] = (totals[entry.origin_withdrawal_item_id] ?? 0) + entry.quantity
+      }
+      return totals
+    }, {})
+
+    setReturnedQuantities(nextTotals)
+  }, [])
+
+  const fetchDocumentRequirements = useCallback(async () => {
+    if (!id) return
+    const { data, error: requirementsError } = await supabase
+      .from('withdrawal_document_requirements')
+      .select('*, documents:withdrawal_person_documents(*)')
+      .eq('withdrawal_id', id)
+      .neq('status', 'not_required')
+      .order('created_at')
+
+    if (requirementsError) {
+      setDocumentError(requirementsError.message)
+      return
+    }
+
+    setDocumentRequirements((data ?? []) as WithdrawalDocumentRequirement[])
+    setDocumentError(null)
+  }, [id])
 
   useEffect(() => {
     if (!id) return
@@ -80,9 +143,12 @@ export function WithdrawalDetailPage() {
           setError(fetchError?.message ?? 'Retirada nao encontrada')
         } else {
           setWithdrawal(data)
+          void fetchReturnedQuantities(data.withdrawal_items)
         }
         setLoading(false)
       })
+
+    void fetchDocumentRequirements()
 
     supabase
       .from('audit_logs')
@@ -97,7 +163,21 @@ export function WithdrawalDetailPage() {
       })
 
     return () => { cancelled = true }
-  }, [id])
+  }, [fetchDocumentRequirements, fetchReturnedQuantities, id])
+
+  const handleDocumentUpload = async (requirement: WithdrawalDocumentRequirement, file?: File) => {
+    if (!file) return
+    setUploadingRequirementId(requirement.id)
+    setDocumentError(null)
+    try {
+      await registerWithdrawalPdf({ requirement, file })
+      await fetchDocumentRequirements()
+    } catch (uploadError) {
+      setDocumentError(uploadError instanceof Error ? uploadError.message : 'Nao foi possivel anexar o PDF.')
+    } finally {
+      setUploadingRequirementId(null)
+    }
+  }
 
   useEffect(() => {
     if (!withdrawal || !shouldAutoPrint || autoPrintHandledRef.current) return
@@ -153,6 +233,78 @@ export function WithdrawalDetailPage() {
     navigate(`/withdrawals/${withdrawal.id}?reopened=1`, { replace: true })
   }
 
+  const openReturnModal = (item: WithdrawalItem) => {
+    const available = Math.max(item.quantity - (returnedQuantities[item.id] ?? 0), 0)
+    setReturningItem(item)
+    setReturnQuantity(String(Math.max(available, 1)))
+    setReturnCondition('used')
+    setReturnError(null)
+  }
+
+  const closeReturnModal = () => {
+    if (returning) return
+    setReturningItem(null)
+    setReturnError(null)
+  }
+
+  const handleReturn = async () => {
+    if (!withdrawal || !returningItem) return
+
+    const quantity = Number.parseInt(returnQuantity, 10)
+    const alreadyReturned = returnedQuantities[returningItem.id] ?? 0
+    const available = Math.max(returningItem.quantity - alreadyReturned, 0)
+
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > available) {
+      setReturnError(`Informe uma quantidade entre 1 e ${available}.`)
+      return
+    }
+
+    const destinationType = returningItem.destination_type ?? withdrawal.destination_type
+    const sourcePersonId = destinationType === 'collaborator'
+      ? (returningItem.collaborator_id ?? withdrawal.collaborator_id)
+      : null
+    const sourceWorkSiteId = destinationType === 'work_site'
+      ? (returningItem.work_site_id ?? withdrawal.work_site_id)
+      : null
+
+    if ((destinationType === 'collaborator' && !sourcePersonId) || (destinationType === 'work_site' && !sourceWorkSiteId)) {
+      setReturnError('O destino original desta retirada esta incompleto e nao pode ser usado para registrar a devolucao.')
+      return
+    }
+
+    setReturning(true)
+    setReturnError(null)
+    try {
+      const { data: authData, error: authError } = await supabase.auth.getUser()
+      if (authError || !authData.user) {
+        throw new Error('Sua sessao expirou. Entre novamente para registrar a devolucao.')
+      }
+
+      const { error: insertError } = await supabase
+        .from('stock_return_requests')
+        .insert({
+          origin_withdrawal_item_id: returningItem.id,
+          stock_item_id: returningItem.stock_item_id,
+          quantity,
+          item_condition: returnCondition,
+          source_type: destinationType,
+          source_person_id: sourcePersonId,
+          source_work_site_id: sourceWorkSiteId,
+          created_by: authData.user.id,
+        })
+
+      if (insertError) throw new Error(insertError.message)
+
+      await fetchReturnedQuantities(withdrawal.withdrawal_items)
+      setReturningItem(null)
+      setReturnError(null)
+    } catch (submitError) {
+      setReturnError(submitError instanceof Error ? submitError.message : 'Nao foi possivel registrar a devolucao.')
+    } finally {
+      setReturning(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -184,8 +336,10 @@ export function WithdrawalDetailPage() {
   const bothSignaturesPresent = hasSupervisorSignature && hasRequesterSignature
   const sharedSignatureAttachment = resolveSharedSignatureAttachment(withdrawal)
   const photoUrls = getWithdrawalPhotoUrls(withdrawal)
+  const attachedDocumentCount = documentRequirements.filter((requirement) => requirement.status === 'attached').length
 
   const destinationLabel = withdrawalDestinationsSummary(withdrawal)
+  const canReturn = withdrawal.status !== 'rejected'
 
   return (
     <div className="flex flex-col gap-6">
@@ -261,6 +415,12 @@ export function WithdrawalDetailPage() {
         </Alert>
       )}
 
+      {documentsWarning && (
+        <Alert variant="warning" title="Retirada criada; existem documentos pendentes">
+          {documentsWarning}
+        </Alert>
+      )}
+
       <Card variant="bordered" padding="lg">
         <h3 className="mb-4 text-lg font-semibold text-white">Detalhes</h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -312,10 +472,14 @@ export function WithdrawalDetailPage() {
                   <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Destino</th>
                   <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Qtd</th>
                   <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Unidade</th>
+                  <th className="px-3 py-2 text-right text-sm font-medium text-gray-300">Devolucao</th>
                 </tr>
               </thead>
               <tbody>
-                {withdrawal.withdrawal_items.map((wi) => (
+                {withdrawal.withdrawal_items.map((wi) => {
+                  const alreadyReturned = returnedQuantities[wi.id] ?? 0
+                  const availableToReturn = Math.max(wi.quantity - alreadyReturned, 0)
+                  return (
                   <tr key={wi.id} className="border-b border-gray-800">
                     <td className="px-3 py-2 text-sm text-white">
                       {wi.stock_items?.name ?? '-'}
@@ -332,8 +496,24 @@ export function WithdrawalDetailPage() {
                     <td className="px-3 py-2 text-sm text-gray-300">
                       {wi.unit}
                     </td>
+                    <td className="px-3 py-2 text-right">
+                      {alreadyReturned > 0 && (
+                        <p className="mb-1 text-xs text-emerald-300">
+                          Devolvido: {alreadyReturned}
+                        </p>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={!canReturn || availableToReturn === 0}
+                        onClick={() => openReturnModal(wi)}
+                      >
+                        {availableToReturn === 0 ? 'Devolvido' : 'Devolver item'}
+                      </Button>
+                    </td>
                   </tr>
-                ))}
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -374,9 +554,93 @@ export function WithdrawalDetailPage() {
       </Card>
 
       <Card variant="bordered" padding="lg">
+        <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h3 className="text-lg font-semibold text-white">
+              <SignatureIcon size={18} className="mr-2 inline-block" />
+              PDFs assinados por pessoa
+            </h3>
+            <p className="mt-1 text-sm text-gray-400">
+              {attachedDocumentCount}/{documentRequirements.length} documento(s) anexado(s)
+            </p>
+          </div>
+          <Badge variant={documentRequirements.length > 0 && attachedDocumentCount === documentRequirements.length ? 'success' : attachedDocumentCount > 0 ? 'warning' : 'default'}>
+            {documentRequirements.length > 0 && attachedDocumentCount === documentRequirements.length
+              ? 'Completo'
+              : attachedDocumentCount > 0
+                ? 'Parcial'
+                : 'Pendente'}
+          </Badge>
+        </div>
+
+        {documentError && <Alert variant="danger" className="mb-4">{documentError}</Alert>}
+
+        {documentRequirements.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-white/10 bg-white/3 px-4 py-5 text-sm text-gray-500">
+            Nenhuma pendencia individual foi encontrada. Se esta retirada e anterior a atualizacao, os anexos legados continuam abaixo.
+          </p>
+        ) : (
+          <div className="space-y-3">
+            {documentRequirements.map((requirement) => {
+              const activeDocument = activeRequirementDocument(requirement)
+              const isUploading = uploadingRequirementId === requirement.id
+              return (
+                <div key={requirement.id} className="rounded-2xl border border-white/8 bg-white/3 p-4">
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-white">{requirement.person_name_snapshot}</p>
+                        <Badge variant={requirement.status === 'attached' ? 'success' : requirement.status === 'rejected' ? 'danger' : 'default'} size="sm">
+                          {requirementStatusLabels[requirement.status]}
+                        </Badge>
+                      </div>
+                      <p className="mt-1 text-xs text-gray-500">{requirement.destination_label_snapshot}</p>
+                      {activeDocument && (
+                        <p className="mt-1 text-xs text-gray-400">
+                          {activeDocument.file_name} • versao {activeDocument.version} • {formatDateTime(activeDocument.uploaded_at)}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      {activeDocument && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => void openWithdrawalPdf(activeDocument.storage_path).catch((openError) => {
+                            setDocumentError(openError instanceof Error ? openError.message : 'Nao foi possivel abrir o PDF.')
+                          })}
+                        >
+                          Abrir PDF
+                        </Button>
+                      )}
+                      <label className="cursor-pointer rounded-lg bg-orange-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-orange-600">
+                        {isUploading ? 'Enviando...' : activeDocument ? 'Substituir PDF' : 'Anexar PDF assinado'}
+                        <input
+                          type="file"
+                          accept=".pdf,application/pdf"
+                          disabled={isUploading}
+                          className="sr-only"
+                          onChange={(event) => {
+                            void handleDocumentUpload(requirement, event.target.files?.[0])
+                            event.target.value = ''
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </Card>
+
+      {(withdrawal.supervisor_signature || withdrawal.requester_signature || withdrawal.witness_signature || sharedSignatureAttachment.url) && (
+      <Card variant="bordered" padding="lg">
         <h3 className="mb-4 text-lg font-semibold text-white">
           <SignatureIcon size={18} className="mr-2 inline-block" />
-          Assinaturas
+          Assinaturas e anexos legados
           {bothSignaturesPresent && (
             <Badge variant="success" size="sm" className="ml-2">
               OK Completas
@@ -438,6 +702,7 @@ export function WithdrawalDetailPage() {
           </div>
         )}
       </Card>
+      )}
 
       <Modal
         isOpen={showCancelModal}
@@ -501,6 +766,66 @@ export function WithdrawalDetailPage() {
             </Button>
           </div>
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(returningItem)}
+        onClose={closeReturnModal}
+        title="Registrar devolucao"
+        size="sm"
+      >
+        {returningItem && (() => {
+          const alreadyReturned = returnedQuantities[returningItem.id] ?? 0
+          const available = Math.max(returningItem.quantity - alreadyReturned, 0)
+          return (
+            <div className="space-y-4">
+              <div className="rounded-xl border border-white/10 bg-white/4 p-3 text-sm">
+                <p className="font-medium text-white">{returningItem.stock_items?.name ?? 'Item da retirada'}</p>
+                <p className="mt-1 text-gray-400">
+                  Retirada {withdrawal.code} · {withdrawalItemDestinationLabel(returningItem, withdrawal)}
+                </p>
+                <p className="mt-1 text-emerald-300">Disponivel para devolver: {available} {returningItem.unit}</p>
+              </div>
+
+              <Input
+                label="Quantidade devolvida"
+                type="number"
+                min="1"
+                max={available}
+                value={returnQuantity}
+                onChange={(event) => setReturnQuantity(event.target.value)}
+                disabled={returning}
+              />
+
+              <div className="grid grid-cols-2 gap-3">
+                {([
+                  { value: 'used', label: 'Usado', description: 'Vai para triagem para limpeza ou nova liberacao.' },
+                  { value: 'damaged', label: 'Com avaria', description: 'Vai para triagem para avaliacao tecnica.' },
+                ] as const).map((option) => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setReturnCondition(option.value)}
+                    disabled={returning}
+                    className={`rounded-xl border p-3 text-left text-sm transition-colors ${returnCondition === option.value ? 'border-orange-400 bg-orange-500/10 text-white' : 'border-white/10 bg-white/3 text-gray-300'}`}
+                  >
+                    <p className="font-medium">{option.label}</p>
+                    <p className="mt-1 text-xs text-gray-400">{option.description}</p>
+                  </button>
+                ))}
+              </div>
+
+              {returnError && <Alert variant="danger">{returnError}</Alert>}
+
+              <div className="flex justify-end gap-2">
+                <Button variant="secondary" onClick={closeReturnModal} disabled={returning}>Cancelar</Button>
+                <Button onClick={() => void handleReturn()} isLoading={returning} disabled={available === 0}>
+                  Confirmar devolucao
+                </Button>
+              </div>
+            </div>
+          )
+        })()}
       </Modal>
     </div>
   )

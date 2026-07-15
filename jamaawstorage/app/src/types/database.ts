@@ -4,6 +4,8 @@ export type WithdrawalDestinationType = 'collaborator' | 'work_site'
 export type StockReturnSourceType = 'collaborator' | 'work_site'
 export type StockReturnRequestStatus = 'pending' | 'held' | 'approved'
 export type StockConditionCategory = 'new' | 'used' | 'damaged'
+export type WithdrawalDocumentRequirementStatus = 'pending' | 'attached' | 'rejected' | 'replaced' | 'not_required'
+export type WithdrawalPersonDocumentStatus = 'active' | 'replaced' | 'rejected'
 
 export interface Database {
   public: {
@@ -159,6 +161,7 @@ export interface Database {
           held_quantity: number
           item_condition: 'used' | 'damaged'
           approved_condition: 'new' | 'used' | 'damaged' | null
+          origin_withdrawal_item_id: string | null
           source_type: StockReturnSourceType
           source_person_id: string | null
           source_work_site_id: string | null
@@ -184,6 +187,7 @@ export interface Database {
           held_quantity?: number
           item_condition?: 'used' | 'damaged'
           approved_condition?: 'new' | 'used' | 'damaged' | null
+          origin_withdrawal_item_id?: string | null
           source_type: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
@@ -209,6 +213,7 @@ export interface Database {
           held_quantity?: number
           item_condition?: 'used' | 'damaged'
           approved_condition?: 'new' | 'used' | 'damaged' | null
+          origin_withdrawal_item_id?: string | null
           source_type?: StockReturnSourceType
           source_person_id?: string | null
           source_work_site_id?: string | null
@@ -465,6 +470,164 @@ export interface Database {
           }
         ]
       }
+      withdrawal_document_requirements: {
+        Row: {
+          id: string
+          withdrawal_id: string
+          person_id: string
+          scope_key: string
+          destination_type: WithdrawalDestinationType
+          collaborator_id: string | null
+          work_site_id: string | null
+          status: WithdrawalDocumentRequirementStatus
+          person_name_snapshot: string
+          person_role_snapshot: string
+          destination_label_snapshot: string
+          due_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          withdrawal_id: string
+          person_id: string
+          scope_key: string
+          destination_type: WithdrawalDestinationType
+          collaborator_id?: string | null
+          work_site_id?: string | null
+          status?: WithdrawalDocumentRequirementStatus
+          person_name_snapshot: string
+          person_role_snapshot: string
+          destination_label_snapshot: string
+          due_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          withdrawal_id?: string
+          person_id?: string
+          scope_key?: string
+          destination_type?: WithdrawalDestinationType
+          collaborator_id?: string | null
+          work_site_id?: string | null
+          status?: WithdrawalDocumentRequirementStatus
+          person_name_snapshot?: string
+          person_role_snapshot?: string
+          destination_label_snapshot?: string
+          due_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "withdrawal_document_requirements_withdrawal_id_fkey"
+            columns: ["withdrawal_id"]
+            isOneToOne: false
+            referencedRelation: "withdrawals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_return_requests_origin_withdrawal_item_id_fkey"
+            columns: ["origin_withdrawal_item_id"]
+            isOneToOne: false
+            referencedRelation: "withdrawal_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "withdrawal_document_requirements_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      withdrawal_person_documents: {
+        Row: {
+          id: string
+          requirement_id: string
+          withdrawal_id: string
+          person_id: string
+          version: number
+          status: WithdrawalPersonDocumentStatus
+          storage_path: string
+          file_name: string
+          mime_type: string
+          file_size: number
+          sha256: string | null
+          uploaded_by: string
+          uploaded_at: string
+          rejection_reason: string | null
+          rejected_by: string | null
+          rejected_at: string | null
+          supersedes_document_id: string | null
+          notes: string | null
+        }
+        Insert: {
+          id?: string
+          requirement_id: string
+          withdrawal_id: string
+          person_id: string
+          version: number
+          status?: WithdrawalPersonDocumentStatus
+          storage_path: string
+          file_name: string
+          mime_type?: string
+          file_size: number
+          sha256?: string | null
+          uploaded_by: string
+          uploaded_at?: string
+          rejection_reason?: string | null
+          rejected_by?: string | null
+          rejected_at?: string | null
+          supersedes_document_id?: string | null
+          notes?: string | null
+        }
+        Update: {
+          id?: string
+          requirement_id?: string
+          withdrawal_id?: string
+          person_id?: string
+          version?: number
+          status?: WithdrawalPersonDocumentStatus
+          storage_path?: string
+          file_name?: string
+          mime_type?: string
+          file_size?: number
+          sha256?: string | null
+          uploaded_by?: string
+          uploaded_at?: string
+          rejection_reason?: string | null
+          rejected_by?: string | null
+          rejected_at?: string | null
+          supersedes_document_id?: string | null
+          notes?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "withdrawal_person_documents_requirement_id_fkey"
+            columns: ["requirement_id"]
+            isOneToOne: false
+            referencedRelation: "withdrawal_document_requirements"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "withdrawal_person_documents_withdrawal_id_fkey"
+            columns: ["withdrawal_id"]
+            isOneToOne: false
+            referencedRelation: "withdrawals"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "withdrawal_person_documents_person_id_fkey"
+            columns: ["person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
   withdrawal_items: {
     Row: {
       id: string
@@ -670,7 +833,19 @@ export interface Database {
         Relationships: []
       }
     }
-    Views: Record<string, never>
+    Views: {
+      withdrawal_document_summary: {
+        Row: {
+          withdrawal_id: string | null
+          expected_count: number | null
+          attached_count: number | null
+          pending_count: number | null
+          rejected_count: number | null
+          document_status: 'pending' | 'partial' | 'complete' | 'rejected' | 'not_required' | null
+        }
+        Relationships: []
+      }
+    }
   Functions: {
   check_low_stock: {
     Args: Record<string, never>
@@ -803,6 +978,18 @@ export interface Database {
   reopen_rejected_withdrawal: {
     Args: {
       p_withdrawal_id: string
+    }
+    Returns: string
+  }
+  register_withdrawal_person_document: {
+    Args: {
+      p_requirement_id: string
+      p_storage_path: string
+      p_file_name: string
+      p_mime_type: string
+      p_file_size: number
+      p_sha256?: string | null
+      p_notes?: string | null
     }
     Returns: string
   }

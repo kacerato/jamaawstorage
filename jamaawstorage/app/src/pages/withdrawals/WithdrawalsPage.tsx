@@ -9,10 +9,18 @@ import { formatDateTime } from '../../lib/utils'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 type PeopleRow = Tables<'people'>
-type WithdrawalRowForTable = WithdrawalListItem & Record<string, unknown>
+type DocumentSummary = {
+  expected_count: number
+  attached_count: number
+  pending_count: number
+  rejected_count: number
+  document_status: 'pending' | 'partial' | 'complete' | 'rejected' | 'not_required'
+}
+type WithdrawalWithDocumentSummary = WithdrawalListItem & { document_summary?: DocumentSummary | null }
+type WithdrawalRowForTable = WithdrawalWithDocumentSummary & Record<string, unknown>
 
 const withdrawalsPageCache: {
-  withdrawals: WithdrawalListItem[]
+  withdrawals: WithdrawalWithDocumentSummary[]
   requesters: PeopleRow[]
 } = {
   withdrawals: [],
@@ -23,6 +31,14 @@ const statusOptions = [
   { value: '', label: 'Todas' },
   { value: 'completed', label: 'Concluidas' },
   { value: 'rejected', label: 'Rejeitadas/Canceladas' },
+]
+
+const documentStatusOptions = [
+  { value: '', label: 'Todos os documentos' },
+  { value: 'pending', label: 'PDFs pendentes' },
+  { value: 'partial', label: 'PDFs parciais' },
+  { value: 'complete', label: 'PDFs completos' },
+  { value: 'rejected', label: 'PDF rejeitado' },
 ]
 
 const statusBadgeVariant: Record<WithdrawalStatus, 'success' | 'warning' | 'danger' | 'default'> = {
@@ -75,7 +91,7 @@ export function WithdrawalsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const initialQuery = searchParams.get('q') ?? ''
   const createdCount = Number(searchParams.get('created') ?? '0')
-  const [withdrawals, setWithdrawals] = useState<WithdrawalListItem[]>(withdrawalsPageCache.withdrawals)
+  const [withdrawals, setWithdrawals] = useState<WithdrawalWithDocumentSummary[]>(withdrawalsPageCache.withdrawals)
   const [requesters, setRequesters] = useState<PeopleRow[]>(withdrawalsPageCache.requesters)
   const [loading, setLoading] = useState(withdrawalsPageCache.withdrawals.length === 0)
   const [refreshing, setRefreshing] = useState(false)
@@ -83,6 +99,7 @@ export function WithdrawalsPage() {
   const [searchCode, setSearchCode] = useState(initialQuery)
   const [statusFilter, setStatusFilter] = useState<string>('')
   const [leaderFilter, setLeaderFilter] = useState<string>('')
+  const [documentStatusFilter, setDocumentStatusFilter] = useState<string>('')
   const [dateFrom, setDateFrom] = useState<string>('')
   const [dateTo, setDateTo] = useState<string>('')
   const debouncedSearchCode = useDebouncedValue(searchCode, 220)
@@ -160,7 +177,21 @@ export function WithdrawalsPage() {
         console.error('Error fetching withdrawals:', error.message)
         setWithdrawals([])
       } else {
-        const nextWithdrawals = (data as unknown as WithdrawalListItem[]) ?? []
+        const baseWithdrawals = (data as unknown as WithdrawalListItem[]) ?? []
+        const withdrawalIds = baseWithdrawals.map((withdrawal) => withdrawal.id)
+        const { data: summaries } = withdrawalIds.length > 0
+          ? await supabase
+              .from('withdrawal_document_summary')
+              .select('*')
+              .in('withdrawal_id', withdrawalIds)
+          : { data: [] }
+        const summaryByWithdrawal = new Map(
+          (summaries ?? []).map((summary) => [summary.withdrawal_id, summary as DocumentSummary]),
+        )
+        const nextWithdrawals: WithdrawalWithDocumentSummary[] = baseWithdrawals.map((withdrawal) => ({
+          ...withdrawal,
+          document_summary: summaryByWithdrawal.get(withdrawal.id) ?? null,
+        }))
         withdrawalsPageCache.withdrawals = nextWithdrawals
         setWithdrawals(nextWithdrawals)
       }
@@ -195,8 +226,10 @@ export function WithdrawalsPage() {
   )
 
   const tableData = useMemo<WithdrawalRowForTable[]>(
-    () => withdrawals as WithdrawalRowForTable[],
-    [withdrawals]
+    () => withdrawals.filter((withdrawal) => (
+      !documentStatusFilter || withdrawal.document_summary?.document_status === documentStatusFilter
+    )) as WithdrawalRowForTable[],
+    [documentStatusFilter, withdrawals]
   )
 
   const columns = [
@@ -258,15 +291,17 @@ export function WithdrawalsPage() {
     },
     {
       key: 'signatures' as const,
-      header: 'Assinaturas',
+      header: 'PDFs assinados',
       render: (_value: unknown, row: WithdrawalRowForTable) => {
         const withdrawal = row as unknown as WithdrawalListItem
-        const both = !!withdrawal.supervisor_signature && !!withdrawal.requester_signature
-        return both ? (
-          <span className="text-emerald-400">OK</span>
-        ) : (
-          <span className="text-gray-500">-</span>
-        )
+        const summary = (withdrawal as WithdrawalWithDocumentSummary).document_summary
+        if (!summary || summary.expected_count === 0) return <span className="text-gray-500">-</span>
+        const color = summary.document_status === 'complete'
+          ? 'text-emerald-400'
+          : summary.document_status === 'rejected'
+            ? 'text-red-400'
+            : 'text-amber-300'
+        return <span className={color}>{summary.attached_count}/{summary.expected_count} PDFs</span>
       },
       className: 'text-center',
     },
@@ -338,6 +373,14 @@ export function WithdrawalsPage() {
               placeholder="Solicitante"
             />
           </div>
+          <div className="w-52">
+            <Select
+              options={documentStatusOptions}
+              value={documentStatusFilter}
+              onChange={(e) => setDocumentStatusFilter(e.target.value)}
+              placeholder="Documentos"
+            />
+          </div>
           <div className="w-40">
             <Input
               type="date"
@@ -364,7 +407,7 @@ export function WithdrawalsPage() {
         )}
       </div>
 
-      {!loading && withdrawals.length === 0 && !searchCode && !statusFilter && !leaderFilter ? (
+      {!loading && withdrawals.length === 0 && !searchCode && !statusFilter && !leaderFilter && !documentStatusFilter ? (
         <EmptyState
           icon={<ClipboardIcon size={48} />}
           title="Nenhuma retirada registrada"

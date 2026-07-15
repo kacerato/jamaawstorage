@@ -330,7 +330,10 @@ function formatPdfCell(value: unknown): string {
 function normalizePdfFilename(value: string): string {
   const safeName = value
     .trim()
-    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '-')
+    .replace(/[<>:"/\\|?*]/g, '-')
+    .split('')
+    .map((character) => character.charCodeAt(0) <= 31 ? '-' : character)
+    .join('')
     .replace(/\s+/g, '-')
 
   if (!safeName) return 'relatorio.pdf'

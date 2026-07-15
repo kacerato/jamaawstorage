@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent } from 'react'
+import { useNavigate } from 'react-router-dom'
 import type { Tables, TablesInsert } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { buildPublicStorageUrl, uploadFileToStorage, uploadImageToStorage } from '../../lib/storage'
@@ -241,6 +242,7 @@ function buildInventoryGroups(
 }
 
 export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTabProps) {
+  const navigate = useNavigate()
   const [requests, setRequests] = useState<ReturnRequestWithDetails[]>([])
   const [stockItems, setStockItems] = useState<StockItemRow[]>([])
   const [people, setPeople] = useState<PersonRow[]>([])
@@ -963,8 +965,8 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
               options={STATUS_OPTIONS}
             />
           </div>
-          <Button onClick={() => setShowCreateModal(true)}>
-            Nova devolucao
+          <Button onClick={() => navigate('/withdrawals')}>
+            Escolher retirada
           </Button>
         </div>
 
@@ -973,10 +975,10 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
             <EmptyState
               icon={<ClipboardIcon size={48} />}
               title="Nenhuma devolucao encontrada"
-              description="Quando um item usado voltar ao almoxarifado, ele aparece aqui para triagem e aprovacao."
+              description="Abra a retirada original para devolver o item com destino e historico ja identificados."
               action={{
-                label: 'Registrar devolucao',
-                onClick: () => setShowCreateModal(true),
+                label: 'Escolher retirada',
+                onClick: () => navigate('/withdrawals'),
               }}
             />
           ) : (
