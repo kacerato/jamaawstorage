@@ -61,6 +61,10 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
       {kits.map((kit) => {
         const isExpanded = expandedId === kit.id
         const itemCount = kit.kit_items?.length ?? 0
+        const shortages = (kit.kit_items ?? []).filter((item) =>
+          !item.stock_items || item.stock_items.current_quantity < item.quantity,
+        )
+        const isComplete = shortages.length === 0
 
         return (
           <div
@@ -88,6 +92,9 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
               <Badge variant="primary" size="sm">
                 {itemCount} {itemCount === 1 ? 'item' : 'itens'}
               </Badge>
+              <Badge variant={isComplete ? 'success' : 'warning'} size="sm">
+                {isComplete ? 'Completo' : 'Parcial disponível'}
+              </Badge>
               <svg
                 width="16"
                 height="16"
@@ -111,7 +118,10 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
             {isExpanded && (
               <div className="border-t border-gray-700 px-4 py-3">
                 <div className="mb-3 flex flex-col gap-1">
-                  {kit.kit_items?.map((ki) => (
+                  {kit.kit_items?.map((ki) => {
+                    const availableQuantity = ki.stock_items?.current_quantity ?? 0
+                    const missingQuantity = Math.max(ki.quantity - availableQuantity, 0)
+                    return (
                     <div
                       key={ki.id}
                       className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/3 px-3 py-2 text-sm"
@@ -122,18 +132,24 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
                           {ki.stock_items?.name ?? 'Item'}
                         </span>
                       </div>
-                      <span className="text-gray-400">
-                        {ki.quantity} {ki.stock_items?.unit ?? 'un'}
-                      </span>
+                      <div className="text-right text-xs">
+                        <p className="text-gray-300">Kit: {ki.quantity} {ki.stock_items?.unit ?? 'un'}</p>
+                        <p className={missingQuantity > 0 ? 'text-amber-300' : 'text-emerald-300'}>
+                          {missingQuantity > 0
+                            ? `Disponível ${availableQuantity}; faltam ${missingQuantity}`
+                            : `Disponível ${availableQuantity}`}
+                        </p>
+                      </div>
                     </div>
-                  ))}
+                    )
+                  })}
                 </div>
                 <button
                   type="button"
                   onClick={() => onSelect(kit)}
                   className="w-full rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
                 >
-                  Usar este Kit
+                  {isComplete ? 'Usar este Kit' : 'Usar o que está disponível'}
                 </button>
               </div>
             )}

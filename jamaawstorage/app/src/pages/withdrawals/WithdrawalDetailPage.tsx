@@ -35,6 +35,7 @@ import {
 
 type WithdrawalRow = WithdrawalWithDetails
 type WithdrawalItem = WithdrawalRow['withdrawal_items'][number]
+type ReturnTotals = { registered: number; returnedToStock: number }
 
 const statusBadgeVariant: Record<WithdrawalStatus, 'success' | 'warning' | 'danger' | 'default'> = {
   completed: 'success',
@@ -74,22 +75,22 @@ export function WithdrawalDetailPage() {
   const [showReopenModal, setShowReopenModal] = useState(false)
   const [reopening, setReopening] = useState(false)
   const [reopenError, setReopenError] = useState<string | null>(null)
-  const [returnedQuantities, setReturnedQuantities] = useState<Record<string, number>>({})
+  const [returnTotals, setReturnTotals] = useState<Record<string, ReturnTotals>>({})
   const [returningItem, setReturningItem] = useState<WithdrawalItem | null>(null)
   const [returnQuantity, setReturnQuantity] = useState('1')
   const [returnCondition, setReturnCondition] = useState<'used' | 'damaged'>('used')
   const [returning, setReturning] = useState(false)
   const [returnError, setReturnError] = useState<string | null>(null)
 
-  const fetchReturnedQuantities = useCallback(async (items: WithdrawalItem[]) => {
+  const fetchReturnTotals = useCallback(async (items: WithdrawalItem[]) => {
     if (items.length === 0) {
-      setReturnedQuantities({})
+      setReturnTotals({})
       return
     }
 
     const { data, error: returnsError } = await supabase
       .from('stock_return_requests')
-      .select('origin_withdrawal_item_id, quantity')
+      .select('origin_withdrawal_item_id, quantity, approved_quantity')
       .in('origin_withdrawal_item_id', items.map((item) => item.id))
 
     if (returnsError) {
@@ -97,14 +98,18 @@ export function WithdrawalDetailPage() {
       return
     }
 
-    const nextTotals = (data ?? []).reduce<Record<string, number>>((totals, entry) => {
+    const nextTotals = (data ?? []).reduce<Record<string, ReturnTotals>>((totals, entry) => {
       if (entry.origin_withdrawal_item_id) {
-        totals[entry.origin_withdrawal_item_id] = (totals[entry.origin_withdrawal_item_id] ?? 0) + entry.quantity
+        const previous = totals[entry.origin_withdrawal_item_id] ?? { registered: 0, returnedToStock: 0 }
+        totals[entry.origin_withdrawal_item_id] = {
+          registered: previous.registered + entry.quantity,
+          returnedToStock: previous.returnedToStock + entry.approved_quantity,
+        }
       }
       return totals
     }, {})
 
-    setReturnedQuantities(nextTotals)
+    setReturnTotals(nextTotals)
   }, [])
 
   const fetchDocumentRequirements = useCallback(async () => {
@@ -143,7 +148,7 @@ export function WithdrawalDetailPage() {
           setError(fetchError?.message ?? 'Retirada nao encontrada')
         } else {
           setWithdrawal(data)
-          void fetchReturnedQuantities(data.withdrawal_items)
+          void fetchReturnTotals(data.withdrawal_items)
         }
         setLoading(false)
       })
@@ -163,7 +168,7 @@ export function WithdrawalDetailPage() {
       })
 
     return () => { cancelled = true }
-  }, [fetchDocumentRequirements, fetchReturnedQuantities, id])
+  }, [fetchDocumentRequirements, fetchReturnTotals, id])
 
   const handleDocumentUpload = async (requirement: WithdrawalDocumentRequirement, file?: File) => {
     if (!file) return
@@ -234,7 +239,7 @@ export function WithdrawalDetailPage() {
   }
 
   const openReturnModal = (item: WithdrawalItem) => {
-    const available = Math.max(item.quantity - (returnedQuantities[item.id] ?? 0), 0)
+    const available = Math.max(item.quantity - (returnTotals[item.id]?.registered ?? 0), 0)
     setReturningItem(item)
     setReturnQuantity(String(Math.max(available, 1)))
     setReturnCondition('used')
@@ -251,51 +256,28 @@ export function WithdrawalDetailPage() {
     if (!withdrawal || !returningItem) return
 
     const quantity = Number.parseInt(returnQuantity, 10)
-    const alreadyReturned = returnedQuantities[returningItem.id] ?? 0
-    const available = Math.max(returningItem.quantity - alreadyReturned, 0)
+    const registeredQuantity = returnTotals[returningItem.id]?.registered ?? 0
+    const available = Math.max(returningItem.quantity - registeredQuantity, 0)
 
     if (!Number.isFinite(quantity) || quantity <= 0 || quantity > available) {
       setReturnError(`Informe uma quantidade entre 1 e ${available}.`)
       return
     }
 
-    const destinationType = returningItem.destination_type ?? withdrawal.destination_type
-    const sourcePersonId = destinationType === 'collaborator'
-      ? (returningItem.collaborator_id ?? withdrawal.collaborator_id)
-      : null
-    const sourceWorkSiteId = destinationType === 'work_site'
-      ? (returningItem.work_site_id ?? withdrawal.work_site_id)
-      : null
-
-    if ((destinationType === 'collaborator' && !sourcePersonId) || (destinationType === 'work_site' && !sourceWorkSiteId)) {
-      setReturnError('O destino original desta retirada esta incompleto e nao pode ser usado para registrar a devolucao.')
-      return
-    }
-
     setReturning(true)
     setReturnError(null)
     try {
-      const { data: authData, error: authError } = await supabase.auth.getUser()
-      if (authError || !authData.user) {
-        throw new Error('Sua sessao expirou. Entre novamente para registrar a devolucao.')
+      const { error: returnError } = await supabase.rpc('register_linked_stock_return', {
+        p_withdrawal_item_id: returningItem.id,
+        p_quantity: quantity,
+        p_item_condition: returnCondition,
+      })
+
+      if (returnError) {
+        throw new Error(returnError.message)
       }
 
-      const { error: insertError } = await supabase
-        .from('stock_return_requests')
-        .insert({
-          origin_withdrawal_item_id: returningItem.id,
-          stock_item_id: returningItem.stock_item_id,
-          quantity,
-          item_condition: returnCondition,
-          source_type: destinationType,
-          source_person_id: sourcePersonId,
-          source_work_site_id: sourceWorkSiteId,
-          created_by: authData.user.id,
-        })
-
-      if (insertError) throw new Error(insertError.message)
-
-      await fetchReturnedQuantities(withdrawal.withdrawal_items)
+      await fetchReturnTotals(withdrawal.withdrawal_items)
       setReturningItem(null)
       setReturnError(null)
     } catch (submitError) {
@@ -340,6 +322,10 @@ export function WithdrawalDetailPage() {
 
   const destinationLabel = withdrawalDestinationsSummary(withdrawal)
   const canReturn = withdrawal.status !== 'rejected'
+  const pendingTriageTotal = Object.values(returnTotals).reduce(
+    (total, value) => total + value.registered - value.returnedToStock,
+    0,
+  )
 
   return (
     <div className="flex flex-col gap-6">
@@ -421,6 +407,15 @@ export function WithdrawalDetailPage() {
         </Alert>
       )}
 
+      {pendingTriageTotal > 0 && (
+        <Alert variant="warning" title="Existem devoluções antigas ainda em triagem">
+          {pendingTriageTotal} unidade(s) ja foram registradas como devolvidas, mas ainda nao entraram no estoque. Regularize-as em Pendências de devolução antes de realizar outra movimentação desse item.
+          <Button className="ml-3" size="sm" variant="outline" onClick={() => navigate('/stock?tab=returns')}>
+            Abrir pendências
+          </Button>
+        </Alert>
+      )}
+
       <Card variant="bordered" padding="lg">
         <h3 className="mb-4 text-lg font-semibold text-white">Detalhes</h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -477,8 +472,9 @@ export function WithdrawalDetailPage() {
               </thead>
               <tbody>
                 {withdrawal.withdrawal_items.map((wi) => {
-                  const alreadyReturned = returnedQuantities[wi.id] ?? 0
-                  const availableToReturn = Math.max(wi.quantity - alreadyReturned, 0)
+                  const totals = returnTotals[wi.id] ?? { registered: 0, returnedToStock: 0 }
+                  const pendingTriage = totals.registered - totals.returnedToStock
+                  const availableToReturn = Math.max(wi.quantity - totals.registered, 0)
                   return (
                   <tr key={wi.id} className="border-b border-gray-800">
                     <td className="px-3 py-2 text-sm text-white">
@@ -497,9 +493,14 @@ export function WithdrawalDetailPage() {
                       {wi.unit}
                     </td>
                     <td className="px-3 py-2 text-right">
-                      {alreadyReturned > 0 && (
+                      {totals.returnedToStock > 0 && (
                         <p className="mb-1 text-xs text-emerald-300">
-                          Devolvido: {alreadyReturned}
+                          No estoque: {totals.returnedToStock}
+                        </p>
+                      )}
+                      {pendingTriage > 0 && (
+                        <p className="mb-1 text-xs text-amber-300">
+                          Em triagem: {pendingTriage}
                         </p>
                       )}
                       <Button
@@ -508,7 +509,7 @@ export function WithdrawalDetailPage() {
                         disabled={!canReturn || availableToReturn === 0}
                         onClick={() => openReturnModal(wi)}
                       >
-                        {availableToReturn === 0 ? 'Devolvido' : 'Devolver item'}
+                        {availableToReturn === 0 ? 'Devolucao registrada' : 'Devolver item'}
                       </Button>
                     </td>
                   </tr>
@@ -775,8 +776,8 @@ export function WithdrawalDetailPage() {
         size="sm"
       >
         {returningItem && (() => {
-          const alreadyReturned = returnedQuantities[returningItem.id] ?? 0
-          const available = Math.max(returningItem.quantity - alreadyReturned, 0)
+          const registeredQuantity = returnTotals[returningItem.id]?.registered ?? 0
+          const available = Math.max(returningItem.quantity - registeredQuantity, 0)
           return (
             <div className="space-y-4">
               <div className="rounded-xl border border-white/10 bg-white/4 p-3 text-sm">

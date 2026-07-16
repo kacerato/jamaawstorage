@@ -73,6 +73,15 @@ interface WithdrawalCompositionWarning {
   composition: WithdrawalComposition
 }
 
+interface KitShortage {
+  kitName: string
+  itemName: string
+  unit: string
+  requestedQuantity: number
+  addedQuantity: number
+  missingQuantity: number
+}
+
 interface PhotoAttachment {
   id: string
   url: string
@@ -223,6 +232,7 @@ export function NewWithdrawalPage() {
   const [compositionWarnings, setCompositionWarnings] = useState<WithdrawalCompositionWarning[]>([])
   const [showCompositionConfirm, setShowCompositionConfirm] = useState(false)
 
+  const [kitShortages, setKitShortages] = useState<KitShortage[]>([])
   const [notes, setNotes] = useState<string>('')
   const [photoAttachments, setPhotoAttachments] = useState<PhotoAttachment[]>([])
   const [photoError, setPhotoError] = useState<string | null>(null)
@@ -362,6 +372,7 @@ export function NewWithdrawalPage() {
 
     setItems((prev) => [...prev, entry])
     setCompositionWarnings([])
+    setKitShortages([])
     setStepErrors((prev) => {
       const next = { ...prev }
       delete next.items
@@ -371,7 +382,8 @@ export function NewWithdrawalPage() {
   }
 
   const handleAddKit = (kit: KitWithItems) => {
-    const newItems: WithdrawalItemEntry[] = []
+    const nextItems = [...items]
+    const shortages: KitShortage[] = []
 
     for (const kitItem of kit.kit_items) {
       if (!kitItem.stock_items) continue
@@ -379,14 +391,40 @@ export function NewWithdrawalPage() {
       const entry = createDraftEntry(kitItem.stock_items)
       if (!entry) return
 
-      entry.quantity = kitItem.quantity
+      const alreadyPlanned = nextItems
+        .filter((item) => item.stock_item_id === kitItem.stock_item_id)
+        .reduce((total, item) => total + item.quantity, 0)
+      const availableQuantity = Math.max(kitItem.stock_items.current_quantity - alreadyPlanned, 0)
+      const addedQuantity = Math.min(kitItem.quantity, availableQuantity)
+      const missingQuantity = kitItem.quantity - addedQuantity
 
-      if (!selectedEntryKeys.has(makeEntryDuplicateKey(entry))) {
-        newItems.push(entry)
+      if (addedQuantity > 0) {
+        entry.quantity = addedQuantity
+        const existingIndex = nextItems.findIndex((item) => makeEntryDuplicateKey(item) === makeEntryDuplicateKey(entry))
+        if (existingIndex >= 0) {
+          nextItems[existingIndex] = {
+            ...nextItems[existingIndex],
+            quantity: nextItems[existingIndex].quantity + addedQuantity,
+          }
+        } else {
+          nextItems.push(entry)
+        }
+      }
+
+      if (missingQuantity > 0) {
+        shortages.push({
+          kitName: kit.name,
+          itemName: kitItem.stock_items.name,
+          unit: kitItem.stock_items.unit,
+          requestedQuantity: kitItem.quantity,
+          addedQuantity,
+          missingQuantity,
+        })
       }
     }
 
-    setItems((prev) => [...prev, ...newItems])
+    setItems(nextItems)
+    setKitShortages(shortages)
     setCompositionWarnings([])
     setStepErrors((prev) => {
       const next = { ...prev }
@@ -398,6 +436,7 @@ export function NewWithdrawalPage() {
 
   const handleUpdateQuantity = (entryId: string, quantity: number) => {
     setCompositionWarnings([])
+    setKitShortages([])
     setItems((prev) =>
       prev.map((item) =>
         item.entry_id === entryId ? { ...item, quantity } : item,
@@ -1051,6 +1090,16 @@ export function NewWithdrawalPage() {
         {stepErrors.items && (
           <Alert variant="danger" className="mb-4">
             {stepErrors.items}
+          </Alert>
+        )}
+
+        {kitShortages.length > 0 && (
+          <Alert variant="warning" title={`Kit "${kitShortages[0].kitName}" adicionado parcialmente`} className="mb-4">
+            Foram incluidos os itens disponiveis. Faltaram: {kitShortages.map((shortage) => (
+              <span key={shortage.itemName} className="block mt-1">
+                {shortage.itemName}: solicitado {shortage.requestedQuantity}, incluido {shortage.addedQuantity}, faltam {shortage.missingQuantity} {shortage.unit}.
+              </span>
+            ))}
           </Alert>
         )}
 

@@ -69,7 +69,7 @@ BEGIN
       RAISE EXCEPTION 'O item devolvido precisa ser o mesmo item da retirada de origem.';
     END IF;
 
-    IF NEW.source_type <> origin_item.destination_type
+    IF NEW.source_type <> origin_item.destination_type::TEXT
        OR (NEW.source_type = 'collaborator' AND NEW.source_person_id IS DISTINCT FROM origin_item.collaborator_id)
        OR (NEW.source_type = 'work_site' AND NEW.source_work_site_id IS DISTINCT FROM origin_item.work_site_id) THEN
       RAISE EXCEPTION 'A origem da devolucao precisa ser o mesmo destino da retirada vinculada.';

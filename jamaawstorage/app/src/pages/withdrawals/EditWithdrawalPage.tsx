@@ -45,6 +45,15 @@ interface EditableWithdrawalItem {
   work_site_id: string | null
 }
 
+interface KitShortage {
+  kitName: string
+  itemName: string
+  unit: string
+  requestedQuantity: number
+  addedQuantity: number
+  missingQuantity: number
+}
+
 function createEntryId(): string {
   return `withdrawal-edit-${crypto.randomUUID()}`
 }
@@ -118,6 +127,7 @@ export function EditWithdrawalPage() {
 
   const [showItemSelector, setShowItemSelector] = useState(false)
   const [showKitSelector, setShowKitSelector] = useState(false)
+  const [kitShortages, setKitShortages] = useState<KitShortage[]>([])
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [splitQuantity, setSplitQuantity] = useState('')
 
@@ -374,46 +384,67 @@ export function EditWithdrawalPage() {
     setItems((current) => [...current, newItem])
     setShowItemSelector(false)
     setSaveError(null)
+    setKitShortages([])
   }
 
   const handleAddKit = (kit: KitWithItems) => {
-    setItems((current) => {
-      const nextItems = [...current]
+    const nextItems = [...items]
+    const shortages: KitShortage[] = []
 
-      for (const kitItem of kit.kit_items) {
-        if (!kitItem.stock_items) continue
+    for (const kitItem of kit.kit_items) {
+      if (!kitItem.stock_items) continue
 
-        const kitEntryDestination = {
-          stock_item_id: kitItem.stock_item_id,
-          destination_type: destinationType,
-          collaborator_id: destinationType === 'collaborator' ? collaboratorId || null : null,
-          work_site_id: destinationType === 'work_site' ? workSiteId || null : null,
-        }
+      const alreadyPlanned = nextItems
+        .filter((item) => item.stock_item_id === kitItem.stock_item_id)
+        .reduce((total, item) => total + item.quantity, 0)
+      const editableTotal = kitItem.stock_items.current_quantity + (originalQuantities.get(kitItem.stock_item_id) ?? 0)
+      const availableQuantity = Math.max(editableTotal - alreadyPlanned, 0)
+      const addedQuantity = Math.min(kitItem.quantity, availableQuantity)
+      const missingQuantity = kitItem.quantity - addedQuantity
+      const kitEntryDestination = {
+        stock_item_id: kitItem.stock_item_id,
+        destination_type: destinationType,
+        collaborator_id: destinationType === 'collaborator' ? collaboratorId || null : null,
+        work_site_id: destinationType === 'work_site' ? workSiteId || null : null,
+      }
+
+      if (addedQuantity > 0) {
         const existingIndex = nextItems.findIndex((item) => makeEntryDuplicateKey(item) === makeEntryDuplicateKey(kitEntryDestination))
         if (existingIndex >= 0) {
           nextItems[existingIndex] = {
             ...nextItems[existingIndex],
-            quantity: nextItems[existingIndex].quantity + kitItem.quantity,
+            quantity: nextItems[existingIndex].quantity + addedQuantity,
           }
-          continue
+        } else {
+          nextItems.push({
+            entry_id: createEntryId(),
+            withdrawal_item_id: null,
+            stock_item_id: kitItem.stock_item_id,
+            quantity: addedQuantity,
+            unit: kitItem.stock_items.unit,
+            lot_id: null,
+            stock_item: kitItem.stock_items,
+            destination_type: destinationType,
+            collaborator_id: destinationType === 'collaborator' ? collaboratorId || null : null,
+            work_site_id: destinationType === 'work_site' ? workSiteId || null : null,
+          })
         }
-
-        nextItems.push({
-          entry_id: createEntryId(),
-          withdrawal_item_id: null,
-          stock_item_id: kitItem.stock_item_id,
-          quantity: kitItem.quantity,
-          unit: kitItem.stock_items.unit,
-          lot_id: null,
-          stock_item: kitItem.stock_items,
-          destination_type: destinationType,
-          collaborator_id: destinationType === 'collaborator' ? collaboratorId || null : null,
-          work_site_id: destinationType === 'work_site' ? workSiteId || null : null,
-        })
       }
 
-      return nextItems
-    })
+      if (missingQuantity > 0) {
+        shortages.push({
+          kitName: kit.name,
+          itemName: kitItem.stock_items.name,
+          unit: kitItem.stock_items.unit,
+          requestedQuantity: kitItem.quantity,
+          addedQuantity,
+          missingQuantity,
+        })
+      }
+    }
+
+    setItems(nextItems)
+    setKitShortages(shortages)
 
     setShowKitSelector(false)
     setSaveError(null)
@@ -669,6 +700,16 @@ export function EditWithdrawalPage() {
                 </Button>
               </div>
             </div>
+
+            {kitShortages.length > 0 && (
+              <Alert variant="warning" title={`Kit "${kitShortages[0].kitName}" adicionado parcialmente`} className="mb-4">
+                Foram incluidos os itens disponiveis. Faltaram: {kitShortages.map((shortage) => (
+                  <span key={shortage.itemName} className="block mt-1">
+                    {shortage.itemName}: solicitado {shortage.requestedQuantity}, incluido {shortage.addedQuantity}, faltam {shortage.missingQuantity} {shortage.unit}.
+                  </span>
+                ))}
+              </Alert>
+            )}
 
             {items.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-10 text-center text-sm text-gray-500">
