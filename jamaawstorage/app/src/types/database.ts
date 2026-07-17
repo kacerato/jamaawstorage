@@ -240,6 +240,13 @@ export interface Database {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "stock_return_requests_origin_withdrawal_item_id_fkey"
+            columns: ["origin_withdrawal_item_id"]
+            isOneToOne: false
+            referencedRelation: "withdrawal_items"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "stock_return_requests_source_person_id_fkey"
             columns: ["source_person_id"]
             isOneToOne: false
@@ -263,6 +270,57 @@ export interface Database {
           {
             foreignKeyName: "stock_return_requests_approved_by_fkey"
             columns: ["approved_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      stock_return_events: {
+        Row: {
+          id: string
+          return_request_id: string
+          event_type: 'received' | 'held_for_triage' | 'returned_to_stock'
+          quantity: number
+          stock_delta: number
+          item_condition: 'new' | 'used' | 'damaged' | null
+          actor_id: string | null
+          details: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          return_request_id: string
+          event_type: 'received' | 'held_for_triage' | 'returned_to_stock'
+          quantity: number
+          stock_delta: number
+          item_condition?: 'new' | 'used' | 'damaged' | null
+          actor_id?: string | null
+          details?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          return_request_id?: string
+          event_type?: 'received' | 'held_for_triage' | 'returned_to_stock'
+          quantity?: number
+          stock_delta?: number
+          item_condition?: 'new' | 'used' | 'damaged' | null
+          actor_id?: string | null
+          details?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_return_events_return_request_id_fkey"
+            columns: ["return_request_id"]
+            isOneToOne: false
+            referencedRelation: "stock_return_requests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_return_events_actor_id_fkey"
+            columns: ["actor_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -525,13 +583,6 @@ export interface Database {
             columns: ["withdrawal_id"]
             isOneToOne: false
             referencedRelation: "withdrawals"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "stock_return_requests_origin_withdrawal_item_id_fkey"
-            columns: ["origin_withdrawal_item_id"]
-            isOneToOne: false
-            referencedRelation: "withdrawal_items"
             referencedColumns: ["id"]
           },
           {
@@ -927,6 +978,14 @@ export interface Database {
       p_triage_notes?: string | null
       p_approved_condition?: 'new' | 'used' | 'damaged' | null
       p_hold_condition?: 'used' | 'damaged' | null
+    }
+    Returns: Database['public']['Tables']['stock_return_requests']['Row']
+  }
+  register_linked_stock_return: {
+    Args: {
+      p_withdrawal_item_id: string
+      p_quantity: number
+      p_item_condition?: 'used' | 'damaged'
     }
     Returns: Database['public']['Tables']['stock_return_requests']['Row']
   }

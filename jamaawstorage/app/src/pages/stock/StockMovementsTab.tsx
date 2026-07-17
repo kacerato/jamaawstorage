@@ -54,20 +54,25 @@ interface WithdrawalItemRow {
   } | null
 }
 
-interface StockReturnRow {
+interface StockReturnEventRow {
   id: string
   quantity: number
-  approved_quantity: number
-  held_quantity: number
-  item_condition: 'used' | 'damaged'
-  approved_condition: 'new' | 'used' | 'damaged' | null
-  status: string
-  approved_at: string | null
+  stock_delta: number
+  event_type: 'received' | 'held_for_triage' | 'returned_to_stock'
+  item_condition: 'new' | 'used' | 'damaged' | null
+  details: string | null
   created_at: string
-  source_person: { full_name: string } | null
-  source_work_site: { name: string } | null
-  approved_by_profile: { full_name: string } | null
-  stock_item: Pick<StockItemRow, 'id' | 'code' | 'name' | 'unit' | 'svg_icon_key'> | null
+  actor: { full_name: string } | null
+  return_request: {
+    id: string
+    source_person: { full_name: string } | null
+    source_work_site: { name: string } | null
+    stock_item: Pick<StockItemRow, 'id' | 'code' | 'name' | 'unit' | 'svg_icon_key'> | null
+    origin_withdrawal_item: {
+      id: string
+      withdrawal: { id: string; code: string | null } | null
+    } | null
+  } | null
 }
 
 interface StockMovement {
@@ -86,7 +91,9 @@ interface StockMovement {
   afterQuantity: number | null
   actor: string
   target: string | null
+  targetLabel: string | null
   reference: string | null
+  stage: string | null
   createdAt: string
   description: string
 }
@@ -254,7 +261,9 @@ function buildAuditMovements(rows: AuditLogRow[]): StockMovement[] {
         afterQuantity: createdQuantity,
         actor,
         target: null,
+        targetLabel: null,
         reference: 'Cadastro inicial',
+        stage: null,
         createdAt: row.created_at,
         description: 'Quantidade criada junto com o item.',
       }]
@@ -281,7 +290,9 @@ function buildAuditMovements(rows: AuditLogRow[]): StockMovement[] {
       afterQuantity: newQty,
       actor,
       target: null,
+      targetLabel: null,
       reference: 'Alteracao no estoque',
+      stage: null,
       createdAt: row.created_at,
       description: delta > 0
         ? 'Aumento detectado no saldo do item.'
@@ -316,37 +327,56 @@ function buildWithdrawalMovements(rows: WithdrawalItemRow[]): StockMovement[] {
         afterQuantity: null,
         actor: withdrawal?.requested_by_person?.full_name ?? 'Solicitante nao registrado',
         target,
+        targetLabel: 'Destino',
         reference: withdrawal?.code ?? 'Retirada',
+        stage: 'Retirada concluida',
         createdAt: withdrawal?.withdrawn_at ?? withdrawal?.created_at ?? new Date().toISOString(),
         description: target ? `Saida registrada para ${target}.` : 'Saida registrada em retirada.',
       }
     })
 }
 
-function buildReturnMovements(rows: StockReturnRow[]): StockMovement[] {
+function buildReturnMovements(rows: StockReturnEventRow[]): StockMovement[] {
   return rows
-    .filter((row) => row.approved_quantity > 0)
+    .filter((row) => Boolean(row.return_request))
     .map((row) => {
-      const source = row.source_person?.full_name ?? row.source_work_site?.name ?? null
+      const request = row.return_request!
+      const source = request.source_person?.full_name ?? request.source_work_site?.name ?? null
+      const withdrawalCode = request.origin_withdrawal_item?.withdrawal?.code ?? null
+      const reference = withdrawalCode ? `Retirada ${withdrawalCode}` : 'Devolucao sem retirada vinculada'
+      const stage = row.event_type === 'received'
+        ? 'Recebido na triagem'
+        : row.event_type === 'held_for_triage'
+          ? 'Mantido em triagem'
+          : 'Voltou ao estoque'
+      const description = row.details
+        ?? (row.event_type === 'returned_to_stock'
+          ? `${row.quantity} unidade(s) voltaram ao estoque.`
+          : row.event_type === 'held_for_triage'
+            ? `${row.quantity} unidade(s) foram mantidas em triagem.`
+            : `${row.quantity} unidade(s) foram recebidas para conferência.`)
+
       return {
-        id: `return-${row.id}`,
+        id: `return-event-${row.id}`,
         kind: 'return' as const,
         source: 'return' as const,
-        stockItemId: row.stock_item?.id ?? null,
-        itemName: row.stock_item?.name ?? 'Item removido',
-        itemCode: row.stock_item?.code ?? null,
-        itemUnit: row.stock_item?.unit ?? 'un',
-        itemIconKey: row.stock_item?.svg_icon_key ?? null,
-        quantity: row.approved_quantity,
-        signedQuantity: row.approved_quantity,
-        condition: row.approved_condition ?? row.item_condition,
+        stockItemId: request.stock_item?.id ?? null,
+        itemName: request.stock_item?.name ?? 'Item removido',
+        itemCode: request.stock_item?.code ?? null,
+        itemUnit: request.stock_item?.unit ?? 'un',
+        itemIconKey: request.stock_item?.svg_icon_key ?? null,
+        quantity: row.quantity,
+        signedQuantity: row.stock_delta,
+        condition: row.item_condition,
         beforeQuantity: null,
         afterQuantity: null,
-        actor: row.approved_by_profile?.full_name ?? 'Aprovador nao registrado',
+        actor: row.actor?.full_name ?? 'Sistema',
         target: source,
-        reference: 'Devolucao aprovada',
-        createdAt: row.approved_at ?? row.created_at,
-        description: source ? `Retorno aprovado vindo de ${source}.` : 'Retorno aprovado para o estoque.',
+        targetLabel: 'Origem',
+        reference,
+        stage,
+        createdAt: row.created_at,
+        description,
       }
     })
 }
@@ -396,6 +426,7 @@ export function StockMovementsTab() {
           .from('withdrawal_items')
           .select(`
             id,
+            origin_withdrawal_item_id,
             quantity,
             unit,
             destination_type,
@@ -418,21 +449,26 @@ export function StockMovementsTab() {
           .order('created_at', { ascending: false })
           .limit(700),
         supabase
-          .from('stock_return_requests')
+          .from('stock_return_events')
           .select(`
             id,
             quantity,
-            approved_quantity,
-            held_quantity,
+            stock_delta,
+            event_type,
             item_condition,
-            approved_condition,
-            status,
-            approved_at,
+            details,
             created_at,
-            source_person:people!stock_return_requests_source_person_id_fkey(full_name),
-            source_work_site:work_sites!stock_return_requests_source_work_site_id_fkey(name),
-            approved_by_profile:profiles!stock_return_requests_approved_by_fkey(full_name),
-            stock_item:stock_items(id, code, name, unit, svg_icon_key)
+            actor:profiles!stock_return_events_actor_id_fkey(full_name),
+            return_request:stock_return_requests!stock_return_events_return_request_id_fkey(
+              id,
+              source_person:people!stock_return_requests_source_person_id_fkey(full_name),
+              source_work_site:work_sites!stock_return_requests_source_work_site_id_fkey(name),
+              stock_item:stock_items(id, code, name, unit, svg_icon_key),
+              origin_withdrawal_item:withdrawal_items!stock_return_requests_origin_withdrawal_item_id_fkey(
+                id,
+                withdrawal:withdrawals(id, code)
+              )
+            )
           `)
           .order('created_at', { ascending: false })
           .limit(700),
@@ -445,7 +481,7 @@ export function StockMovementsTab() {
       const nextMovements = dedupeAuditWithDocumentedMovements([
         ...buildAuditMovements((auditResult.data as unknown as AuditLogRow[]) ?? []),
         ...buildWithdrawalMovements((withdrawalResult.data as unknown as WithdrawalItemRow[]) ?? []),
-        ...buildReturnMovements((returnResult.data as unknown as StockReturnRow[]) ?? []),
+        ...buildReturnMovements((returnResult.data as unknown as StockReturnEventRow[]) ?? []),
       ]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
       setMovements(nextMovements)
@@ -541,7 +577,7 @@ export function StockMovementsTab() {
       (acc, movement) => {
         if (movement.kind === 'entry') acc.entries += movement.quantity
         if (movement.kind === 'exit') acc.exits += movement.quantity
-        if (movement.kind === 'return') acc.returns += movement.quantity
+        if (movement.kind === 'return' && movement.signedQuantity > 0) acc.returns += movement.quantity
         if (movement.kind === 'adjustment') acc.adjustments += 1
         return acc
       },
@@ -765,6 +801,7 @@ function MovementCard({ movement }: { movement: StockMovement }) {
             <div className="flex flex-wrap items-center gap-2">
               <MovementPill movement={movement} />
               <Badge variant="default">{sourceLabel(movement.source)}</Badge>
+              {movement.stage && <Badge variant="default">{movement.stage}</Badge>}
               {movement.condition && (
                 <Badge variant="default">{conditionLabel(movement.condition)}</Badge>
               )}
@@ -781,7 +818,8 @@ function MovementCard({ movement }: { movement: StockMovement }) {
 
             <div className="mt-3 flex flex-wrap gap-2">
               <MiniPill label="Responsavel" value={movement.actor} />
-              {movement.target && <MiniPill label="Origem/Destino" value={movement.target} />}
+              {movement.target && <MiniPill label={movement.targetLabel ?? 'Origem/Destino'} value={movement.target} />}
+              {movement.reference && <MiniPill label="Referência" value={movement.reference} />}
               {movement.beforeQuantity !== null && movement.afterQuantity !== null && (
                 <MiniPill
                   label="Antes/depois"
@@ -793,9 +831,13 @@ function MovementCard({ movement }: { movement: StockMovement }) {
         </div>
 
         <div className="shrink-0 rounded-xl border border-white/8 bg-gray-950/50 px-4 py-3 text-right">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Quantidade</p>
+          <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">
+            {movement.signedQuantity === 0 ? 'Em triagem' : 'Quantidade'}
+          </p>
           <p className={cn('mt-1 text-2xl font-semibold', tone.amount)}>
-            {sign}{formatQuantity(movement.quantity, movement.itemUnit)}
+            {movement.signedQuantity === 0
+              ? formatQuantity(movement.quantity, movement.itemUnit)
+              : `${sign}${formatQuantity(movement.quantity, movement.itemUnit)}`}
           </p>
         </div>
       </div>

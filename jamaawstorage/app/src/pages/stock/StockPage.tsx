@@ -21,6 +21,7 @@ import { StockItemForm } from './StockItemForm'
 import { StockImportModal } from './StockImportModal'
 import { KitsPage } from '../kits/KitsPage'
 import { StockMovementsTab } from './StockMovementsTab'
+import { StockReturnsTab } from './StockReturnsTab'
 import { useDebouncedValue } from '../../hooks/useDebouncedValue'
 
 type StockItemRow = Tables<'stock_items'>
@@ -136,7 +137,7 @@ export function StockPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { profile } = useAuth()
   const currentTab = searchParams.get('tab')
-  const activeTab = currentTab === 'kits' || currentTab === 'movements' ? currentTab : 'items'
+  const activeTab = currentTab === 'kits' || currentTab === 'movements' || currentTab === 'returns' ? currentTab : 'items'
   const initialQuery = searchParams.get('q') ?? ''
   const targetItemId = searchParams.get('item')
 
@@ -676,12 +677,28 @@ export function StockPage() {
         >
           Movimentações
         </button>
+        <button
+          type="button"
+          onClick={() => setSearchParams((prev) => {
+            const next = new URLSearchParams(prev)
+            next.set('tab', 'returns')
+            return next
+          })}
+          className={cn(
+            'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === 'returns' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+          )}
+        >
+          Pendências de devolução
+        </button>
       </div>
 
       {activeTab === 'kits' ? (
         <KitsPage embedded initialQuery={initialQuery} />
       ) : activeTab === 'movements' ? (
         <StockMovementsTab />
+      ) : activeTab === 'returns' ? (
+        <StockReturnsTab profileId={profile?.id ?? null} embedded />
       ) : (
         <>
       <div className="flex items-center justify-between">
