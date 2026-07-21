@@ -4,6 +4,7 @@ import { Sidebar } from './Sidebar'
 import { Header } from './Header'
 import { useNotifications } from '../../hooks/useNotifications'
 import { cn } from '../../lib/utils'
+import { KimiAssistant } from '../assistant/KimiAssistant'
 
 export function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -48,10 +49,11 @@ export function AppLayout() {
           onNotificationsOpen={markAllAsRead}
         />
 
-        <main className="p-4 lg:p-6">
+        <main className="app-density p-3 sm:p-4 lg:p-5">
           <Outlet />
         </main>
       </div>
+      <KimiAssistant />
     </div>
   )
 }

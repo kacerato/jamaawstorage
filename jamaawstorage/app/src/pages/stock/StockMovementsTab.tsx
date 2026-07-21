@@ -1,872 +1,479 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { Tables } from '../../types/database'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { ChevronDown, ChevronRight, ExternalLink, Filter, RotateCcw } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { cn, formatDateTime, formatQuantity } from '../../lib/utils'
-import {
-  Alert,
-  Badge,
-  Card,
-  EmptyState,
-  Input,
-  Select,
-  Spinner,
-} from '../../components/ui'
+import { Alert, Badge, Button, EmptyState, Input, Select, Spinner } from '../../components/ui'
 import { ClipboardIcon } from '../../components/icons'
 import { ItemVisual } from '../../components/items/ItemVisual'
 
-type StockItemRow = Tables<'stock_items'>
-
-type MovementKind = 'entry' | 'exit' | 'return' | 'adjustment'
-type MovementSource = 'audit' | 'withdrawal' | 'return'
+type MovementKind = 'initial_entry' | 'entry' | 'exit' | 'return' | 'received' | 'triage' | 'restoration' | 'adjustment' | 'reclassification' | 'cancelled'
+type MovementSource = 'manual' | 'withdrawal' | 'return' | 'import' | 'assistant' | 'system'
 type PeriodPreset = 'all' | 'today' | '7d' | '30d' | 'custom'
 
-interface AuditLogRow {
+interface MovementEventRow {
   id: string
-  user_id: string | null
-  action: string
-  table_name: string
-  record_id: string | null
-  old_data: Record<string, unknown> | null
-  new_data: Record<string, unknown> | null
-  created_at: string
-  profiles: { full_name: string } | null
-}
-
-interface WithdrawalItemRow {
-  id: string
-  quantity: number
-  unit: string
-  destination_type: 'collaborator' | 'work_site' | null
-  collaborator_id: string | null
-  work_site_id: string | null
-  collaborator: { full_name: string } | null
-  work_site: { name: string } | null
-  stock_item: Pick<StockItemRow, 'id' | 'code' | 'name' | 'unit' | 'svg_icon_key'> | null
-  withdrawal: {
-    id: string
-    code: string | null
-    status: string
-    created_at: string
-    withdrawn_at: string | null
-    requested_by_person: { full_name: string } | null
-    collaborator: { full_name: string } | null
-    work_site: { name: string } | null
-  } | null
-}
-
-interface StockReturnEventRow {
-  id: string
-  quantity: number
-  stock_delta: number
-  event_type: 'received' | 'held_for_triage' | 'returned_to_stock'
-  item_condition: 'new' | 'used' | 'damaged' | null
-  details: string | null
-  created_at: string
-  actor: { full_name: string } | null
-  return_request: {
-    id: string
-    source_person: { full_name: string } | null
-    source_work_site: { name: string } | null
-    stock_item: Pick<StockItemRow, 'id' | 'code' | 'name' | 'unit' | 'svg_icon_key'> | null
-    origin_withdrawal_item: {
-      id: string
-      withdrawal: { id: string; code: string | null } | null
-    } | null
-  } | null
-}
-
-interface StockMovement {
-  id: string
-  kind: MovementKind
+  operation_id: string
+  stock_item_id: string
+  event_kind: MovementKind
   source: MovementSource
-  stockItemId: string | null
-  itemName: string
-  itemCode: string | null
-  itemUnit: string
-  itemIconKey: string | null
-  quantity: number
-  signedQuantity: number
-  condition: 'new' | 'used' | 'damaged' | 'mixed' | null
-  beforeQuantity: number | null
-  afterQuantity: number | null
-  actor: string
-  target: string | null
-  targetLabel: string | null
-  reference: string | null
-  stage: string | null
-  createdAt: string
-  description: string
+  quantity_delta: number
+  quantity_new_delta: number
+  quantity_used_delta: number
+  quantity_damaged_delta: number
+  balance_before: number | null
+  balance_after: number | null
+  actor_id: string | null
+  related_entity_type: string | null
+  related_entity_id: string | null
+  related_code: string | null
+  counterparty_type: string | null
+  counterparty_id: string | null
+  counterparty_name: string | null
+  description: string | null
+  metadata: Record<string, unknown>
+  provenance: 'live' | 'backfill'
+  created_at: string
+  stock_item: {
+    id: string
+    code: string
+    name: string
+    unit: string
+    svg_icon_key: string | null
+  } | null
+  actor: { full_name: string } | null
 }
+
+interface MovementOperation {
+  id: string
+  events: MovementEventRow[]
+  primary: MovementEventRow
+  quantityDelta: number
+  newDelta: number
+  usedDelta: number
+  damagedDelta: number
+  balanceBefore: number | null
+  balanceAfter: number | null
+  createdAt: string
+}
+
+const PAGE_SIZE = 120
 
 const TYPE_OPTIONS = [
   { value: 'all', label: 'Todos os tipos' },
   { value: 'entry', label: 'Entradas' },
-  { value: 'exit', label: 'Saidas' },
-  { value: 'return', label: 'Devolucoes' },
-  { value: 'adjustment', label: 'Ajustes manuais' },
+  { value: 'exit', label: 'Saídas' },
+  { value: 'return', label: 'Devoluções' },
+  { value: 'adjustment', label: 'Ajustes' },
 ]
 
 const SOURCE_OPTIONS = [
   { value: 'all', label: 'Todas as origens' },
-  { value: 'audit', label: 'Auditoria' },
+  { value: 'manual', label: 'Manual' },
   { value: 'withdrawal', label: 'Retiradas' },
-  { value: 'return', label: 'Devolucoes' },
+  { value: 'return', label: 'Devoluções' },
+  { value: 'assistant', label: 'Assistente Kimi' },
+  { value: 'import', label: 'Importações' },
 ]
 
-const PERIOD_PRESETS: { value: PeriodPreset; label: string }[] = [
-  { value: 'all', label: 'Tudo' },
+const PERIOD_OPTIONS = [
+  { value: 'all', label: 'Todo o período' },
   { value: 'today', label: 'Hoje' },
-  { value: '7d', label: '7 dias' },
-  { value: '30d', label: '30 dias' },
+  { value: '7d', label: 'Últimos 7 dias' },
+  { value: '30d', label: 'Últimos 30 dias' },
   { value: 'custom', label: 'Personalizado' },
 ]
 
-function toDateTimeLocalValue(date: Date): string {
-  const offsetMs = date.getTimezoneOffset() * 60_000
-  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 16)
+function dateTimeLocal(date: Date): string {
+  const offset = date.getTimezoneOffset() * 60_000
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16)
 }
 
-function startOfToday(): Date {
+function startOfDay(daysAgo = 0): Date {
   const date = new Date()
+  date.setDate(date.getDate() - daysAgo)
   date.setHours(0, 0, 0, 0)
   return date
 }
 
-function endOfToday(): Date {
+function endOfDay(): Date {
   const date = new Date()
   date.setHours(23, 59, 59, 999)
   return date
 }
 
-function formatPeriodDateTime(value: string): string {
-  return new Date(value).toLocaleString('pt-BR', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function numericValue(source: Record<string, unknown> | null | undefined, key: string): number | null {
-  const value = source?.[key]
-  return typeof value === 'number' && Number.isFinite(value) ? value : null
-}
-
-function textValue(source: Record<string, unknown> | null | undefined, key: string): string | null {
-  const value = source?.[key]
-  return typeof value === 'string' && value.trim() ? value : null
-}
-
-function conditionFromBucketDelta(oldData: Record<string, unknown> | null, newData: Record<string, unknown> | null): StockMovement['condition'] {
-  const buckets = [
-    { key: 'quantity_new', condition: 'new' as const },
-    { key: 'quantity_used', condition: 'used' as const },
-    { key: 'quantity_damaged', condition: 'damaged' as const },
-  ]
-
-  const changed = buckets.filter(({ key }) => numericValue(oldData, key) !== numericValue(newData, key))
-  return changed.length === 1 ? changed[0].condition : changed.length > 1 ? 'mixed' : null
-}
-
-function conditionLabel(condition: StockMovement['condition']): string {
-  if (condition === 'new') return 'Novo'
-  if (condition === 'used') return 'Usado'
-  if (condition === 'damaged') return 'Avaria'
-  if (condition === 'mixed') return 'Misto'
-  return 'Nao informado'
-}
-
 function movementLabel(kind: MovementKind): string {
-  if (kind === 'entry') return 'Entrada'
-  if (kind === 'exit') return 'Saida'
-  if (kind === 'return') return 'Devolucao'
-  return 'Ajuste manual'
-}
-
-function movementTone(kind: MovementKind): {
-  dot: string
-  amount: string
-  symbol: string
-  badge: 'default' | 'success' | 'danger' | 'info'
-} {
-  if (kind === 'entry') {
-    return {
-      dot: 'bg-emerald-400',
-      amount: 'text-emerald-300',
-      symbol: '+',
-      badge: 'success',
-    }
-  }
-  if (kind === 'exit') {
-    return {
-      dot: 'bg-red-400',
-      amount: 'text-red-300',
-      symbol: '-',
-      badge: 'danger',
-    }
-  }
-  if (kind === 'return') {
-    return {
-      dot: 'bg-blue-400',
-      amount: 'text-blue-300',
-      symbol: '+',
-      badge: 'info',
-    }
-  }
-  return {
-    dot: 'bg-gray-500',
-    amount: 'text-gray-100',
-    symbol: movementLabel(kind).slice(0, 1),
-    badge: 'default',
+  switch (kind) {
+    case 'initial_entry': return 'Estoque inicial'
+    case 'entry': return 'Entrada'
+    case 'exit': return 'Saída'
+    case 'return': return 'Devolução ao estoque'
+    case 'received': return 'Devolução recebida'
+    case 'triage': return 'Em triagem'
+    case 'restoration': return 'Estoque restaurado'
+    case 'reclassification': return 'Reclassificação'
+    case 'cancelled': return 'Cancelado'
+    default: return 'Ajuste'
   }
 }
 
 function sourceLabel(source: MovementSource): string {
-  if (source === 'withdrawal') return 'Retirada'
-  if (source === 'return') return 'Devolucao'
-  return 'Auditoria'
+  switch (source) {
+    case 'withdrawal': return 'Retirada'
+    case 'return': return 'Devolução'
+    case 'assistant': return 'Kimi'
+    case 'import': return 'Importação'
+    case 'system': return 'Sistema'
+    default: return 'Manual'
+  }
 }
 
-function buildAuditMovements(rows: AuditLogRow[]): StockMovement[] {
-  return rows.flatMap((row): StockMovement[] => {
-    if (row.table_name !== 'stock_items') return []
+function typeBucket(operation: MovementOperation): 'entry' | 'exit' | 'return' | 'adjustment' {
+  if (operation.events.some((event) => event.source === 'return')) return 'return'
+  if (operation.quantityDelta < 0 || operation.primary.event_kind === 'exit') return 'exit'
+  if (operation.quantityDelta > 0 && operation.primary.event_kind !== 'restoration') return 'entry'
+  return 'adjustment'
+}
 
-    const oldQty = numericValue(row.old_data, 'current_quantity')
-    const newQty = numericValue(row.new_data, 'current_quantity')
-    const source = row.new_data ?? row.old_data
-    const itemName = textValue(source, 'name') ?? 'Item de estoque'
-    const itemCode = textValue(source, 'code')
-    const itemUnit = textValue(source, 'unit') ?? 'un'
-    const itemIconKey = textValue(source, 'svg_icon_key')
-    const actor = row.profiles?.full_name ?? 'Sistema'
+function toneFor(operation: MovementOperation) {
+  const bucket = typeBucket(operation)
+  if (bucket === 'entry') return { dot: 'bg-emerald-400', amount: 'text-emerald-300', badge: 'success' as const }
+  if (bucket === 'exit') return { dot: 'bg-red-400', amount: 'text-red-300', badge: 'danger' as const }
+  if (bucket === 'return') return { dot: 'bg-sky-400', amount: 'text-sky-300', badge: 'info' as const }
+  return { dot: 'bg-amber-400', amount: 'text-amber-200', badge: 'warning' as const }
+}
 
-    if (row.action === 'INSERT') {
-      const createdQuantity = newQty ?? 0
-      if (createdQuantity <= 0) return []
+function groupOperations(events: MovementEventRow[]): MovementOperation[] {
+  const grouped = new Map<string, MovementEventRow[]>()
+  for (const event of events) {
+    const key = `${event.operation_id}:${event.stock_item_id}`
+    grouped.set(key, [...(grouped.get(key) ?? []), event])
+  }
 
-      return [{
-        id: `audit-${row.id}`,
-        kind: 'entry',
-        source: 'audit',
-        stockItemId: row.record_id,
-        itemName,
-        itemCode,
-        itemUnit,
-        itemIconKey,
-        quantity: createdQuantity,
-        signedQuantity: createdQuantity,
-        condition: conditionFromBucketDelta(null, row.new_data) ?? 'mixed',
-        beforeQuantity: 0,
-        afterQuantity: createdQuantity,
-        actor,
-        target: null,
-        targetLabel: null,
-        reference: 'Cadastro inicial',
-        stage: null,
-        createdAt: row.created_at,
-        description: 'Quantidade criada junto com o item.',
-      }]
+  return Array.from(grouped.entries()).map(([id, group]) => {
+    const ordered = [...group].sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+    const primary = [...ordered].reverse().find((event) => event.quantity_delta !== 0) ?? ordered[ordered.length - 1]
+    const balanceEventFirst = ordered.find((event) => event.balance_before !== null)
+    const balanceEventLast = [...ordered].reverse().find((event) => event.balance_after !== null)
+    return {
+      id,
+      events: ordered,
+      primary,
+      quantityDelta: ordered.reduce((total, event) => total + event.quantity_delta, 0),
+      newDelta: ordered.reduce((total, event) => total + event.quantity_new_delta, 0),
+      usedDelta: ordered.reduce((total, event) => total + event.quantity_used_delta, 0),
+      damagedDelta: ordered.reduce((total, event) => total + event.quantity_damaged_delta, 0),
+      balanceBefore: balanceEventFirst?.balance_before ?? null,
+      balanceAfter: balanceEventLast?.balance_after ?? null,
+      createdAt: ordered[ordered.length - 1].created_at,
     }
-
-    if (row.action !== 'UPDATE' || oldQty === null || newQty === null || oldQty === newQty) {
-      return []
-    }
-
-    const delta = newQty - oldQty
-    return [{
-      id: `audit-${row.id}`,
-      kind: delta > 0 ? 'entry' : 'adjustment',
-      source: 'audit',
-      stockItemId: row.record_id,
-      itemName,
-      itemCode,
-      itemUnit,
-      itemIconKey,
-      quantity: Math.abs(delta),
-      signedQuantity: delta,
-      condition: conditionFromBucketDelta(row.old_data, row.new_data),
-      beforeQuantity: oldQty,
-      afterQuantity: newQty,
-      actor,
-      target: null,
-      targetLabel: null,
-      reference: 'Alteracao no estoque',
-      stage: null,
-      createdAt: row.created_at,
-      description: delta > 0
-        ? 'Aumento detectado no saldo do item.'
-        : 'Reducao ou correcao detectada no saldo do item.',
-    }]
-  })
-}
-
-function buildWithdrawalMovements(rows: WithdrawalItemRow[]): StockMovement[] {
-  return rows
-    .filter((row) => row.withdrawal && row.withdrawal.status !== 'rejected')
-    .map((row) => {
-      const withdrawal = row.withdrawal
-      const target = row.collaborator?.full_name
-        ?? row.work_site?.name
-        ?? withdrawal?.collaborator?.full_name
-        ?? withdrawal?.work_site?.name
-        ?? null
-      return {
-        id: `withdrawal-${row.id}`,
-        kind: 'exit' as const,
-        source: 'withdrawal' as const,
-        stockItemId: row.stock_item?.id ?? null,
-        itemName: row.stock_item?.name ?? 'Item removido',
-        itemCode: row.stock_item?.code ?? null,
-        itemUnit: row.stock_item?.unit ?? row.unit,
-        itemIconKey: row.stock_item?.svg_icon_key ?? null,
-        quantity: row.quantity,
-        signedQuantity: -row.quantity,
-        condition: null,
-        beforeQuantity: null,
-        afterQuantity: null,
-        actor: withdrawal?.requested_by_person?.full_name ?? 'Solicitante nao registrado',
-        target,
-        targetLabel: 'Destino',
-        reference: withdrawal?.code ?? 'Retirada',
-        stage: 'Retirada concluida',
-        createdAt: withdrawal?.withdrawn_at ?? withdrawal?.created_at ?? new Date().toISOString(),
-        description: target ? `Saida registrada para ${target}.` : 'Saida registrada em retirada.',
-      }
-    })
-}
-
-function buildReturnMovements(rows: StockReturnEventRow[]): StockMovement[] {
-  return rows
-    .filter((row) => Boolean(row.return_request))
-    .map((row) => {
-      const request = row.return_request!
-      const source = request.source_person?.full_name ?? request.source_work_site?.name ?? null
-      const withdrawalCode = request.origin_withdrawal_item?.withdrawal?.code ?? null
-      const reference = withdrawalCode ? `Retirada ${withdrawalCode}` : 'Devolucao sem retirada vinculada'
-      const stage = row.event_type === 'received'
-        ? 'Recebido na triagem'
-        : row.event_type === 'held_for_triage'
-          ? 'Mantido em triagem'
-          : 'Voltou ao estoque'
-      const description = row.details
-        ?? (row.event_type === 'returned_to_stock'
-          ? `${row.quantity} unidade(s) voltaram ao estoque.`
-          : row.event_type === 'held_for_triage'
-            ? `${row.quantity} unidade(s) foram mantidas em triagem.`
-            : `${row.quantity} unidade(s) foram recebidas para conferência.`)
-
-      return {
-        id: `return-event-${row.id}`,
-        kind: 'return' as const,
-        source: 'return' as const,
-        stockItemId: request.stock_item?.id ?? null,
-        itemName: request.stock_item?.name ?? 'Item removido',
-        itemCode: request.stock_item?.code ?? null,
-        itemUnit: request.stock_item?.unit ?? 'un',
-        itemIconKey: request.stock_item?.svg_icon_key ?? null,
-        quantity: row.quantity,
-        signedQuantity: row.stock_delta,
-        condition: row.item_condition,
-        beforeQuantity: null,
-        afterQuantity: null,
-        actor: row.actor?.full_name ?? 'Sistema',
-        target: source,
-        targetLabel: 'Origem',
-        reference,
-        stage,
-        createdAt: row.created_at,
-        description,
-      }
-    })
-}
-
-function movementSignature(movement: StockMovement): string {
-  const timeBucket = Math.round(new Date(movement.createdAt).getTime() / 10000)
-  return `${movement.stockItemId ?? movement.itemCode ?? movement.itemName}:${movement.signedQuantity}:${timeBucket}`
-}
-
-function dedupeAuditWithDocumentedMovements(movements: StockMovement[]): StockMovement[] {
-  const documentedSignatures = new Set(
-    movements
-      .filter((movement) => movement.source !== 'audit')
-      .map(movementSignature),
-  )
-
-  return movements.filter((movement) => {
-    if (movement.source !== 'audit') return true
-    return !documentedSignatures.has(movementSignature(movement))
-  })
+  }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 }
 
 export function StockMovementsTab() {
-  const [movements, setMovements] = useState<StockMovement[]>([])
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const itemFilter = searchParams.get('item')
+  const [events, setEvents] = useState<MovementEventRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMore, setHasMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [searchQuery, setSearchQuery] = useState('')
+  const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState('all')
   const [sourceFilter, setSourceFilter] = useState('all')
-  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('all')
-  const [dateTimeFrom, setDateTimeFrom] = useState('')
-  const [dateTimeTo, setDateTimeTo] = useState('')
+  const [periodPreset, setPeriodPreset] = useState<PeriodPreset>('30d')
+  const [from, setFrom] = useState(dateTimeLocal(startOfDay(29)))
+  const [to, setTo] = useState(dateTimeLocal(endOfDay()))
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
-  const loadMovements = useCallback(async () => {
-    setLoading(true)
+  const loadEvents = useCallback(async (append = false) => {
+    if (append) setLoadingMore(true)
+    else setLoading(true)
     setError(null)
+    const offset = append ? events.length : 0
 
     try {
-      const [auditResult, withdrawalResult, returnResult] = await Promise.all([
-        supabase
-          .from('audit_logs')
-          .select('id, user_id, action, table_name, record_id, old_data, new_data, created_at, profiles!audit_logs_user_id_fkey(full_name)')
-          .eq('table_name', 'stock_items')
-          .order('created_at', { ascending: false })
-          .limit(700),
-        supabase
-          .from('withdrawal_items')
-          .select(`
-            id,
-            origin_withdrawal_item_id,
-            quantity,
-            unit,
-            destination_type,
-            collaborator_id,
-            work_site_id,
-            collaborator:people!withdrawal_items_collaborator_id_fkey(full_name),
-            work_site:work_sites!withdrawal_items_work_site_id_fkey(name),
-            stock_item:stock_items(id, code, name, unit, svg_icon_key),
-            withdrawal:withdrawals(
-              id,
-              code,
-              status,
-              created_at,
-              withdrawn_at,
-              requested_by_person:people!withdrawals_requested_by_fkey(full_name),
-              collaborator:people!withdrawals_collaborator_id_fkey(full_name),
-              work_site:work_sites!withdrawals_work_site_id_fkey(name)
-            )
-          `)
-          .order('created_at', { ascending: false })
-          .limit(700),
-        supabase
-          .from('stock_return_events')
-          .select(`
-            id,
-            quantity,
-            stock_delta,
-            event_type,
-            item_condition,
-            details,
-            created_at,
-            actor:profiles!stock_return_events_actor_id_fkey(full_name),
-            return_request:stock_return_requests!stock_return_events_return_request_id_fkey(
-              id,
-              source_person:people!stock_return_requests_source_person_id_fkey(full_name),
-              source_work_site:work_sites!stock_return_requests_source_work_site_id_fkey(name),
-              stock_item:stock_items(id, code, name, unit, svg_icon_key),
-              origin_withdrawal_item:withdrawal_items!stock_return_requests_origin_withdrawal_item_id_fkey(
-                id,
-                withdrawal:withdrawals(id, code)
-              )
-            )
-          `)
-          .order('created_at', { ascending: false })
-          .limit(700),
-      ])
+      let query = supabase
+        .from('stock_movement_events')
+        .select(`
+          id, operation_id, stock_item_id, event_kind, source,
+          quantity_delta, quantity_new_delta, quantity_used_delta, quantity_damaged_delta,
+          balance_before, balance_after, actor_id, related_entity_type, related_entity_id,
+          related_code, counterparty_type, counterparty_id, counterparty_name,
+          description, metadata, provenance, created_at,
+          stock_item:stock_items(id, code, name, unit, svg_icon_key),
+          actor:profiles!stock_movement_events_actor_id_fkey(full_name)
+        `)
+        .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
+        .range(offset, offset + PAGE_SIZE - 1)
 
-      if (auditResult.error) throw new Error(auditResult.error.message)
-      if (withdrawalResult.error) throw new Error(withdrawalResult.error.message)
-      if (returnResult.error) throw new Error(returnResult.error.message)
+      if (itemFilter) query = query.eq('stock_item_id', itemFilter)
+      if (sourceFilter !== 'all') query = query.eq('source', sourceFilter as MovementSource)
+      if (from) query = query.gte('created_at', new Date(from).toISOString())
+      if (to) query = query.lte('created_at', new Date(to).toISOString())
 
-      const nextMovements = dedupeAuditWithDocumentedMovements([
-        ...buildAuditMovements((auditResult.data as unknown as AuditLogRow[]) ?? []),
-        ...buildWithdrawalMovements((withdrawalResult.data as unknown as WithdrawalItemRow[]) ?? []),
-        ...buildReturnMovements((returnResult.data as unknown as StockReturnEventRow[]) ?? []),
-      ]).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-
-      setMovements(nextMovements)
+      const { data, error: queryError } = await query
+      if (queryError) throw queryError
+      const rows = (data as unknown as MovementEventRow[]) ?? []
+      setEvents((current) => append ? [...current, ...rows] : rows)
+      setHasMore(rows.length === PAGE_SIZE)
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'Nao foi possivel carregar as movimentacoes.')
+      setError(loadError instanceof Error ? loadError.message : 'Não foi possível carregar as movimentações.')
     } finally {
       setLoading(false)
+      setLoadingMore(false)
     }
-  }, [])
+  }, [events.length, from, itemFilter, sourceFilter, to])
 
   useEffect(() => {
-    void loadMovements()
-  }, [loadMovements])
+    void loadEvents(false)
+    // Recarrega quando os filtros persistidos no servidor mudam.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [from, itemFilter, sourceFilter, to])
 
-  const filteredMovements = useMemo(() => {
-    const normalizedSearch = searchQuery.trim().toLowerCase()
-    const rawFromTime = dateTimeFrom ? new Date(dateTimeFrom).getTime() : null
-    const rawToTime = dateTimeTo ? new Date(dateTimeTo).getTime() : null
-    const hasInvalidPeriod = rawFromTime !== null && rawToTime !== null && rawFromTime > rawToTime
-    const fromTime = hasInvalidPeriod ? null : rawFromTime
-    const toTime = hasInvalidPeriod ? null : rawToTime
-
-    return movements.filter((movement) => {
-      if (typeFilter !== 'all' && movement.kind !== typeFilter) return false
-      if (sourceFilter !== 'all' && movement.source !== sourceFilter) return false
-
-      const movementTime = new Date(movement.createdAt).getTime()
-      if (fromTime !== null && movementTime < fromTime) return false
-      if (toTime !== null && movementTime > toTime) return false
-
-      if (!normalizedSearch) return true
-
-      const haystack = [
-        movement.itemName,
-        movement.itemCode,
-        movement.actor,
-        movement.target,
-        movement.reference,
-        movement.description,
-        movementLabel(movement.kind),
-        sourceLabel(movement.source),
-      ]
-        .filter(Boolean)
-        .join(' ')
-        .toLowerCase()
-
-      return haystack.includes(normalizedSearch)
+  const operations = useMemo(() => groupOperations(events), [events])
+  const filtered = useMemo(() => {
+    const normalized = search.trim().toLocaleLowerCase('pt-BR')
+    return operations.filter((operation) => {
+      if (typeFilter !== 'all' && typeBucket(operation) !== typeFilter) return false
+      if (!normalized) return true
+      const event = operation.primary
+      return [
+        event.stock_item?.name,
+        event.stock_item?.code,
+        event.related_code,
+        event.counterparty_name,
+        event.actor?.full_name,
+        event.description,
+        movementLabel(event.event_kind),
+      ].filter(Boolean).join(' ').toLocaleLowerCase('pt-BR').includes(normalized)
     })
-  }, [dateTimeFrom, dateTimeTo, movements, searchQuery, sourceFilter, typeFilter])
+  }, [operations, search, typeFilter])
 
-  const invalidPeriod = Boolean(
-    dateTimeFrom
-      && dateTimeTo
-      && new Date(dateTimeFrom).getTime() > new Date(dateTimeTo).getTime(),
-  )
+  const stats = useMemo(() => filtered.reduce((summary, operation) => {
+    const bucket = typeBucket(operation)
+    if (bucket === 'entry') summary.entries += Math.max(operation.quantityDelta, 0)
+    if (bucket === 'exit') summary.exits += Math.abs(Math.min(operation.quantityDelta, 0))
+    if (bucket === 'return') summary.returns += Math.max(operation.quantityDelta, 0)
+    if (bucket === 'adjustment') summary.adjustments += 1
+    return summary
+  }, { entries: 0, exits: 0, returns: 0, adjustments: 0 }), [filtered])
 
-  const periodSummary = useMemo(() => {
-    if (invalidPeriod) return 'Periodo inicial maior que o final.'
-    if (dateTimeFrom && dateTimeTo) return `${formatPeriodDateTime(dateTimeFrom)} ate ${formatPeriodDateTime(dateTimeTo)}`
-    if (dateTimeFrom) return `A partir de ${formatPeriodDateTime(dateTimeFrom)}`
-    if (dateTimeTo) return `Ate ${formatPeriodDateTime(dateTimeTo)}`
-    return 'Sem limite de data e hora.'
-  }, [dateTimeFrom, dateTimeTo, invalidPeriod])
-
-  const handlePeriodPresetChange = (preset: PeriodPreset) => {
+  const applyPeriod = (preset: PeriodPreset) => {
     setPeriodPreset(preset)
-
-    if (preset === 'custom') return
-
-    if (preset === 'all') {
-      setDateTimeFrom('')
-      setDateTimeTo('')
+    if (preset === 'custom') {
+      setShowAdvanced(true)
       return
     }
-
-    const end = endOfToday()
-    const start = startOfToday()
-
-    if (preset === '7d') {
-      start.setDate(start.getDate() - 6)
+    if (preset === 'all') {
+      setFrom('')
+      setTo('')
+      return
     }
-
-    if (preset === '30d') {
-      start.setDate(start.getDate() - 29)
-    }
-
-    setDateTimeFrom(toDateTimeLocalValue(start))
-    setDateTimeTo(toDateTimeLocalValue(end))
+    setFrom(dateTimeLocal(startOfDay(preset === 'today' ? 0 : preset === '7d' ? 6 : 29)))
+    setTo(dateTimeLocal(endOfDay()))
   }
 
-  const stats = useMemo(() => {
-    return filteredMovements.reduce(
-      (acc, movement) => {
-        if (movement.kind === 'entry') acc.entries += movement.quantity
-        if (movement.kind === 'exit') acc.exits += movement.quantity
-        if (movement.kind === 'return' && movement.signedQuantity > 0) acc.returns += movement.quantity
-        if (movement.kind === 'adjustment') acc.adjustments += 1
-        return acc
-      },
-      { entries: 0, exits: 0, returns: 0, adjustments: 0 },
-    )
-  }, [filteredMovements])
+  const resetFilters = () => {
+    setSearch('')
+    setTypeFilter('all')
+    setSourceFilter('all')
+    applyPeriod('30d')
+  }
 
-  if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-24">
-        <Spinner size="lg" />
-        <p className="mt-4 text-sm text-gray-400">Carregando movimentacoes...</p>
-      </div>
-    )
+  const openRelated = (operation: MovementOperation) => {
+    const event = operation.primary
+    if (event.related_entity_type === 'withdrawal' && event.related_entity_id) {
+      navigate(`/withdrawals/${event.related_entity_id}`)
+      return
+    }
+    if (event.related_entity_type === 'return_request') {
+      const withdrawalId = typeof event.metadata?.withdrawal_id === 'string' ? event.metadata.withdrawal_id : null
+      if (withdrawalId) {
+        navigate(`/withdrawals/${withdrawalId}?from=movements`)
+      } else {
+        navigate(`/stock?tab=returns&return=${event.related_entity_id ?? ''}`)
+      }
+      return
+    }
+    navigate(`/stock?tab=items&item=${event.stock_item_id}`)
+  }
+
+  if (loading && events.length === 0) {
+    return <div className="flex items-center justify-center py-20"><Spinner size="lg" /></div>
   }
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="rounded-xl border border-white/8 bg-gray-900 p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-gray-950/60 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
-              <span className="h-1.5 w-1.5 rounded-full bg-gray-500" />
-              Historico do estoque
-            </div>
-            <h2 className="mt-3 text-2xl font-bold text-white">Movimentacoes</h2>
-            <p className="mt-1 max-w-2xl text-sm text-gray-400">
-              Entradas, saidas, devolucoes e ajustes reconstruidos a partir das retiradas, devolucoes e auditoria ja existentes.
-            </p>
+    <div className="space-y-4">
+      <section className="rounded-2xl border border-white/8 bg-[#111216] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.14)]">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="min-w-0 xl:w-64">
+            <h2 className="text-lg font-semibold text-white">Histórico de movimentações</h2>
+            <p className="mt-0.5 text-xs text-gray-500">Saldo real, origem e responsável em uma única timeline.</p>
           </div>
 
-          <div className="rounded-lg border border-white/8 bg-gray-950/50 px-4 py-3 text-sm text-gray-300">
-            <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Eventos visiveis</p>
-            <p className="mt-1 text-2xl font-semibold text-white">{filteredMovements.length}</p>
+          <div className="grid flex-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1.5fr)_minmax(150px,0.8fr)_minmax(160px,0.8fr)_auto]">
+            <Input
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+              placeholder="Item, código, pessoa ou referência"
+            />
+            <Select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} options={TYPE_OPTIONS} />
+            <Select value={periodPreset} onChange={(event) => applyPeriod(event.target.value as PeriodPreset)} options={PERIOD_OPTIONS} />
+            <Button
+              variant="secondary"
+              onClick={() => setShowAdvanced((current) => !current)}
+              leftIcon={<Filter size={15} />}
+            >
+              Filtros
+            </Button>
           </div>
         </div>
+
+        {showAdvanced && (
+          <div className="mt-3 grid gap-2 border-t border-white/8 pt-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+            <Select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} options={SOURCE_OPTIONS} label="Origem" />
+            <Input label="De" type="datetime-local" value={from} onChange={(event) => { setPeriodPreset('custom'); setFrom(event.target.value) }} />
+            <Input label="Até" type="datetime-local" value={to} onChange={(event) => { setPeriodPreset('custom'); setTo(event.target.value) }} />
+            <Button variant="ghost" onClick={resetFilters} leftIcon={<RotateCcw size={14} />}>Limpar</Button>
+          </div>
+        )}
+      </section>
+
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <CompactStat label="Entradas" value={`+${stats.entries}`} tone="text-emerald-300" />
+        <CompactStat label="Saídas" value={`-${stats.exits}`} tone="text-red-300" />
+        <CompactStat label="Devoluções" value={`+${stats.returns}`} tone="text-sky-300" />
+        <CompactStat label="Ajustes" value={stats.adjustments} tone="text-amber-200" />
       </div>
 
-      {error && (
-        <Alert variant="danger" title="Erro ao carregar movimentacoes">
-          {error}
-        </Alert>
+      {itemFilter && (
+        <div className="flex items-center justify-between rounded-xl border border-orange-400/15 bg-orange-500/8 px-3 py-2 text-sm text-orange-100">
+          <span>Exibindo somente as movimentações deste item.</span>
+          <Button size="sm" variant="ghost" onClick={() => navigate('/stock?tab=movements')}>Ver todos</Button>
+        </div>
       )}
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <MovementStat title="Entradas" value={`+${stats.entries}`} tone="entry" subtitle="Itens adicionados" />
-        <MovementStat title="Saidas" value={`-${stats.exits}`} tone="exit" subtitle="Itens retirados" />
-        <MovementStat title="Devolucoes" value={`+${stats.returns}`} tone="return" subtitle="Voltaram ao estoque" />
-        <MovementStat title="Ajustes manuais" value={stats.adjustments} tone="adjustment" subtitle="Correcoes detectadas" />
-      </div>
+      {error && <Alert variant="danger" title="Histórico indisponível">{error}</Alert>}
 
-      <Card variant="bordered" className="border-white/8 bg-gray-900 shadow-[0_12px_26px_rgba(0,0,0,0.10)]">
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-sm font-medium text-white">Filtros</p>
-            <p className="mt-1 text-xs text-gray-500">Use para encontrar um item, responsavel ou periodo especifico.</p>
-          </div>
-          {(searchQuery || typeFilter !== 'all' || sourceFilter !== 'all' || periodPreset !== 'all' || dateTimeFrom || dateTimeTo) && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearchQuery('')
-                setTypeFilter('all')
-                setSourceFilter('all')
-                setPeriodPreset('all')
-                setDateTimeFrom('')
-                setDateTimeTo('')
-              }}
-              className="rounded-lg border border-white/8 bg-gray-950/50 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:bg-white/8 hover:text-white"
-            >
-              Limpar filtros
-            </button>
-          )}
-        </div>
-
-        <div className="grid gap-3 xl:grid-cols-[1.5fr_1fr_1fr_1.1fr]">
-          <Input
-            placeholder="Buscar por item, codigo, responsavel ou referencia..."
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            leftIcon={
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="2" />
-                <path d="M11 11L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-              </svg>
-            }
-          />
-          <Select value={typeFilter} onChange={(event) => setTypeFilter(event.target.value)} options={TYPE_OPTIONS} />
-          <Select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} options={SOURCE_OPTIONS} />
-          <Select
-            value={periodPreset}
-            onChange={(event) => handlePeriodPresetChange(event.target.value as PeriodPreset)}
-            options={PERIOD_PRESETS}
-            aria-label="Periodo"
-          />
-        </div>
-
-        <div className="mt-3 grid gap-3 rounded-xl border border-white/8 bg-gray-950/35 p-3 md:grid-cols-[1fr_1fr_auto] md:items-end">
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-[0.16em] text-gray-500">Inicio</span>
-            <input
-              type="datetime-local"
-              value={dateTimeFrom}
-              onChange={(event) => {
-                setPeriodPreset('custom')
-                setDateTimeFrom(event.target.value)
-              }}
-              className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-              aria-label="Data e hora inicial"
-            />
-          </label>
-          <label className="flex flex-col gap-1.5">
-            <span className="text-xs font-medium uppercase tracking-[0.16em] text-gray-500">Fim</span>
-            <input
-              type="datetime-local"
-              value={dateTimeTo}
-              min={dateTimeFrom || undefined}
-              onChange={(event) => {
-                setPeriodPreset('custom')
-                setDateTimeTo(event.target.value)
-              }}
-              className={cn(
-                'w-full rounded-lg border bg-gray-950 px-3 py-2 text-sm text-white transition-colors focus:outline-none focus:ring-2',
-                invalidPeriod
-                  ? 'border-red-500 focus:border-red-500 focus:ring-red-500/40'
-                  : 'border-gray-700 focus:border-orange-500 focus:ring-orange-500/50',
-              )}
-              aria-label="Data e hora final"
-            />
-          </label>
-          <button
-            type="button"
-            onClick={() => {
-              setPeriodPreset('today')
-              setDateTimeFrom(toDateTimeLocalValue(startOfToday()))
-              setDateTimeTo(toDateTimeLocalValue(endOfToday()))
-            }}
-            className="rounded-lg border border-white/8 bg-white/5 px-3 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/8 hover:text-white"
-          >
-            Hoje
-          </button>
-        </div>
-
-        <div className={cn(
-          'mt-3 rounded-lg border px-3 py-2 text-xs',
-          invalidPeriod
-            ? 'border-red-500/20 bg-red-500/10 text-red-300'
-            : 'border-white/8 bg-gray-950/35 text-gray-400',
-        )}>
-          Periodo aplicado: <span className="text-gray-200">{periodSummary}</span>
-        </div>
-      </Card>
-
-      {filteredMovements.length === 0 ? (
+      {filtered.length === 0 && !error ? (
         <EmptyState
-          icon={<ClipboardIcon size={48} />}
-          title="Nenhuma movimentacao encontrada"
-          description="Tente limpar filtros ou ampliar o periodo pesquisado."
+          icon={<ClipboardIcon size={42} />}
+          title="Nenhuma movimentação encontrada"
+          description="Altere o período ou limpe os filtros para ampliar a busca."
         />
       ) : (
-        <div className="relative">
-          <div className="absolute bottom-0 left-6 top-0 hidden w-px bg-gradient-to-b from-white/12 via-white/8 to-transparent md:block" />
-          <div className="flex flex-col gap-3">
-            {filteredMovements.map((movement) => (
-              <MovementCard key={movement.id} movement={movement} />
-            ))}
-          </div>
+        <div className="space-y-2">
+          {filtered.map((operation) => (
+            <MovementRow key={operation.id} operation={operation} onOpen={() => openRelated(operation)} />
+          ))}
+        </div>
+      )}
+
+      {hasMore && (
+        <div className="flex justify-center pt-2">
+          <Button variant="secondary" isLoading={loadingMore} onClick={() => void loadEvents(true)}>
+            Carregar movimentações anteriores
+          </Button>
         </div>
       )}
     </div>
   )
 }
 
-function MovementStat({
-  title,
-  value,
-  tone,
-  subtitle,
-}: {
-  title: string
-  value: number | string
-  tone: MovementKind
-  subtitle: string
-}) {
-  const style = movementTone(tone)
-
+function CompactStat({ label, value, tone }: { label: string; value: string | number; tone: string }) {
   return (
-    <Card variant="bordered" className="border-white/8 bg-gray-900 shadow-[0_10px_22px_rgba(0,0,0,0.10)]">
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">{title}</p>
-          <p className={cn('mt-2 text-2xl font-semibold', style.amount)}>{value}</p>
-          <p className="mt-1 text-xs text-gray-500">{subtitle}</p>
-        </div>
-        <span className={cn('mt-1 flex h-8 w-8 items-center justify-center rounded-lg border border-white/8 bg-gray-950/50 text-sm font-semibold', style.amount)}>
-          {style.symbol}
-        </span>
-      </div>
-    </Card>
+    <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.035] px-3 py-2">
+      <span className="text-xs text-gray-500">{label}</span>
+      <strong className={cn('text-sm font-semibold', tone)}>{value}</strong>
+    </div>
   )
 }
 
-function MovementCard({ movement }: { movement: StockMovement }) {
-  const tone = movementTone(movement.kind)
-  const sign = movement.signedQuantity > 0 ? '+' : '-'
+function MovementRow({ operation, onOpen }: { operation: MovementOperation; onOpen: () => void }) {
+  const navigate = useNavigate()
+  const [expanded, setExpanded] = useState(false)
+  const event = operation.primary
+  const tone = toneFor(operation)
+  const unit = event.stock_item?.unit ?? 'un'
+  const hasDetails = operation.events.length > 1
+  const sign = operation.quantityDelta > 0 ? '+' : ''
 
   return (
-    <Card
-      variant="bordered"
-      className="relative overflow-hidden border-white/8 bg-gray-900 shadow-[0_12px_26px_rgba(0,0,0,0.10)] transition-colors hover:border-white/14 md:ml-14"
-    >
-      <span className={cn('absolute -left-[39px] top-7 hidden h-3 w-3 rounded-full ring-4 ring-gray-950 md:block', tone.dot)} />
+    <article className="overflow-hidden rounded-2xl border border-white/8 bg-[#111216] transition-colors hover:border-white/14">
+      <div className="grid gap-3 p-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
+        <button
+          type="button"
+          onClick={() => navigate(`/stock?tab=items&item=${event.stock_item_id}`)}
+          className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/8 bg-black/20"
+          aria-label={`Abrir ${event.stock_item?.name ?? 'item'}`}
+        >
+          <ItemVisual iconKey={event.stock_item?.svg_icon_key ?? null} size={28} />
+        </button>
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex min-w-0 gap-4">
-          <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl border border-white/10 bg-gray-950/55">
-            <ItemVisual iconKey={movement.itemIconKey} size={34} />
+        <button type="button" onClick={onOpen} className="min-w-0 text-left">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant={tone.badge} size="sm">{movementLabel(event.event_kind)}</Badge>
+            <Badge variant="default" size="sm">{sourceLabel(event.source)}</Badge>
+            {event.related_code && <span className="font-mono text-xs text-orange-300">{event.related_code}</span>}
+            {event.provenance === 'backfill' && <span className="text-[10px] text-gray-600">histórico migrado</span>}
           </div>
-
-          <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-2">
-              <MovementPill movement={movement} />
-              <Badge variant="default">{sourceLabel(movement.source)}</Badge>
-              {movement.stage && <Badge variant="default">{movement.stage}</Badge>}
-              {movement.condition && (
-                <Badge variant="default">{conditionLabel(movement.condition)}</Badge>
-              )}
-            </div>
-
-            <h3 className="mt-3 text-base font-semibold text-white">{movement.itemName}</h3>
-            <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-500">
-              <span className="font-mono text-gray-300">{movement.itemCode ?? '-'}</span>
-              <span>{formatDateTime(movement.createdAt)}</span>
-              {movement.reference && <span>{movement.reference}</span>}
-            </div>
-
-            <p className="mt-3 text-sm text-gray-300">{movement.description}</p>
-
-            <div className="mt-3 flex flex-wrap gap-2">
-              <MiniPill label="Responsavel" value={movement.actor} />
-              {movement.target && <MiniPill label={movement.targetLabel ?? 'Origem/Destino'} value={movement.target} />}
-              {movement.reference && <MiniPill label="Referência" value={movement.reference} />}
-              {movement.beforeQuantity !== null && movement.afterQuantity !== null && (
-                <MiniPill
-                  label="Antes/depois"
-                  value={`${movement.beforeQuantity} -> ${movement.afterQuantity}`}
-                />
-              )}
-            </div>
+          <div className="mt-1.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
+            <h3 className="truncate text-sm font-semibold text-white">{event.stock_item?.name ?? 'Item removido'}</h3>
+            <span className="text-xs text-gray-500">{event.counterparty_name ?? event.actor?.full_name ?? 'Sistema'}</span>
+            <span className="text-xs text-gray-600">{formatDateTime(operation.createdAt)}</span>
           </div>
-        </div>
+          <p className="mt-1 line-clamp-1 text-xs text-gray-400">{event.description ?? 'Movimentação registrada.'}</p>
+        </button>
 
-        <div className="shrink-0 rounded-xl border border-white/8 bg-gray-950/50 px-4 py-3 text-right">
-          <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">
-            {movement.signedQuantity === 0 ? 'Em triagem' : 'Quantidade'}
-          </p>
-          <p className={cn('mt-1 text-2xl font-semibold', tone.amount)}>
-            {movement.signedQuantity === 0
-              ? formatQuantity(movement.quantity, movement.itemUnit)
-              : `${sign}${formatQuantity(movement.quantity, movement.itemUnit)}`}
-          </p>
+        <div className="flex items-center justify-between gap-2 sm:justify-end">
+          <div className="text-right">
+            <p className={cn('text-base font-semibold', tone.amount)}>
+              {operation.quantityDelta === 0 ? 'Sem alteração' : `${sign}${formatQuantity(operation.quantityDelta, unit)}`}
+            </p>
+            {operation.balanceBefore !== null && operation.balanceAfter !== null && (
+              <p className="text-[11px] text-gray-500">{operation.balanceBefore} → {operation.balanceAfter}</p>
+            )}
+          </div>
+          <button type="button" onClick={onOpen} className="rounded-lg p-2 text-gray-500 hover:bg-white/5 hover:text-white" aria-label="Abrir registro">
+            <ExternalLink size={16} />
+          </button>
+          {hasDetails && (
+            <button type="button" onClick={() => setExpanded((current) => !current)} className="rounded-lg p-2 text-gray-500 hover:bg-white/5 hover:text-white" aria-label="Exibir etapas">
+              {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+            </button>
+          )}
         </div>
       </div>
-    </Card>
+
+      {expanded && (
+        <div className="border-t border-white/8 bg-black/15 px-3 py-2.5">
+          <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
+            <div className="space-y-1.5">
+              {operation.events.map((stage) => (
+                <div key={stage.id} className="flex items-start gap-2 text-xs">
+                  <span className={cn('mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full', tone.dot)} />
+                  <span className="font-medium text-gray-300">{movementLabel(stage.event_kind)}</span>
+                  <span className="text-gray-500">{stage.description}</span>
+                  <span className="ml-auto shrink-0 text-gray-600">{formatDateTime(stage.created_at)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-1 text-[11px]">
+              <DeltaPill label="Novo" value={operation.newDelta} />
+              <DeltaPill label="Usado" value={operation.usedDelta} />
+              <DeltaPill label="Avaria" value={operation.damagedDelta} />
+            </div>
+          </div>
+        </div>
+      )}
+    </article>
   )
 }
 
-function MovementPill({ movement }: { movement: StockMovement }) {
-  const tone = movementTone(movement.kind)
-
-  return (
-    <span className={cn(
-      'inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-medium',
-      tone.badge === 'success' && 'bg-emerald-500/12 text-emerald-300',
-      tone.badge === 'danger' && 'bg-red-500/12 text-red-300',
-      tone.badge === 'info' && 'bg-blue-500/12 text-blue-300',
-      tone.badge === 'default' && 'bg-gray-800 text-gray-300',
-    )}>
-      <span className={cn('h-1.5 w-1.5 rounded-full', tone.dot)} />
-      {movementLabel(movement.kind)}
-    </span>
-  )
-}
-
-function MiniPill({ label, value }: { label: string; value: string }) {
-  return (
-    <span className="inline-flex max-w-full items-center gap-2 rounded-lg border border-white/8 bg-gray-950/45 px-3 py-1 text-xs text-gray-300">
-      <span className="shrink-0 text-gray-500">{label}:</span>
-      <span className="truncate text-gray-200">{value}</span>
-    </span>
-  )
+function DeltaPill({ label, value }: { label: string; value: number }) {
+  if (value === 0) return null
+  return <span className="rounded-md border border-white/8 bg-white/4 px-2 py-1 text-gray-400">{label}: {value > 0 ? '+' : ''}{value}</span>
 }

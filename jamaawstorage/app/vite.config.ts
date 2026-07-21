@@ -7,6 +7,8 @@ import kimiStockImportHandler from './api/kimi-stock-import.js'
 import telegramWithdrawalNotifyHandler from './api/telegram-withdrawal-notify.js'
 // @ts-expect-error Local serverless handler has no TS types.
 import vehicleImageAnalysisHandler from './api/vehicle-image-analysis.js'
+// @ts-expect-error Local serverless handler has no TS types.
+import kimiAssistantHandler from './api/kimi-assistant.js'
 
 type LocalApiRequest = NodeJS.ReadableStream & { method?: string; body?: string }
 type LocalApiResponse = NodeJS.WritableStream & {
@@ -93,6 +95,12 @@ function localApiPlugin() {
           res as Parameters<typeof vehicleImageAnalysisHandler>[1],
         )
       })
+      attachLocalApiHandler(server, '/api/kimi-assistant', async (req, res) => {
+        await kimiAssistantHandler(
+          req as Parameters<typeof kimiAssistantHandler>[0],
+          res as Parameters<typeof kimiAssistantHandler>[1],
+        )
+      })
     },
   }
 }
@@ -101,6 +109,12 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const forwardedEnvKeys = [
     'KIMI_API',
+    'KIMI_CHAT_MODEL',
+    'SUPABASE_URL',
+    'SUPABASE_ANON_KEY',
+    'SUPABASE_SERVICE_ROLE_KEY',
+    'VITE_SUPABASE_URL',
+    'VITE_SUPABASE_ANON_KEY',
     'TELEGRAM_BOT_TOKEN',
     'TELEGRAM_CHAT_ID',
     'TELEGRAM_CHANNEL_URL',

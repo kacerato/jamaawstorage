@@ -92,6 +92,7 @@ interface ProcessFormState {
 }
 
 function processableQuantity(row: ReturnRequestWithDetails): number {
+  if (row.status === 'cancelled' || row.status === 'approved') return 0
   if (row.status === 'held') {
     return Math.max(row.held_quantity, 0)
   }
@@ -104,6 +105,7 @@ const STATUS_OPTIONS = [
   { value: 'pending', label: 'Pendentes' },
   { value: 'held', label: 'Mantidos na triagem' },
   { value: 'approved', label: 'Aprovados' },
+  { value: 'cancelled', label: 'Cancelados' },
 ]
 
 const initialFormState: ReturnFormState = {
@@ -126,12 +128,14 @@ function normalizeUrl(value: string | null): string | null {
 function statusLabel(status: ReturnStatus): string {
   if (status === 'pending') return 'Pendente'
   if (status === 'held') return 'Mantido na triagem'
+  if (status === 'cancelled') return 'Cancelado'
   return 'Aprovado'
 }
 
-function statusVariant(status: ReturnStatus): 'warning' | 'info' | 'success' {
+function statusVariant(status: ReturnStatus): 'warning' | 'info' | 'success' | 'danger' {
   if (status === 'pending') return 'warning'
   if (status === 'held') return 'info'
+  if (status === 'cancelled') return 'danger'
   return 'success'
 }
 
@@ -173,6 +177,10 @@ function approvedStateLabel(row: ReturnRequestWithDetails): string {
 }
 
 function approvedByLabel(row: ReturnRequestWithDetails): string {
+  if (row.status === 'cancelled') {
+    return 'Cancelado sem entrada no estoque'
+  }
+
   if (!row.approved_by_profile?.full_name) {
     return row.approved_quantity > 0 || row.held_quantity > 0 || row.status !== 'pending'
       ? 'Autorizador nao registrado'
@@ -381,17 +389,17 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   const heldCount = requests.filter((row) => row.status === 'held').length
 
   const pendingInventoryGroups = useMemo(
-    () => buildInventoryGroups(filteredRequests, (row) => row.quantity - row.approved_quantity - row.held_quantity, (row) => row.item_condition),
+    () => buildInventoryGroups(filteredRequests.filter((row) => row.status === 'pending'), (row) => row.quantity - row.approved_quantity - row.held_quantity, (row) => row.item_condition),
     [filteredRequests],
   )
 
   const heldInventoryGroups = useMemo(
-    () => buildInventoryGroups(filteredRequests, (row) => row.held_quantity, (row) => row.item_condition),
+    () => buildInventoryGroups(filteredRequests.filter((row) => row.status === 'held'), (row) => row.held_quantity, (row) => row.item_condition),
     [filteredRequests],
   )
 
   const approvedInventoryGroups = useMemo(
-    () => buildInventoryGroups(filteredRequests, (row) => row.approved_quantity, (row) => resolvedApprovedCondition(row) ?? 'used'),
+    () => buildInventoryGroups(filteredRequests.filter((row) => row.approved_quantity > 0), (row) => row.approved_quantity, (row) => resolvedApprovedCondition(row) ?? 'used'),
     [filteredRequests],
   )
 
@@ -831,13 +839,13 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   }
 
   const handleDeleteRequest = async (request: ReturnRequestWithDetails) => {
-    const canDelete = request.status !== 'approved' && request.approved_quantity === 0
+    const canDelete = request.status !== 'approved' && request.status !== 'cancelled' && request.approved_quantity === 0
     if (!canDelete) {
-      setError('Somente registros pendentes ou mantidos em triagem sem quantidade aprovada podem ser excluidos.')
+      setError('Somente devoluções pendentes ou em triagem sem quantidade aprovada podem ser canceladas.')
       return
     }
 
-    const confirmed = window.confirm(`Excluir o registro de devolucao de ${request.stock_item?.name ?? 'item'}? Essa acao remove apenas a entrada de triagem e nao altera estoque aprovado.`)
+    const confirmed = window.confirm(`Cancelar a devolução de ${request.stock_item?.name ?? 'item'}? O registro será preservado no histórico e nenhum estoque aprovado será alterado.`)
     if (!confirmed) return
 
     setUpdatingRequestId(request.id)
@@ -856,7 +864,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
       }
       await fetchRequests()
     } catch (deleteError) {
-      setError(deleteError instanceof Error ? deleteError.message : 'Nao foi possivel excluir a devolucao.')
+      setError(deleteError instanceof Error ? deleteError.message : 'Não foi possível cancelar a devolução.')
     } finally {
       setUpdatingRequestId(null)
     }
@@ -871,7 +879,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
   }
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {!embedded && (
         <div>
           <h2 className="text-2xl font-bold text-white">Itens devolvidos ao almoxarifado</h2>
@@ -881,21 +889,21 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-2 md:grid-cols-3">
         <Card className="border border-orange-500/10 bg-orange-500/5" variant="bordered">
           <p className="text-xs uppercase tracking-[0.24em] text-orange-200/70">Pendentes</p>
-          <p className="mt-2 text-3xl font-semibold text-white">{pendingCount}</p>
-          <p className="mt-1 text-sm text-gray-400">Aguardando aprovacao para voltar ao uso.</p>
+          <p className="mt-1 text-xl font-semibold text-white">{pendingCount}</p>
+          <p className="mt-0.5 text-xs text-gray-400">Aguardando decisão.</p>
         </Card>
         <Card className="border border-sky-500/10 bg-sky-500/5" variant="bordered">
           <p className="text-xs uppercase tracking-[0.24em] text-sky-200/70">Mantidos</p>
-          <p className="mt-2 text-3xl font-semibold text-white">{heldCount}</p>
-          <p className="mt-1 text-sm text-gray-400">Itens separados para reavaliacao ou reparo.</p>
+          <p className="mt-1 text-xl font-semibold text-white">{heldCount}</p>
+          <p className="mt-0.5 text-xs text-gray-400">Separados para reavaliação.</p>
         </Card>
         <Card className="border border-emerald-500/10 bg-emerald-500/5" variant="bordered">
           <p className="text-xs uppercase tracking-[0.24em] text-emerald-200/70">Fluxo</p>
-          <p className="mt-2 text-lg font-semibold text-white">Triagem antes do estoque</p>
-          <p className="mt-1 text-sm text-gray-400">Nada entra em `Qtd Atual` sem aprovacao.</p>
+          <p className="mt-1 text-sm font-semibold text-white">Triagem antes do estoque</p>
+          <p className="mt-0.5 text-xs text-gray-400">Nada entra no saldo sem aprovação.</p>
         </Card>
       </div>
 
@@ -905,7 +913,7 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
         </Alert>
       )}
 
-      <div className="space-y-8">
+      <div className="space-y-4">
         <InventoryStatusSection
           title="Estoque aguardando decisao"
           description="Itens ainda pendentes de processamento. Clique no item para abrir os registros individuais antes de decidir."
@@ -1019,13 +1027,13 @@ export function StockReturnsTab({ profileId, embedded = false }: StockReturnsTab
                   Processar quantidades
                 </Button>
               )}
-              {selectedRequest.status !== 'approved' && selectedRequest.approved_quantity === 0 && (
+              {selectedRequest.status !== 'approved' && selectedRequest.status !== 'cancelled' && selectedRequest.approved_quantity === 0 && (
                 <Button
                   variant="danger"
                   onClick={() => void handleDeleteRequest(selectedRequest)}
                   isLoading={updatingRequestId === selectedRequest.id}
                 >
-                  Excluir da triagem
+                  Cancelar devolução
                 </Button>
               )}
             </div>
