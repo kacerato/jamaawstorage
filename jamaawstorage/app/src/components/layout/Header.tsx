@@ -319,7 +319,7 @@ export function Header({
   }, [])
 
   return (
-    <header className="sticky top-0 z-30 flex h-20 items-center gap-4 border-b border-white/8 bg-[#09090b]/72 px-4 backdrop-blur-xl lg:px-6">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/8 bg-[#09090b]/82 px-3 backdrop-blur-xl sm:px-4 lg:px-5">
       <button
         onClick={onToggleSidebar}
         className="flex items-center justify-center rounded-2xl p-2 text-gray-400 transition-colors hover:bg-white/5 hover:text-white lg:hidden"

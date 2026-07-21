@@ -2,7 +2,7 @@ export type AppRole = 'supervisor' | 'leader' | 'collaborator'
 
 export type WithdrawalDestinationType = 'collaborator' | 'work_site'
 export type StockReturnSourceType = 'collaborator' | 'work_site'
-export type StockReturnRequestStatus = 'pending' | 'held' | 'approved'
+export type StockReturnRequestStatus = 'pending' | 'held' | 'approved' | 'cancelled'
 export type StockConditionCategory = 'new' | 'used' | 'damaged'
 export type WithdrawalDocumentRequirementStatus = 'pending' | 'attached' | 'rejected' | 'replaced' | 'not_required'
 export type WithdrawalPersonDocumentStatus = 'active' | 'replaced' | 'rejected'
@@ -280,7 +280,7 @@ export interface Database {
         Row: {
           id: string
           return_request_id: string
-          event_type: 'received' | 'held_for_triage' | 'returned_to_stock'
+          event_type: 'received' | 'held_for_triage' | 'returned_to_stock' | 'cancelled'
           quantity: number
           stock_delta: number
           item_condition: 'new' | 'used' | 'damaged' | null
@@ -291,7 +291,7 @@ export interface Database {
         Insert: {
           id?: string
           return_request_id: string
-          event_type: 'received' | 'held_for_triage' | 'returned_to_stock'
+          event_type: 'received' | 'held_for_triage' | 'returned_to_stock' | 'cancelled'
           quantity: number
           stock_delta: number
           item_condition?: 'new' | 'used' | 'damaged' | null
@@ -302,7 +302,7 @@ export interface Database {
         Update: {
           id?: string
           return_request_id?: string
-          event_type?: 'received' | 'held_for_triage' | 'returned_to_stock'
+          event_type?: 'received' | 'held_for_triage' | 'returned_to_stock' | 'cancelled'
           quantity?: number
           stock_delta?: number
           item_condition?: 'new' | 'used' | 'damaged' | null
@@ -321,6 +321,267 @@ export interface Database {
           {
             foreignKeyName: "stock_return_events_actor_id_fkey"
             columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      stock_movement_events: {
+        Row: {
+          id: string
+          operation_id: string
+          transaction_id: number
+          stock_item_id: string
+          event_kind: 'initial_entry' | 'entry' | 'exit' | 'return' | 'received' | 'triage' | 'restoration' | 'adjustment' | 'reclassification' | 'cancelled'
+          source: 'manual' | 'withdrawal' | 'return' | 'import' | 'assistant' | 'system'
+          quantity_delta: number
+          quantity_new_delta: number
+          quantity_used_delta: number
+          quantity_damaged_delta: number
+          balance_before: number | null
+          balance_after: number | null
+          quantity_new_before: number | null
+          quantity_new_after: number | null
+          quantity_used_before: number | null
+          quantity_used_after: number | null
+          quantity_damaged_before: number | null
+          quantity_damaged_after: number | null
+          actor_id: string | null
+          related_entity_type: string | null
+          related_entity_id: string | null
+          related_code: string | null
+          counterparty_type: string | null
+          counterparty_id: string | null
+          counterparty_name: string | null
+          description: string | null
+          metadata: Record<string, unknown>
+          provenance: 'live' | 'backfill'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          operation_id?: string
+          transaction_id?: number
+          stock_item_id: string
+          event_kind: 'initial_entry' | 'entry' | 'exit' | 'return' | 'received' | 'triage' | 'restoration' | 'adjustment' | 'reclassification' | 'cancelled'
+          source?: 'manual' | 'withdrawal' | 'return' | 'import' | 'assistant' | 'system'
+          quantity_delta?: number
+          quantity_new_delta?: number
+          quantity_used_delta?: number
+          quantity_damaged_delta?: number
+          balance_before?: number | null
+          balance_after?: number | null
+          quantity_new_before?: number | null
+          quantity_new_after?: number | null
+          quantity_used_before?: number | null
+          quantity_used_after?: number | null
+          quantity_damaged_before?: number | null
+          quantity_damaged_after?: number | null
+          actor_id?: string | null
+          related_entity_type?: string | null
+          related_entity_id?: string | null
+          related_code?: string | null
+          counterparty_type?: string | null
+          counterparty_id?: string | null
+          counterparty_name?: string | null
+          description?: string | null
+          metadata?: Record<string, unknown>
+          provenance?: 'live' | 'backfill'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          operation_id?: string
+          transaction_id?: number
+          stock_item_id?: string
+          event_kind?: 'initial_entry' | 'entry' | 'exit' | 'return' | 'received' | 'triage' | 'restoration' | 'adjustment' | 'reclassification' | 'cancelled'
+          source?: 'manual' | 'withdrawal' | 'return' | 'import' | 'assistant' | 'system'
+          quantity_delta?: number
+          quantity_new_delta?: number
+          quantity_used_delta?: number
+          quantity_damaged_delta?: number
+          balance_before?: number | null
+          balance_after?: number | null
+          quantity_new_before?: number | null
+          quantity_new_after?: number | null
+          quantity_used_before?: number | null
+          quantity_used_after?: number | null
+          quantity_damaged_before?: number | null
+          quantity_damaged_after?: number | null
+          actor_id?: string | null
+          related_entity_type?: string | null
+          related_entity_id?: string | null
+          related_code?: string | null
+          counterparty_type?: string | null
+          counterparty_id?: string | null
+          counterparty_name?: string | null
+          description?: string | null
+          metadata?: Record<string, unknown>
+          provenance?: 'live' | 'backfill'
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_movement_events_stock_item_id_fkey"
+            columns: ["stock_item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_movement_events_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      ai_conversations: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          is_archived: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title?: string
+          is_archived?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          is_archived?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [{
+          foreignKeyName: "ai_conversations_user_id_fkey"
+          columns: ["user_id"]
+          isOneToOne: false
+          referencedRelation: "profiles"
+          referencedColumns: ["id"]
+        }]
+      }
+      ai_messages: {
+        Row: {
+          id: string
+          conversation_id: string
+          user_id: string
+          role: 'user' | 'assistant' | 'system'
+          content: string
+          attachments: Record<string, unknown>[]
+          metadata: Record<string, unknown>
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          user_id: string
+          role: 'user' | 'assistant' | 'system'
+          content: string
+          attachments?: Record<string, unknown>[]
+          metadata?: Record<string, unknown>
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          user_id?: string
+          role?: 'user' | 'assistant' | 'system'
+          content?: string
+          attachments?: Record<string, unknown>[]
+          metadata?: Record<string, unknown>
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_messages_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      ai_action_requests: {
+        Row: {
+          id: string
+          conversation_id: string
+          user_id: string
+          tool_name: string
+          arguments: Record<string, unknown>
+          summary: string
+          status: 'pending' | 'confirmed' | 'executing' | 'succeeded' | 'failed' | 'cancelled' | 'expired'
+          provider_message: Record<string, unknown> | null
+          result: Record<string, unknown> | Record<string, unknown>[] | null
+          error: string | null
+          confirmed_at: string | null
+          executed_at: string | null
+          expires_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          conversation_id: string
+          user_id: string
+          tool_name: string
+          arguments: Record<string, unknown>
+          summary: string
+          status?: 'pending' | 'confirmed' | 'executing' | 'succeeded' | 'failed' | 'cancelled' | 'expired'
+          provider_message?: Record<string, unknown> | null
+          result?: Record<string, unknown> | Record<string, unknown>[] | null
+          error?: string | null
+          confirmed_at?: string | null
+          executed_at?: string | null
+          expires_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          conversation_id?: string
+          user_id?: string
+          tool_name?: string
+          arguments?: Record<string, unknown>
+          summary?: string
+          status?: 'pending' | 'confirmed' | 'executing' | 'succeeded' | 'failed' | 'cancelled' | 'expired'
+          provider_message?: Record<string, unknown> | null
+          result?: Record<string, unknown> | Record<string, unknown>[] | null
+          error?: string | null
+          confirmed_at?: string | null
+          executed_at?: string | null
+          expires_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_action_requests_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_action_requests_user_id_fkey"
+            columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -918,6 +1179,32 @@ export interface Database {
       p_delta: number
     }
     Returns: number
+  }
+  assistant_adjust_stock_item: {
+    Args: {
+      p_stock_item_id: string
+      p_quantity_new_delta: number
+      p_quantity_used_delta: number
+      p_quantity_damaged_delta: number
+      p_reason: string
+      p_action_id: string
+    }
+    Returns: Database['public']['Tables']['stock_items']['Row']
+  }
+  assistant_create_stock_item: {
+    Args: {
+      p_name: string
+      p_unit: string
+      p_category: string | null
+      p_minimum_quantity: number
+      p_quantity_new: number
+      p_quantity_used: number
+      p_quantity_damaged: number
+      p_description: string | null
+      p_ca_nr: string | null
+      p_action_id: string
+    }
+    Returns: Database['public']['Tables']['stock_items']['Row']
   }
   update_stock_item_details_and_quantity: {
     Args: {

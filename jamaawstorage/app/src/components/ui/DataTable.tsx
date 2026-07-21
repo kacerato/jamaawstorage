@@ -86,7 +86,7 @@ export function DataTable<T extends Record<string, unknown>>({
               {columns.map((col, idx) => (
                 <th
                   key={`${String(col.key)}-${idx}`}
-                  className="px-4 py-3 text-left text-sm font-medium text-gray-300"
+                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-300"
                 >
                   {col.header}
                 </th>
@@ -99,7 +99,7 @@ export function DataTable<T extends Record<string, unknown>>({
                 {columns.map((col, colIdx) => (
                   <td
                     key={`${String(col.key)}-${colIdx}`}
-                    className="px-4 py-3"
+                    className="px-3 py-2.5"
                   >
                     <div className="h-4 animate-pulse rounded bg-gray-800" />
                   </td>
@@ -159,7 +159,7 @@ export function DataTable<T extends Record<string, unknown>>({
                 <th
                   key={`${String(col.key)}-${idx}`}
                   className={cn(
-                    'px-4 py-3 text-left text-sm font-medium text-gray-300',
+                    'px-3 py-2.5 text-left text-xs font-medium text-gray-300',
                     col.sortable && 'cursor-pointer select-none hover:text-orange-400',
                     col.className,
                   )}
@@ -210,7 +210,7 @@ export function DataTable<T extends Record<string, unknown>>({
                   {columns.map((col, idx) => (
                     <td
                       key={`${String(col.key)}-${idx}`}
-                      className={cn('px-4 py-3 text-sm text-gray-300', col.className)}
+                      className={cn('px-3 py-2.5 text-sm text-gray-300', col.className)}
                     >
                       {renderCellValue(row, col)}
                     </td>

@@ -65,7 +65,7 @@ export function Modal({
   return createPortal(
     <div
       className={cn(
-        'fixed inset-0 z-50 flex items-center justify-center p-4 transition-all duration-200',
+        'fixed inset-0 z-50 flex items-center justify-center p-2 transition-all duration-200 sm:p-4',
         isAnimating ? 'opacity-100' : 'opacity-0',
       )}
       role="dialog"
@@ -78,14 +78,14 @@ export function Modal({
       />
       <div
         className={cn(
-          'relative flex max-h-[90vh] w-full transform flex-col overflow-y-auto rounded-[28px] border border-white/10 bg-[linear-gradient(180deg,_rgba(20,20,24,0.98)_0%,_rgba(12,12,15,0.98)_100%)] shadow-[0_32px_90px_rgba(0,0,0,0.45)] transition-all duration-200',
+          'relative flex max-h-[calc(100dvh-1rem)] w-full transform flex-col overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(180deg,_rgba(20,20,24,0.98)_0%,_rgba(12,12,15,0.98)_100%)] shadow-[0_32px_90px_rgba(0,0,0,0.45)] transition-all duration-200 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[24px]',
           sizeClasses[size],
           isAnimating
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-4 scale-95 opacity-0',
         )}
       >
-        <div className="flex flex-shrink-0 items-center justify-between border-b border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.12),_transparent_50%)] px-6 py-5">
+        <div className="flex flex-shrink-0 items-center justify-between border-b border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.12),_transparent_50%)] px-4 py-3.5 sm:px-5 sm:py-4">
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-orange-200/70">
               JamaaW
@@ -101,7 +101,7 @@ export function Modal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-2xl border border-white/8 bg-white/4 p-2 text-gray-400 transition-colors hover:bg-white/8 hover:text-white"
+              className="rounded-xl border border-white/8 bg-white/4 p-2 text-gray-400 transition-colors hover:bg-white/8 hover:text-white"
               aria-label="Fechar"
             >
               <svg
@@ -121,7 +121,7 @@ export function Modal({
             </button>
           )}
         </div>
-        <div className="flex-1 px-6 py-5">{children}</div>
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5 sm:py-4">{children}</div>
       </div>
     </div>,
     document.body,

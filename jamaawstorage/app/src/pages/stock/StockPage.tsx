@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { Tables, TablesInsert, TablesUpdate } from '../../types/database'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
@@ -32,31 +32,20 @@ interface StockItemWithLowStock extends StockItemRow {
 
 interface MovementWithDetails {
   id: string
-  code: string | null
-  type: 'withdrawal' | 'return'
-  status: string
+  operation_id: string
+  event_kind: string
+  source: string
+  related_entity_type: string | null
+  related_entity_id: string | null
+  related_code: string | null
+  counterparty_name: string | null
+  description: string | null
+  quantity_delta: number
+  balance_before: number | null
+  balance_after: number | null
+  metadata: Record<string, unknown>
   created_at: string
-  requested_by_person: { full_name: string } | null
-  quantity: number
-}
-
-type WithdrawalMovementEntry = {
-  quantity: number
-  withdrawal: {
-    id: string
-    code: string | null
-    status: string
-    created_at: string
-    requested_by: string | null
-  }
-}
-
-type ReturnMovementEntry = {
-  id: string
-  quantity: number
-  status: string
-  created_at: string
-  source_person_id: string | null
+  actor: { full_name: string } | null
 }
 
 type ModalMode = 'detail' | 'create' | 'edit' | 'delete' | 'import'
@@ -134,6 +123,7 @@ async function updateStockItemWithFallback(args: UpdateStockItemRpcArgs) {
 }
 
 export function StockPage() {
+  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { profile } = useAuth()
   const currentTab = searchParams.get('tab')
@@ -236,84 +226,23 @@ export function StockPage() {
   const fetchItemDetails = useCallback(async (itemId: string) => {
     setDetailLoading(true)
     try {
-      const [withdrawalsRes, returnsRes] = await Promise.all([
-        supabase
-          .from('withdrawal_items')
-          .select(`
-            quantity,
-            withdrawal:withdrawals(
-              id,
-              code,
-              status,
-              created_at,
-              requested_by
-            )
-          `)
-          .eq('stock_item_id', itemId)
-          .order('created_at', { ascending: false })
-          .limit(10),
-        supabase
-          .from('stock_return_requests')
-          .select('id, quantity, status, created_at, source_person_id')
-          .eq('stock_item_id', itemId)
-          .order('created_at', { ascending: false })
-          .limit(10)
-      ])
+      const { data, error: movementError } = await supabase
+        .from('stock_movement_events')
+        .select(`
+          id, operation_id, event_kind, source, related_entity_type,
+          related_entity_id, related_code, counterparty_name, description,
+          quantity_delta, balance_before, balance_after, metadata, created_at,
+          actor:profiles!stock_movement_events_actor_id_fkey(full_name)
+        `)
+        .eq('stock_item_id', itemId)
+        .order('created_at', { ascending: false })
+        .limit(20)
 
-      const rawWiData = (withdrawalsRes.data as (WithdrawalMovementEntry | { quantity: number; withdrawal: null })[]) ?? []
-
-      const rawRetData = (returnsRes.data as ReturnMovementEntry[]) ?? []
-
-      const requestedByIds = [
-        ...rawWiData.map((entry) => entry.withdrawal?.requested_by),
-        ...rawRetData.map((entry) => entry.source_person_id)
-      ].filter((value): value is string => Boolean(value))
-
-      let peopleMap: Record<string, { full_name: string }> = {}
-      if (requestedByIds.length > 0) {
-        const { data: peopleData } = await supabase
-          .from('people')
-          .select('id, full_name')
-          .in('id', Array.from(new Set(requestedByIds)))
-
-        peopleMap = Object.fromEntries(
-          (peopleData ?? []).map((person) => [person.id, { full_name: person.full_name }])
-        )
-      }
-
-      const withdrawalMovements: MovementWithDetails[] = rawWiData
-        .filter((entry): entry is WithdrawalMovementEntry => Boolean(entry.withdrawal))
-        .map((entry) => ({
-          id: entry.withdrawal.id,
-          code: entry.withdrawal.code,
-          type: 'withdrawal' as const,
-          status: entry.withdrawal.status,
-          created_at: entry.withdrawal.created_at,
-          requested_by_person: entry.withdrawal.requested_by
-            ? peopleMap[entry.withdrawal.requested_by] ?? null
-            : null,
-          quantity: entry.quantity,
-        }))
-
-      const returnMovements: MovementWithDetails[] = rawRetData.map((entry) => ({
-          id: entry.id,
-          code: null,
-          type: 'return' as const,
-          status: entry.status,
-          created_at: entry.created_at,
-          requested_by_person: entry.source_person_id
-            ? peopleMap[entry.source_person_id] ?? null
-            : null,
-          quantity: entry.quantity,
-        }))
-
-      const typedMovements: MovementWithDetails[] = [...withdrawalMovements, ...returnMovements]
-
-      typedMovements.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-
-      setItemWithdrawals(typedMovements.slice(0, 10))
+      if (movementError) throw movementError
+      setItemWithdrawals((data as unknown as MovementWithDetails[]) ?? [])
     } catch (err) {
       console.error('Error fetching item details:', err)
+      setItemWithdrawals([])
     } finally {
       setDetailLoading(false)
     }
@@ -633,8 +562,8 @@ export function StockPage() {
   ]
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex gap-2 border-b border-white/8 pb-2">
+    <div className="flex flex-col gap-4">
+      <div className="sticky top-16 z-20 flex gap-1 overflow-x-auto border-b border-white/8 bg-[#090a0d]/95 py-2 backdrop-blur-xl">
         <button
           type="button"
           onClick={() => setSearchParams((prev) => {
@@ -1001,56 +930,73 @@ export function StockPage() {
                 ) : itemWithdrawals.length === 0 ? (
                   <p className="text-sm text-gray-500">Nenhuma movimentação registrada para este item</p>
                 ) : (
-                  <div className="max-h-[360px] overflow-auto rounded-2xl border border-white/8">
-                    <table className="w-full min-w-[620px]">
+                  <div className="max-h-[300px] overflow-auto rounded-xl border border-white/8">
+                    <table className="w-full min-w-[560px]">
                       <thead>
                         <tr className="sticky top-0 z-10 bg-[#1a1b1f] shadow-[0_1px_0_rgba(255,255,255,0.08)]">
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Código / Tipo</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Pessoa / Solicitante</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Qtd</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Status</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Movimento</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Origem / destino</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Alteração</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Data</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {itemWithdrawals.map((withdrawal) => (
-                          <tr key={withdrawal.id} className="border-t border-white/8">
+                        {itemWithdrawals.map((movement) => (
+                          <tr
+                            key={movement.id}
+                            className="cursor-pointer border-t border-white/8 transition-colors hover:bg-white/4"
+                            tabIndex={0}
+                            onClick={() => {
+                              if (movement.related_entity_type === 'withdrawal' && movement.related_entity_id) {
+                                navigate(`/withdrawals/${movement.related_entity_id}`)
+                                return
+                              }
+                              const withdrawalId = typeof movement.metadata?.withdrawal_id === 'string'
+                                ? movement.metadata.withdrawal_id
+                                : null
+                              if (withdrawalId) navigate(`/withdrawals/${withdrawalId}?from=stock-item`)
+                            }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') event.currentTarget.click()
+                            }}
+                          >
                             <td className="px-3 py-2 text-sm text-white">
-                              {withdrawal.type === 'return' ? (
-                                <Badge variant="success" size="sm">Devolução</Badge>
-                              ) : (
-                                withdrawal.code ?? '-'
+                              <div className="flex items-center gap-2">
+                                <Badge variant={movement.quantity_delta > 0 ? 'success' : movement.quantity_delta < 0 ? 'danger' : 'default'} size="sm">
+                                  {stockMovementLabel(movement.event_kind)}
+                                </Badge>
+                                {movement.related_code && <span className="font-mono text-xs text-orange-300">{movement.related_code}</span>}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-sm text-gray-300">
+                              {movement.counterparty_name ?? movement.actor?.full_name ?? 'Sistema'}
+                            </td>
+                            <td className="px-3 py-2 text-sm">
+                              <span className={movement.quantity_delta > 0 ? 'text-emerald-300' : movement.quantity_delta < 0 ? 'text-red-300' : 'text-gray-400'}>
+                                {movement.quantity_delta > 0 ? '+' : ''}{movement.quantity_delta} {selectedItem.unit}
+                              </span>
+                              {movement.balance_before !== null && movement.balance_after !== null && (
+                                <span className="ml-2 text-xs text-gray-600">{movement.balance_before} → {movement.balance_after}</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-sm text-gray-300">{withdrawal.requested_by_person?.full_name ?? '-'}</td>
-                            <td className="px-3 py-2 text-sm text-gray-300">{withdrawal.quantity}</td>
-                            <td className="px-3 py-2 text-sm">
-                              <Badge
-                                variant={
-                                  withdrawal.status === 'approved' || withdrawal.status === 'completed'
-                                    ? 'success'
-                                    : withdrawal.status === 'pending'
-                                      ? 'warning'
-                                      : 'danger'
-                                }
-                                size="sm"
-                              >
-                                {withdrawal.status === 'approved'
-                                  ? 'Aprovada'
-                                  : withdrawal.status === 'completed'
-                                    ? 'Concluída'
-                                    : withdrawal.status === 'pending'
-                                      ? 'Pendente'
-                                      : withdrawal.status === 'rejected'
-                                        ? 'Rejeitada'
-                                        : withdrawal.status}
-                              </Badge>
-                            </td>
+                            <td className="px-3 py-2 text-xs text-gray-500">{formatDateTime(movement.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>
                     </table>
                   </div>
                 )}
+                <Button
+                  className="mt-3"
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => {
+                    handleCloseModal()
+                    setSearchParams({ tab: 'movements', item: selectedItem.id })
+                  }}
+                >
+                  Abrir histórico completo
+                </Button>
               </div>
             </div>
 
@@ -1078,5 +1024,21 @@ function DetailField({ label, value }: { label: string; value: React.ReactNode }
       <div className="mt-1 min-w-0 break-words text-sm leading-5 text-gray-200">{value}</div>
     </div>
   )
+}
+
+function stockMovementLabel(kind: string): string {
+  const labels: Record<string, string> = {
+    initial_entry: 'Estoque inicial',
+    entry: 'Entrada',
+    exit: 'Saída',
+    return: 'Devolução',
+    received: 'Recebido',
+    triage: 'Triagem',
+    restoration: 'Restaurado',
+    adjustment: 'Ajuste',
+    reclassification: 'Reclassificação',
+    cancelled: 'Cancelado',
+  }
+  return labels[kind] ?? 'Movimentação'
 }
 
