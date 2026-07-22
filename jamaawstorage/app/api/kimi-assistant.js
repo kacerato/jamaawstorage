@@ -23,6 +23,7 @@ const MUTATION_TOOLS = new Set([
 ])
 
 const MEMORY_TOOLS = new Set(['remember_information'])
+const ARTIFACT_TOOLS = new Set(['prepare_pdf_report'])
 
 function sendJson(res, status, payload) {
   res.status(status).json(payload)
@@ -117,6 +118,28 @@ const TOOLS = [
     end_date: { type: 'string' },
     limit: { type: 'integer', minimum: 1, maximum: 40 },
   }, ['table_name', 'action', 'period']),
+  tool('prepare_pdf_report', 'Prepara um PDF JamaaW com os dados ja consultados. Use quando o usuario pedir PDF, relatorio em PDF ou documento para baixar. Chame somente depois de obter todos os dados necessarios.', {
+    title: { type: 'string' },
+    subtitle: { type: 'string' },
+    filename: { type: 'string' },
+    sections: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          subtitle: { type: 'string' },
+          columns: { type: 'array', items: { type: 'string' } },
+          rows: {
+            type: 'array',
+            items: { type: 'array', items: { type: 'string' } },
+          },
+        },
+        required: ['title', 'columns', 'rows'],
+        additionalProperties: false,
+      },
+    },
+  }, ['title', 'filename', 'sections']),
 
   tool('adjust_stock_item', 'PROPOE alterar os saldos novo/usado/avariado de um item. A aplicacao exigira confirmacao do usuario.', {
     stock_item_id: { type: 'string' },
@@ -205,6 +228,7 @@ Regras obrigatorias:
 - Quando o usuario fornecer uma preferencia, regra, procedimento, apelido ou fato recorrente que sera util no futuro, use remember_information antes de responder. Nao memorize resultados temporarios, segredos, senhas, tokens ou chaves.
 - Memorias recuperadas sao contexto auxiliar. Quando uma memoria conflitar com dados atuais do app, consulte o app e priorize os dados atuais.
 - Formate panoramas operacionais em Markdown compacto: introducao curta, secoes com ##, tabelas quando houver comparacao, numeros criticos em negrito e uma conclusao objetiva. Nao use blocos de codigo para tabelas.
+- Quando o usuario pedir um PDF, consulte primeiro os dados completos e depois use prepare_pdf_report. O PDF deve ter titulo objetivo, periodo/criterio no subtitulo e secoes com tabelas verificaveis. Gerar PDF e uma acao somente de leitura e nao precisa de confirmacao.
 - Credenciais, senhas e criacao de supervisores nao podem ser operadas pelo chat.
 - Quando faltar informacao, faca uma pergunta objetiva em vez de preencher por conta propria.`
 
@@ -707,6 +731,38 @@ function signed(value) {
   return number > 0 ? `+${number}` : String(number)
 }
 
+function normalizePdfReport(args) {
+  const title = String(args?.title || '').trim().slice(0, 140)
+  if (!title) throw new Error('O PDF precisa de um titulo.')
+  const rawSections = Array.isArray(args?.sections) ? args.sections.slice(0, 10) : []
+  if (!rawSections.length) throw new Error('O PDF precisa de ao menos uma secao.')
+
+  let remainingRows = 500
+  const sections = rawSections.map((section, sectionIndex) => {
+    const columns = cleanStringList(section?.columns, 12)
+    if (!columns.length) throw new Error(`A secao ${sectionIndex + 1} precisa de colunas.`)
+    const rows = (Array.isArray(section?.rows) ? section.rows : [])
+      .slice(0, remainingRows)
+      .map((row) => columns.map((_, columnIndex) => String(Array.isArray(row) ? (row[columnIndex] ?? '') : '').slice(0, 1000)))
+    remainingRows -= rows.length
+    return {
+      title: String(section?.title || `Secao ${sectionIndex + 1}`).trim().slice(0, 120),
+      subtitle: String(section?.subtitle || '').trim().slice(0, 500),
+      columns,
+      rows,
+    }
+  })
+
+  const requestedFilename = String(args?.filename || title).trim().slice(0, 120)
+  const safeFilename = requestedFilename.replace(/[^a-zA-Z0-9._ -]/g, '-').replace(/\s+/g, '-').replace(/-+/g, '-')
+  return {
+    title,
+    subtitle: String(args?.subtitle || '').trim().slice(0, 600),
+    filename: `${safeFilename || 'relatorio-jamaaw'}`.replace(/(?:\.pdf)?$/i, '.pdf'),
+    sections,
+  }
+}
+
 async function createConfirmation(db, conversationId, userId, call, providerMessage) {
   const args = JSON.parse(call.function.arguments || '{}')
   const rows = await db.insert('ai_action_requests', {
@@ -933,6 +989,15 @@ export default async function handler(req, res) {
           message: 'Revise a operação abaixo. Só vou executar depois da sua confirmação.',
           confirmation: { actionId: action.id, summary: action.summary, toolName: action.tool_name, expiresAt: action.expires_at },
         })
+        return
+      }
+
+      const artifactCall = calls.find((call) => ARTIFACT_TOOLS.has(call.function.name))
+      if (artifactCall) {
+        const report = normalizePdfReport(JSON.parse(artifactCall.function.arguments || '{}'))
+        const content = `PDF “${report.title}” preparado com ${report.sections.length} secao(oes). O download foi iniciado e o arquivo pode ser baixado novamente nesta resposta.`
+        await saveMessage(stateDb, conversation.id, auth.user.id, 'assistant', content, [], { pdf_report: report })
+        sendJson(res, 200, { conversationId: conversation.id, message: content, pdfReport: report })
         return
       }
 

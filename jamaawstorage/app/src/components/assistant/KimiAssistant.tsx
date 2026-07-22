@@ -17,6 +17,7 @@ import {
   ChevronRight,
   Command,
   Database,
+  Download,
   ExternalLink,
   FileText,
   Grip,
@@ -27,11 +28,11 @@ import {
   Search,
   Send,
   ShieldCheck,
-  Sparkles,
   X,
 } from 'lucide-react'
 import jamaawAssistant from '../../assets/jamaaw-assistant.png'
 import { AssistantRichMessage } from './AssistantRichMessage'
+import { createAssistantMessagePdfReport, downloadAssistantPdf, isAssistantPdfReport, type AssistantPdfReport } from './assistantPdf'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { cn } from '../../lib/utils'
@@ -49,6 +50,7 @@ interface ChatMessage {
   content: string
   linkPath?: string | null
   createdAt?: string
+  pdfReport?: AssistantPdfReport | null
 }
 
 interface Confirmation {
@@ -241,6 +243,7 @@ export function KimiAssistant() {
           role: message.role,
           content: message.content,
           linkPath: typeof message.metadata?.link_path === 'string' ? message.metadata.link_path : null,
+          pdfReport: isAssistantPdfReport(message.metadata?.pdf_report) ? message.metadata.pdf_report : null,
           createdAt: message.created_at,
         }))
       if (history.length) setMessages(history)
@@ -281,14 +284,21 @@ export function KimiAssistant() {
     else localStorage.removeItem(storageKey)
   }
 
-  const addAssistantResponse = (data: { message?: string; linkPath?: string | null }) => {
+  const addAssistantResponse = (data: { message?: string; linkPath?: string | null; pdfReport?: unknown }) => {
     if (!data.message) return
+    const pdfReport = isAssistantPdfReport(data.pdfReport) ? data.pdfReport : null
     setMessages((current) => [...current, {
       id: messageId(),
       role: 'assistant',
       content: data.message!,
       linkPath: data.linkPath,
+      pdfReport,
     }])
+    if (pdfReport) {
+      void downloadAssistantPdf(pdfReport).catch((pdfError) => {
+        setError(pdfError instanceof Error ? pdfError.message : 'Não foi possível gerar o PDF.')
+      })
+    }
   }
 
   const send = async (overrideMessage?: string) => {
@@ -525,14 +535,27 @@ export function KimiAssistant() {
                     </div>
                     <div className="px-3.5 py-3 text-sm leading-6 text-gray-200">
                       <AssistantRichMessage content={message.content} />
-                      {message.linkPath && (
-                        <button
-                          type="button"
-                          onClick={() => { navigate(message.linkPath!); setOpen(false) }}
-                          className="mt-3 inline-flex items-center gap-1.5 rounded-xl border border-orange-300/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-200 hover:bg-orange-500/20"
-                        >
-                          Abrir no JamaaW <ExternalLink size={12} />
-                        </button>
+                      {(message.linkPath || message.role === 'assistant') && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {message.linkPath && (
+                            <button
+                              type="button"
+                              onClick={() => { navigate(message.linkPath!); setOpen(false) }}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-orange-300/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-200 hover:bg-orange-500/20"
+                            >
+                              Abrir no JamaaW <ExternalLink size={12} />
+                            </button>
+                          )}
+                          {message.role === 'assistant' && (
+                            <button
+                              type="button"
+                              onClick={() => void downloadAssistantPdf(message.pdfReport ?? createAssistantMessagePdfReport(message.content)).catch((pdfError) => setError(pdfError instanceof Error ? pdfError.message : 'Não foi possível gerar o PDF.'))}
+                              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-semibold text-gray-200 hover:border-orange-300/20 hover:bg-orange-500/10 hover:text-orange-100"
+                            >
+                              {message.pdfReport ? 'Baixar PDF novamente' : 'Exportar em PDF'} <Download size={13} />
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </article>
@@ -639,10 +662,6 @@ export function KimiAssistant() {
               className="max-h-28 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-2 text-sm text-white outline-none placeholder:text-gray-650 disabled:opacity-50"
             />
             <button type="button" onClick={() => void send()} disabled={busy || Boolean(confirmation) || (!input.trim() && attachments.length === 0)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white transition-colors hover:bg-orange-400 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-600" aria-label="Executar comando"><Send size={16} /></button>
-          </div>
-          <div className="mt-2 flex items-center justify-between px-1 text-[9px] font-medium uppercase tracking-[0.12em] text-gray-700">
-            <span className="flex items-center gap-1"><Sparkles size={10} /> memória por gatilhos</span>
-            <span className="flex items-center gap-1"><ShieldCheck size={10} /> ações sob confirmação</span>
           </div>
         </footer>
       </aside>

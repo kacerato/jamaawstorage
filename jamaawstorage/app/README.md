@@ -76,7 +76,7 @@ app/
 - **Veiculos**: frota, logs, fotos, documentos e analise por IA.
 - **Relatorios**: exportacoes e visoes consolidadas.
 - **Auditoria**: rastreio de alteracoes criticas.
-- **JAMAAW Assistente**: central operacional movel com anexos, memoria por gatilhos, consultas agregadas e confirmacao obrigatoria para alteracoes.
+- **JAMAAW Assistente**: central operacional movel com anexos, memoria automatica, consultas agregadas, PDFs no padrao JamaaW e confirmacao obrigatoria para alteracoes.
 
 ## Variaveis de Ambiente
 
