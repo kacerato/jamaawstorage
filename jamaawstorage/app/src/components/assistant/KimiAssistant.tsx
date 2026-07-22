@@ -23,8 +23,11 @@ import {
   Grip,
   Loader2,
   MemoryStick,
+  MapPin,
   Paperclip,
+  PackageCheck,
   Plus,
+  Printer,
   Search,
   Send,
   ShieldCheck,
@@ -51,6 +54,17 @@ interface ChatMessage {
   linkPath?: string | null
   createdAt?: string
   pdfReport?: AssistantPdfReport | null
+  withdrawalResult?: WithdrawalResult | null
+}
+
+interface WithdrawalResult {
+  id: string
+  code: string
+  status: string
+  itemCount: number
+  destinationLabel: string
+  linkPath: string
+  printPath: string
 }
 
 interface Confirmation {
@@ -90,6 +104,7 @@ const GREETING: ChatMessage = {
 }
 
 const QUICK_COMMANDS = [
+  { label: 'Nova retirada', prompt: 'Quero fazer uma retirada. Conduza o preenchimento completo, confira os dados e prepare para minha autorização.', icon: PackageCheck },
   { label: 'Resumo do mês', prompt: 'Faça um resumo operacional completo deste mês.', icon: Database },
   { label: 'Estoque crítico', prompt: 'Quais itens estão abaixo ou próximos do estoque mínimo?', icon: Search },
   { label: 'Devoluções', prompt: 'Mostre as devoluções pendentes e o que precisa de decisão.', icon: FileText },
@@ -105,6 +120,36 @@ const MEMORY_LABELS: Record<AssistantMemory['memory_type'], string> = {
 
 function messageId() {
   return `${Date.now()}-${Math.random().toString(36).slice(2)}`
+}
+
+function normalizeWithdrawalResult(value: unknown): WithdrawalResult | null {
+  if (!value || typeof value !== 'object') return null
+  const result = value as Record<string, unknown>
+  if (
+    typeof result.id !== 'string'
+    || typeof result.code !== 'string'
+    || typeof result.linkPath !== 'string'
+    || typeof result.printPath !== 'string'
+  ) return null
+
+  return {
+    id: result.id,
+    code: result.code,
+    status: typeof result.status === 'string' ? result.status : 'completed',
+    itemCount: Number(result.itemCount || 0),
+    destinationLabel: typeof result.destinationLabel === 'string' ? result.destinationLabel : 'Destino informado',
+    linkPath: result.linkPath,
+    printPath: result.printPath,
+  }
+}
+
+function reservePrintWindow(): Window | null {
+  const printWindow = window.open('', '_blank')
+  if (!printWindow) return null
+  printWindow.document.title = 'Preparando retirada — JAMAAW'
+  printWindow.document.body.style.cssText = 'margin:0;min-height:100vh;display:grid;place-items:center;background:#171719;color:#f3f4f6;font:600 15px system-ui,sans-serif'
+  printWindow.document.body.textContent = 'Criando a retirada e preparando o termo para impressão…'
+  return printWindow
 }
 
 function clampPosition(position: Position): Position {
@@ -165,6 +210,7 @@ export function KimiAssistant() {
   const [memoryBusy, setMemoryBusy] = useState(false)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [launcherPosition, setLauncherPosition] = useState<Position>(initialPosition)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -244,6 +290,7 @@ export function KimiAssistant() {
           content: message.content,
           linkPath: typeof message.metadata?.link_path === 'string' ? message.metadata.link_path : null,
           pdfReport: isAssistantPdfReport(message.metadata?.pdf_report) ? message.metadata.pdf_report : null,
+          withdrawalResult: normalizeWithdrawalResult(message.metadata?.withdrawal_result),
           createdAt: message.created_at,
         }))
       if (history.length) setMessages(history)
@@ -284,7 +331,7 @@ export function KimiAssistant() {
     else localStorage.removeItem(storageKey)
   }
 
-  const addAssistantResponse = (data: { message?: string; linkPath?: string | null; pdfReport?: unknown }) => {
+  const addAssistantResponse = (data: { message?: string; linkPath?: string | null; pdfReport?: unknown; withdrawalResult?: unknown }) => {
     if (!data.message) return
     const pdfReport = isAssistantPdfReport(data.pdfReport) ? data.pdfReport : null
     setMessages((current) => [...current, {
@@ -293,6 +340,7 @@ export function KimiAssistant() {
       content: data.message!,
       linkPath: data.linkPath,
       pdfReport,
+      withdrawalResult: normalizeWithdrawalResult(data.withdrawalResult),
     }])
     if (pdfReport) {
       void downloadAssistantPdf(pdfReport).catch((pdfError) => {
@@ -306,6 +354,7 @@ export function KimiAssistant() {
     if ((!message && attachments.length === 0) || busy || confirmation) return
     setView('operate')
     setError(null)
+    setNotice(null)
     setBusy(true)
     setMessages((current) => [...current, {
       id: messageId(),
@@ -331,8 +380,11 @@ export function KimiAssistant() {
 
   const answerConfirmation = async (approved: boolean) => {
     if (!confirmation || busy) return
+    const expectsWithdrawalPrint = approved && confirmation.toolName === 'create_withdrawal'
+    const printWindow = expectsWithdrawalPrint ? reservePrintWindow() : null
     setBusy(true)
     setError(null)
+    setNotice(null)
     try {
       const data = await callAssistant({
         conversationId,
@@ -340,7 +392,17 @@ export function KimiAssistant() {
       })
       setConfirmation(null)
       addAssistantResponse(data)
+      const withdrawalResult = normalizeWithdrawalResult(data.withdrawalResult)
+      if (printWindow && withdrawalResult) {
+        printWindow.location.replace(new URL(withdrawalResult.printPath, window.location.origin).toString())
+      } else {
+        printWindow?.close()
+        if (expectsWithdrawalPrint && withdrawalResult) {
+          setNotice('A retirada foi criada, mas o navegador bloqueou a aba de impressão. Use “Imprimir termo” no cartão abaixo.')
+        }
+      }
     } catch (confirmationError) {
+      printWindow?.close()
       setError(confirmationError instanceof Error ? confirmationError.message : 'Não foi possível concluir a confirmação.')
     } finally {
       setBusy(false)
@@ -352,6 +414,7 @@ export function KimiAssistant() {
     event.target.value = ''
     if (!files.length) return
     setError(null)
+    setNotice(null)
     try {
       const next = await Promise.all(files.map(fileToAttachment))
       setAttachments((current) => [...current, ...next].slice(0, 3))
@@ -374,6 +437,7 @@ export function KimiAssistant() {
     setAttachments([])
     setInput('')
     setError(null)
+    setNotice(null)
     setLoaded(true)
     setView('operate')
   }
@@ -501,7 +565,7 @@ export function KimiAssistant() {
                     <p className="mt-2 text-xs leading-5 text-gray-400">Consulto períodos completos no banco, recupero contexto da memória e mostro qualquer alteração antes de executar.</p>
                   </div>
                 </div>
-                <div className="mt-4 grid gap-2 sm:grid-cols-3">
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
                   {QUICK_COMMANDS.map(({ label, prompt, icon: Icon }) => (
                     <button
                       key={label}
@@ -535,9 +599,41 @@ export function KimiAssistant() {
                     </div>
                     <div className="px-3.5 py-3 text-sm leading-6 text-gray-200">
                       <AssistantRichMessage content={message.content} />
+                      {message.withdrawalResult && (
+                        <div className="mt-3 overflow-hidden rounded-2xl border border-emerald-300/20 bg-emerald-500/[0.07]">
+                          <div className="flex items-center gap-3 border-b border-emerald-300/10 px-3.5 py-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300"><PackageCheck size={18} /></div>
+                            <div className="min-w-0">
+                              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Retirada concluída</p>
+                              <p className="truncate text-sm font-bold text-white">{message.withdrawalResult.code}</p>
+                            </div>
+                            <span className="ml-auto rounded-full border border-emerald-300/15 bg-emerald-400/10 px-2 py-1 text-[9px] font-bold uppercase text-emerald-200">registrada</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 px-3.5 py-3 text-[11px] text-gray-400">
+                            <span className="flex items-center gap-1.5"><MapPin size={12} className="text-orange-300" /> <span className="truncate">{message.withdrawalResult.destinationLabel}</span></span>
+                            <span className="text-right">{message.withdrawalResult.itemCount} {message.withdrawalResult.itemCount === 1 ? 'item' : 'itens'}</span>
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 border-t border-white/[0.055] p-2.5">
+                            <button
+                              type="button"
+                              onClick={() => { navigate(message.withdrawalResult!.linkPath); setOpen(false) }}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2.5 text-xs font-bold text-white hover:bg-orange-400"
+                            >
+                              Abrir retirada <ExternalLink size={12} />
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => window.open(message.withdrawalResult!.printPath, '_blank', 'noopener,noreferrer')}
+                              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.055] px-3 py-2.5 text-xs font-semibold text-gray-200 hover:border-orange-300/20 hover:bg-orange-500/10"
+                            >
+                              Imprimir termo <Printer size={13} />
+                            </button>
+                          </div>
+                        </div>
+                      )}
                       {(message.linkPath || message.role === 'assistant') && (
                         <div className="mt-3 flex flex-wrap gap-2">
-                          {message.linkPath && (
+                          {message.linkPath && !message.withdrawalResult && (
                             <button
                               type="button"
                               onClick={() => { navigate(message.linkPath!); setOpen(false) }}
@@ -546,7 +642,7 @@ export function KimiAssistant() {
                               Abrir no JamaaW <ExternalLink size={12} />
                             </button>
                           )}
-                          {message.role === 'assistant' && (
+                          {message.role === 'assistant' && !message.withdrawalResult && (
                             <button
                               type="button"
                               onClick={() => void downloadAssistantPdf(message.pdfReport ?? createAssistantMessagePdfReport(message.content)).catch((pdfError) => setError(pdfError instanceof Error ? pdfError.message : 'Não foi possível gerar o PDF.'))}
@@ -575,15 +671,16 @@ export function KimiAssistant() {
                     <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-orange-200"><ShieldCheck size={15} /> Sua autorização</div>
                     <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[9px] font-medium text-gray-500">não executado</span>
                   </div>
-                  <p className="mt-3 text-sm font-medium leading-6 text-white">{confirmation.summary}</p>
+                  <div className="mt-3 text-sm font-medium leading-6 text-white"><AssistantRichMessage content={confirmation.summary} /></div>
                   <p className="mt-2 text-[11px] leading-4 text-gray-500">Confira os dados. Uma confirmação autoriza somente esta operação.</p>
                   <div className="mt-4 grid grid-cols-2 gap-2">
                     <button type="button" disabled={busy} onClick={() => void answerConfirmation(false)} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs font-semibold text-gray-300 hover:bg-white/10"><Ban size={14} /> Cancelar</button>
-                    <button type="button" disabled={busy} onClick={() => void answerConfirmation(true)} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2.5 text-xs font-bold text-white shadow-[0_10px_25px_rgba(249,115,22,0.25)] hover:bg-orange-400"><Check size={14} /> Autorizar</button>
+                    <button type="button" disabled={busy} onClick={() => void answerConfirmation(true)} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2.5 text-xs font-bold text-white shadow-[0_10px_25px_rgba(249,115,22,0.25)] hover:bg-orange-400"><Check size={14} /> {confirmation.toolName === 'create_withdrawal' ? 'Autorizar e imprimir' : 'Autorizar'}</button>
                   </div>
                 </section>
               )}
 
+              {notice && <div className="rounded-xl border border-amber-400/20 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-amber-100">{notice}</div>}
               {error && <div className="rounded-xl border border-red-400/20 bg-red-500/8 px-3 py-2 text-xs leading-5 text-red-200">{error}</div>}
             </div>
           </div>

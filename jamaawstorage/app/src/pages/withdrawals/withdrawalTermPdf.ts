@@ -482,6 +482,49 @@ export async function downloadWithdrawalTermPdf(
   pdf.save(options.fileName ?? 'termo-retirada-almoxarifado.pdf')
 }
 
+export async function printWithdrawalTermPdf(
+  terms: WithdrawalTermDocument[],
+  options: { fileName?: string; download?: boolean } = {},
+): Promise<void> {
+  if (terms.length === 0) return
+
+  const pdf = await buildPdf(terms)
+  const fileName = options.fileName ?? 'termo-retirada-almoxarifado.pdf'
+  if (options.download !== false) pdf.save(fileName)
+
+  const blobUrl = URL.createObjectURL(pdf.output('blob'))
+  const frame = document.createElement('iframe')
+  frame.title = 'Impressão do termo de retirada'
+  frame.setAttribute('aria-hidden', 'true')
+  frame.style.position = 'fixed'
+  frame.style.width = '1px'
+  frame.style.height = '1px'
+  frame.style.right = '0'
+  frame.style.bottom = '0'
+  frame.style.opacity = '0'
+  frame.style.pointerEvents = 'none'
+
+  let printRequested = false
+  const requestPrint = () => {
+    if (printRequested) return
+    printRequested = true
+    window.setTimeout(() => {
+      frame.contentWindow?.focus()
+      frame.contentWindow?.print()
+    }, 350)
+  }
+
+  frame.addEventListener('load', requestPrint, { once: true })
+  frame.src = blobUrl
+  document.body.appendChild(frame)
+
+  window.setTimeout(requestPrint, 1400)
+  window.setTimeout(() => {
+    frame.remove()
+    URL.revokeObjectURL(blobUrl)
+  }, 60_000)
+}
+
 export async function downloadIndividualWithdrawalTermPdfs(terms: WithdrawalTermDocument[]): Promise<void> {
   for (const term of terms) {
     const pdf = await buildPdf([term])
