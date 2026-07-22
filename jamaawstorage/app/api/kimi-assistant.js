@@ -75,7 +75,7 @@ const TOOLS = [
   tool('search_movement_history', 'Consulta o livro-razao de estoque por item, codigo ou pessoa.', {
     query: { type: 'string' },
     stock_item_id: { type: 'string' },
-    period: { type: 'string', enum: ['current_month', 'previous_month', 'custom', 'all'] },
+    period: { type: 'string', enum: ['today', 'yesterday', 'current_week', 'previous_week', 'current_month', 'previous_month', 'custom', 'all'] },
     start_date: { type: 'string' },
     end_date: { type: 'string' },
     limit: { type: 'integer', minimum: 1, maximum: 60 },
@@ -94,19 +94,20 @@ const TOOLS = [
   tool('calculate_withdrawal_totals', 'Calcula no banco o total completo de itens retirados em um periodo. Use obrigatoriamente para perguntas de quantidade, total, mes, semana ou intervalo; nunca some uma lista paginada.', {
     item_query: { type: 'string', description: 'Nome, codigo ou categoria do item, por exemplo bobina.' },
     stock_item_id: { type: 'string', description: 'ID exato quando ja resolvido.' },
-    period: { type: 'string', enum: ['current_month', 'previous_month', 'custom', 'all'] },
+    period: { type: 'string', enum: ['today', 'yesterday', 'current_week', 'previous_week', 'current_month', 'previous_month', 'custom', 'all'] },
     start_date: { type: 'string', description: 'Data inicial YYYY-MM-DD quando period=custom.' },
     end_date: { type: 'string', description: 'Data final inclusiva YYYY-MM-DD quando period=custom.' },
   }, ['item_query', 'period']),
-  tool('count_person_withdrawals', 'Conta retiradas em que uma pessoa exata foi o solicitante, opcionalmente contendo determinados itens. Use para perguntas como "quantas retiradas de bobina o Wilson fez este mes"; nao use para somar unidades.', {
-    person_id: { type: 'string' },
+  tool('count_person_withdrawals', 'Resolve a pessoa pelo nome e conta retiradas em que ela foi solicitante, opcionalmente filtrando itens pelo nome/codigo/categoria. Chame diretamente com os termos usados pelo usuario, sem buscar IDs antes. Pode ser chamada mais de uma vez na mesma resposta para comparar periodos.', {
+    person_query: { type: 'string', description: 'Nome ou matricula como o usuario informou, por exemplo Wilson.' },
+    person_id: { type: 'string', description: 'Opcional quando a pessoa ja estiver resolvida.' },
     person_name: { type: 'string' },
-    item_query: { type: 'string' },
+    item_query: { type: 'string', description: 'Somente o item mencionado, por exemplo bobina de espinar. Omita para contar todas as retiradas.' },
     stock_item_ids: { type: 'array', items: { type: 'string' } },
-    period: { type: 'string', enum: ['current_month', 'previous_month', 'custom', 'all'] },
+    period: { type: 'string', enum: ['today', 'yesterday', 'current_week', 'previous_week', 'current_month', 'previous_month', 'custom', 'all'] },
     start_date: { type: 'string' },
     end_date: { type: 'string' },
-  }, ['person_id', 'person_name', 'period']),
+  }, ['person_query', 'period']),
   tool('get_stock_threshold_overview', 'Consulta todos os itens ativos abaixo, no limite ou proximos do estoque minimo. Use para panorama de estoque critico; nao use uma busca paginada.', {
     near_margin: { type: 'integer', minimum: 0, maximum: 20, description: 'Quantidade acima do minimo ainda considerada proxima. Padrao 1.' },
   }),
@@ -223,7 +224,9 @@ const SYSTEM_PROMPT = `Voce e o assistente operacional do JamaaW Storage. Respon
 Regras obrigatorias:
 - Consulte as ferramentas antes de afirmar qualquer dado do app.
 - Para perguntas de total retirado, quantidade por mes, semana ou intervalo, use calculate_withdrawal_totals. Nunca calcule totais a partir de search_withdrawals ou de uma lista limitada.
-- Para contar quantas retiradas uma pessoa fez como solicitante, com ou sem filtro de item, resolva pessoa e itens separadamente e use count_person_withdrawals. Diferencie numero de retiradas de quantidade de unidades.
+- Para contar quantas retiradas uma pessoa fez como solicitante, com ou sem filtro de item, chame count_person_withdrawals diretamente com person_query, item_query e period. Essa ferramenta resolve nomes internamente; nao use search_people ou search_stock_items antes dela.
+- Quando o usuario fizer duas ou mais perguntas de contagem na mesma mensagem, preserve cada periodo/filtro e chame count_person_withdrawals uma vez para cada combinacao, podendo emitir as chamadas em paralelo.
+- Se count_person_withdrawals retornar person_not_found, person_ambiguous ou item_not_found, explique a resolucao necessaria. Nunca transforme entidade nao encontrada em contagem zero.
 - Resolva primeiro o item com search_stock_items e passe o stock_item_id para calculate_withdrawal_totals sempre que houver correspondencia exata.
 - Para estoque abaixo, no limite ou proximo do minimo, use get_stock_threshold_overview. Somente depois dessa consulta e permitido afirmar que os demais itens estao confortaveis.
 - Interprete "este mes" e outros periodos no calendario de America/Fortaleza. Informe claramente o intervalo considerado.
@@ -293,19 +296,49 @@ function monthBoundary(year, month) {
   }
 }
 
-function addOneCalendarDay(dateValue) {
+function shiftCalendarDay(dateValue, days) {
   const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(dateValue || ''))
   if (!match) throw new Error('Informe a data no formato YYYY-MM-DD.')
-  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + 1))
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]) + days))
   return date.toISOString().slice(0, 10)
+}
+
+function addOneCalendarDay(dateValue) {
+  return shiftCalendarDay(dateValue, 1)
+}
+
+function calendarDayPeriod(dateValue, label) {
+  return {
+    label,
+    startAt: `${dateValue}T00:00:00-03:00`,
+    endAt: `${addOneCalendarDay(dateValue)}T00:00:00-03:00`,
+  }
 }
 
 function resolvePeriod(args = {}) {
   const current = datePartsInFortaleza()
   const year = Number(current.year)
   const month = Number(current.month)
+  const currentDate = `${current.year}-${current.month}-${current.day}`
 
   if (args.period === 'all') return { label: 'todo o historico', startAt: null, endAt: null }
+  if (args.period === 'today') return calendarDayPeriod(currentDate, `hoje (${current.day}/${current.month}/${current.year})`)
+  if (args.period === 'yesterday') {
+    const yesterday = shiftCalendarDay(currentDate, -1)
+    return calendarDayPeriod(yesterday, `ontem (${yesterday.slice(8, 10)}/${yesterday.slice(5, 7)}/${yesterday.slice(0, 4)})`)
+  }
+  if (args.period === 'current_week' || args.period === 'previous_week') {
+    const currentUtc = new Date(`${currentDate}T00:00:00Z`)
+    const daysSinceMonday = (currentUtc.getUTCDay() + 6) % 7
+    const currentMonday = shiftCalendarDay(currentDate, -daysSinceMonday)
+    const startDate = args.period === 'previous_week' ? shiftCalendarDay(currentMonday, -7) : currentMonday
+    const endDate = shiftCalendarDay(startDate, 7)
+    return {
+      label: `${startDate.slice(8, 10)}/${startDate.slice(5, 7)}/${startDate.slice(0, 4)} a ${shiftCalendarDay(endDate, -1).slice(8, 10)}/${shiftCalendarDay(endDate, -1).slice(5, 7)}/${shiftCalendarDay(endDate, -1).slice(0, 4)}`,
+      startAt: `${startDate}T00:00:00-03:00`,
+      endAt: `${endDate}T00:00:00-03:00`,
+    }
+  }
   if (args.period === 'previous_month') {
     const previousYear = month === 1 ? year - 1 : year
     const previousMonth = month === 1 ? 12 : month - 1
@@ -604,24 +637,53 @@ function queryPath(table, select, query, extra = '') {
   return `${table}?${params.toString()}`
 }
 
+function cachedAnalyticsQuery(db, key, loader) {
+  if (!db.__assistantAnalyticsCache) db.__assistantAnalyticsCache = new Map()
+  if (!db.__assistantAnalyticsCache.has(key)) db.__assistantAnalyticsCache.set(key, Promise.resolve().then(loader))
+  return db.__assistantAnalyticsCache.get(key)
+}
+
 async function searchStockItemsForAnalytics(db, query) {
-  const select = 'id,code,name,category,unit,is_active'
-  const path = queryPath('stock_items', select, query, '(name.ilike.{q},code.ilike.{q},category.ilike.{q})')
-  let rows = await db.get(`${path}&order=name.asc&limit=500`)
-  const tokens = cleanSearch(query).split(/\s+/).filter((token) => token.length >= 2)
-  if (!rows.length && tokens.length > 1) {
-    const groups = await Promise.all(tokens.map(async (token) => {
-      const tokenPath = queryPath('stock_items', select, token, '(name.ilike.{q},code.ilike.{q},category.ilike.{q})')
-      return db.get(`${tokenPath}&order=name.asc&limit=500`)
-    }))
-    rows = groups[0]?.filter((item) => groups.every((group) => group.some((candidate) => candidate.id === item.id))) || []
+  return cachedAnalyticsQuery(db, `stock:${normalizeText(query)}`, async () => {
+    const select = 'id,code,name,category,unit,is_active'
+    const path = queryPath('stock_items', select, query, '(name.ilike.{q},code.ilike.{q},category.ilike.{q})')
+    let rows = await db.get(`${path}&order=name.asc&limit=500`)
+    const tokens = cleanSearch(query).split(/\s+/).filter((token) => token.length >= 2)
+    if (!rows.length && tokens.length > 1) {
+      const groups = await Promise.all(tokens.map(async (token) => {
+        const tokenPath = queryPath('stock_items', select, token, '(name.ilike.{q},code.ilike.{q},category.ilike.{q})')
+        return db.get(`${tokenPath}&order=name.asc&limit=500`)
+      }))
+      rows = groups[0]?.filter((item) => groups.every((group) => group.some((candidate) => candidate.id === item.id))) || []
+    }
+    const singularQuery = singularSearch(query)
+    if (!rows.length && singularQuery && singularQuery !== cleanSearch(query)) {
+      const singularPath = queryPath('stock_items', select, singularQuery, '(name.ilike.{q},code.ilike.{q},category.ilike.{q})')
+      rows = await db.get(`${singularPath}&order=name.asc&limit=500`)
+    }
+    return rows
+  })
+}
+
+async function resolvePersonForAnalytics(db, args) {
+  if (args.person_id) {
+    const rows = await db.get(`people?id=eq.${encodeURIComponent(args.person_id)}&is_active=eq.true&select=id,full_name,employee_id,is_active&limit=1`)
+    return rows[0] ? { person: rows[0], candidates: [] } : { person: null, candidates: [] }
   }
-  const singularQuery = singularSearch(query)
-  if (!rows.length && singularQuery && singularQuery !== cleanSearch(query)) {
-    const singularPath = queryPath('stock_items', select, singularQuery, '(name.ilike.{q},code.ilike.{q},category.ilike.{q})')
-    rows = await db.get(`${singularPath}&order=name.asc&limit=500`)
-  }
-  return rows
+
+  const query = cleanSearch(args.person_query || args.person_name)
+  if (!query) return { person: null, candidates: [] }
+  const rows = await cachedAnalyticsQuery(db, `person:${normalizeText(query)}`, async () => {
+    const path = queryPath('people', 'id,full_name,employee_id,is_active', query, '(full_name.ilike.{q},employee_id.ilike.{q})')
+    return db.get(`${path}&is_active=eq.true&order=full_name.asc&limit=20`)
+  })
+  const normalizedQuery = normalizeText(query)
+  const exact = rows.filter((person) =>
+    normalizeText(person.full_name) === normalizedQuery || normalizeText(person.employee_id) === normalizedQuery,
+  )
+  if (exact.length === 1) return { person: exact[0], candidates: [] }
+  if (rows.length === 1) return { person: rows[0], candidates: [] }
+  return { person: null, candidates: rows }
 }
 
 async function executeReadTool(db, name, args) {
@@ -690,6 +752,19 @@ async function executeReadTool(db, name, args) {
     }
     case 'count_person_withdrawals': {
       const period = resolvePeriod(args)
+      const resolvedPerson = await resolvePersonForAnalytics(db, args)
+      if (!resolvedPerson.person) {
+        return {
+          ok: false,
+          error_code: resolvedPerson.candidates.length > 1 ? 'person_ambiguous' : 'person_not_found',
+          person_query: args.person_query || args.person_name || null,
+          candidates: resolvedPerson.candidates.map((person) => ({ id: person.id, full_name: person.full_name, employee_id: person.employee_id })),
+          instruction: resolvedPerson.candidates.length > 1
+            ? 'Pergunte qual destas pessoas e a correta.'
+            : 'Informe que a pessoa nao foi encontrada; nao invente um cadastro.',
+        }
+      }
+      const person = resolvedPerson.person
       let matchedItems = []
       let stockItemIds = Array.isArray(args.stock_item_ids) ? cleanStringList(args.stock_item_ids, 100) : []
       if (args.item_query && stockItemIds.length === 0) {
@@ -697,19 +772,20 @@ async function executeReadTool(db, name, args) {
         stockItemIds = matchedItems.map((item) => item.id)
         if (stockItemIds.length === 0) {
           return {
-            person_id: args.person_id,
-            person_name: args.person_name,
+            ok: false,
+            error_code: 'item_not_found',
+            person_id: person.id,
+            person_name: person.full_name,
             item_query: args.item_query,
             matched_items: [],
             period,
-            withdrawal_count: 0,
-            definition: 'Nenhum item correspondeu ao filtro informado.',
+            instruction: 'Informe que o item nao foi encontrado; nao apresente isso como zero retiradas.',
           }
         }
       }
       const params = new URLSearchParams({
         select: stockItemIds.length > 0 ? 'id,withdrawal_items!inner(stock_item_id)' : 'id',
-        requested_by: `eq.${args.person_id}`,
+        requested_by: `eq.${person.id}`,
         status: 'in.(approved,completed)',
       })
       if (stockItemIds.length > 0) params.set('withdrawal_items.stock_item_id', `in.(${stockItemIds.join(',')})`)
@@ -717,8 +793,9 @@ async function executeReadTool(db, name, args) {
         params.set('or', `(and(withdrawn_at.gte.${period.startAt},withdrawn_at.lt.${period.endAt}),and(withdrawn_at.is.null,created_at.gte.${period.startAt},created_at.lt.${period.endAt}))`)
       }
       return {
-        person_id: args.person_id,
-        person_name: args.person_name,
+        ok: true,
+        person_id: person.id,
+        person_name: person.full_name,
         item_query: args.item_query || null,
         matched_items: matchedItems.map((item) => ({ id: item.id, code: item.code, name: item.name })),
         period,
@@ -790,19 +867,6 @@ async function prefetchOperationalContext(db, userText) {
     })
   }
 
-  const withdrawalMatch = normalized.match(/quant(?:as|os)\s+(.+?)\s+(?:foram\s+)?retirad/)
-    || normalized.match(/total\s+(?:de\s+)?(.+?)\s+retirad/)
-  if (withdrawalMatch?.[1]) {
-    const period = /mes passado|ultimo mes/.test(normalized) ? 'previous_month' : 'current_month'
-    prefetched.push({
-      source: 'calculate_withdrawal_totals',
-      data: await executeReadTool(db, 'calculate_withdrawal_totals', {
-        item_query: withdrawalMatch[1],
-        period,
-      }),
-    })
-  }
-
   return prefetched
 }
 
@@ -814,103 +878,6 @@ function onlyActiveWorkSite(prefetched) {
 function redundantlyAsksForWorkSite(content) {
   const normalized = normalizeText(content)
   return /(?:para )?qual obra|qual e a obra|informe (?:a )?obra|nome da obra|qual destino/.test(normalized)
-}
-
-const WITHDRAWAL_QUESTION_STOP_WORDS = new Set([
-  'a', 'as', 'atual', 'com', 'contem', 'contendo', 'da', 'das', 'de', 'do', 'dos', 'e', 'em',
-  'envolvendo', 'esse', 'esta', 'este', 'fez', 'item', 'itens', 'material', 'materiais', 'mes',
-  'neste', 'no', 'o', 'onde', 'os', 'para', 'passado', 'pela', 'pelo', 'por', 'quantas',
-  'quantidade', 'que', 'realizou', 'referente', 'relacionadas', 'relacionado', 'retirada',
-  'retiradas', 'solicitou', 'tem', 'teve', 'tinha', 'total',
-])
-
-function fastPersonWithdrawalIntent(userText) {
-  const normalized = normalizeText(userText)
-  if (!/\bquantas?\b/.test(normalized) || !/\bretiradas?\b/.test(normalized)) return null
-  if (/\bmes passado\b/.test(normalized)) return { normalized, period: 'previous_month' }
-  if (/\b(?:esse|este|neste) mes\b/.test(normalized)) return { normalized, period: 'current_month' }
-  return null
-}
-
-function scorePersonMention(person, normalizedQuestion) {
-  const normalizedName = normalizeText(person.full_name)
-  const questionTokens = new Set(normalizedQuestion.split(' '))
-  const nameTokens = normalizedName.split(' ').filter((token) => token.length >= 3)
-  let score = normalizedQuestion.includes(normalizedName) ? 100 : 0
-  nameTokens.forEach((token, index) => {
-    if (questionTokens.has(token)) score += index === 0 ? 8 : 2
-  })
-  if (person.employee_id && normalizedQuestion.includes(normalizeText(person.employee_id))) score += 50
-  return score
-}
-
-function extractItemQuery(normalizedQuestion, person) {
-  const personTokens = new Set(normalizeText(`${person.full_name} ${person.employee_id || ''}`).split(' '))
-  return normalizedQuestion
-    .split(' ')
-    .filter((token) => token.length >= 2 && !WITHDRAWAL_QUESTION_STOP_WORDS.has(token) && !personTokens.has(token))
-    .join(' ')
-    .trim()
-}
-
-async function tryFastPersonWithdrawalCount(db, userText) {
-  const intent = fastPersonWithdrawalIntent(userText)
-  if (!intent) return null
-
-  const people = await db.get('people?select=id,full_name,employee_id,is_active&is_active=eq.true&order=full_name.asc&limit=300')
-  const ranked = people
-    .map((person) => ({ person, score: scorePersonMention(person, intent.normalized) }))
-    .filter(({ score }) => score > 0)
-    .sort((left, right) => right.score - left.score)
-  const topScore = ranked[0]?.score || 0
-  const candidates = ranked.filter(({ score }) => score === topScore).map(({ person }) => person)
-
-  if (candidates.length === 0) {
-    return {
-      content: '## Pessoa não identificada\nNão consegui identificar qual colaborador ativo você mencionou. Informe o nome ou a matrícula.',
-      metadata: { fast_path: 'person_withdrawal_count', resolution: 'not_found' },
-    }
-  }
-
-  if (candidates.length > 1) {
-    return {
-      content: `## Qual colaborador?\nEncontrei mais de uma correspondência:\n${candidates.slice(0, 8).map((person) => `- **${person.full_name}**${person.employee_id ? ` — ${person.employee_id}` : ''}`).join('\n')}\n\nInforme o nome completo para eu contar corretamente.`,
-      metadata: { fast_path: 'person_withdrawal_count', resolution: 'ambiguous' },
-    }
-  }
-
-  const person = candidates[0]
-  const itemQuery = extractItemQuery(intent.normalized, person)
-  let matchedItems = []
-  if (itemQuery) {
-    matchedItems = await searchStockItemsForAnalytics(db, itemQuery)
-    if (matchedItems.length === 0) {
-      return {
-        content: `## Item não encontrado\nIdentifiquei **${person.full_name}**, mas não encontrei item correspondente a **${itemQuery}**.`,
-        metadata: { fast_path: 'person_withdrawal_count', resolution: 'item_not_found', person_id: person.id, item_query: itemQuery },
-      }
-    }
-  }
-  const result = await executeReadTool(db, 'count_person_withdrawals', {
-    person_id: person.id,
-    person_name: person.full_name,
-    period: intent.period,
-    item_query: itemQuery || undefined,
-    stock_item_ids: matchedItems.map((item) => item.id),
-  })
-  const count = Number(result.withdrawal_count || 0)
-  const itemLabel = itemQuery ? ` contendo **${itemQuery}**` : ''
-  return {
-    content: `## Retiradas de ${person.full_name}\n**${count} ${count === 1 ? 'retirada' : 'retiradas'}**${itemLabel} em **${result.period.label}**.\n\nCritério: retiradas concluídas ou aprovadas em que ${person.full_name} aparece como solicitante${itemQuery ? ` e que possuem item correspondente a ${itemQuery}` : ''}.`,
-    metadata: {
-      fast_path: 'person_withdrawal_count',
-      person_id: person.id,
-      period: result.period,
-      withdrawal_count: count,
-      item_query: itemQuery || null,
-      stock_item_ids: matchedItems.map((item) => item.id),
-    },
-  }
 }
 
 function confirmationSummary(name, args) {
@@ -1263,14 +1230,6 @@ export default async function handler(req, res) {
 
     const attachmentMeta = attachments.map((item) => ({ name: item.name, type: item.type, size: item.size }))
     await saveMessage(stateDb, conversation.id, auth.user.id, 'user', userText || 'Analise os arquivos anexados.', attachmentMeta)
-    if (attachments.length === 0) {
-      const fastResponse = await tryFastPersonWithdrawalCount(auth.db, userText)
-      if (fastResponse) {
-        await saveMessage(stateDb, conversation.id, auth.user.id, 'assistant', fastResponse.content, [], fastResponse.metadata)
-        sendJson(res, 200, { conversationId: conversation.id, message: fastResponse.content })
-        return
-      }
-    }
     const [extracted, history, , prefetched] = await Promise.all([
       extractAttachments(config.kimiKey, attachments),
       conversationMessages(stateDb, conversation.id),
