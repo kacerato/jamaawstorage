@@ -110,6 +110,7 @@ export default defineConfig(({ mode }) => {
   const forwardedEnvKeys = [
     'KIMI_API',
     'KIMI_CHAT_MODEL',
+    'KIMI_REASONING_EFFORT',
     'SUPABASE_URL',
     'SUPABASE_ANON_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',

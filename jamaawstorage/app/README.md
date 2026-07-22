@@ -89,6 +89,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 KIMI_API=
 KIMI_CHAT_MODEL=kimi-k3
+KIMI_REASONING_EFFORT=medium
 ZAI_API_KEY=
 VEHICLE_CV_SERVICE_URL=
 VEHICLE_CV_SERVICE_TOKEN=
@@ -108,6 +109,7 @@ TELEGRAM_CHANNEL_URL=
 
 - `KIMI_API`: usada na importacao inteligente e no assistente operacional autenticado.
 - `KIMI_CHAT_MODEL`: modelo do chat; o padrao e `kimi-k3`.
+- `KIMI_REASONING_EFFORT`: equilibrio entre velocidade e raciocinio; o padrao do assistente e `medium`.
 - `VEHICLE_CV_SERVICE_URL`: URL do serviço Python em `vehicle-cv-service/`. Esta e a via rapida e deterministica para leitura de painel.
 - `VEHICLE_CV_SERVICE_TOKEN`: segredo compartilhado entre a Vercel e o serviço Python; use o mesmo valor nos dois ambientes.
 - `ZAI_API_KEY`: fallback visual usado somente quando a leitura Python estiver ausente ou abaixo da confianca minima.

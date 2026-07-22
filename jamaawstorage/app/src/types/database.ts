@@ -1293,6 +1293,21 @@ export interface Database {
       last_withdrawal_at: string
     }[]
   }
+  assistant_stock_threshold_overview: {
+    Args: {
+      p_near_margin?: number
+    }
+    Returns: {
+      stock_item_id: string
+      code: string
+      name: string
+      unit: string
+      current_quantity: number
+      minimum_quantity: number
+      quantity_gap: number
+      threshold_status: 'below' | 'at_limit' | 'near'
+    }[]
+  }
   update_stock_item_details_and_quantity: {
     Args: {
       p_stock_item_id: string

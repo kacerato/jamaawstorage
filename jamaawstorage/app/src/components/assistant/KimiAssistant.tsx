@@ -9,7 +9,7 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
 } from 'react'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Ban,
   BrainCircuit,
@@ -31,6 +31,7 @@ import {
   X,
 } from 'lucide-react'
 import jamaawAssistant from '../../assets/jamaaw-assistant.png'
+import { AssistantRichMessage } from './AssistantRichMessage'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../hooks/useAuth'
 import { cn } from '../../lib/utils'
@@ -148,7 +149,6 @@ function Mascot({ className }: { className?: string }) {
 
 export function KimiAssistant() {
   const navigate = useNavigate()
-  const location = useLocation()
   const { profile } = useAuth()
   const [open, setOpen] = useState(false)
   const [view, setView] = useState<AssistantView>('operate')
@@ -169,7 +169,6 @@ export function KimiAssistant() {
   const dragRef = useRef<{ pointerId: number; startX: number; startY: number; origin: Position; moved: boolean } | null>(null)
 
   const storageKey = profile?.id ? `jamaaw-kimi-conversation:${profile.id}` : null
-  const pageContext = location.pathname === '/' ? 'Visão geral' : location.pathname.split('/').filter(Boolean).join(' / ')
 
   const panelPosition = useMemo(() => {
     if (typeof window === 'undefined') return { left: 12, top: 12, height: 720 }
@@ -462,16 +461,6 @@ export function KimiAssistant() {
             </div>
           </div>
 
-          <div className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-white/[0.06] bg-black/25 px-3 py-2">
-            <div className="flex min-w-0 items-center gap-2 text-[11px] text-gray-400">
-              <Command size={13} className="shrink-0 text-orange-300" />
-              <span className="truncate">Contexto: {pageContext}</span>
-            </div>
-            <div className="flex shrink-0 items-center gap-1 text-[10px] font-medium text-emerald-300/80">
-              <ShieldCheck size={12} /> confirmação ativa
-            </div>
-          </div>
-
           <nav className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.035] p-1" aria-label="Áreas do assistente">
             <button
               type="button"
@@ -535,7 +524,7 @@ export function KimiAssistant() {
                       <span className="ml-auto flex items-center gap-1 text-[10px] text-gray-600"><Database size={11} /> dados do app</span>
                     </div>
                     <div className="px-3.5 py-3 text-sm leading-6 text-gray-200">
-                      <p className="whitespace-pre-wrap">{message.content}</p>
+                      <AssistantRichMessage content={message.content} />
                       {message.linkPath && (
                         <button
                           type="button"

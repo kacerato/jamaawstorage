@@ -106,4 +106,57 @@ REVOKE EXECUTE ON FUNCTION public.assistant_withdrawal_item_totals(TEXT, UUID, T
 GRANT EXECUTE ON FUNCTION public.assistant_withdrawal_item_totals(TEXT, UUID, TIMESTAMPTZ, TIMESTAMPTZ)
   TO authenticated, service_role;
 
+CREATE OR REPLACE FUNCTION public.assistant_stock_threshold_overview(
+  p_near_margin INTEGER DEFAULT 1
+)
+RETURNS TABLE (
+  stock_item_id UUID,
+  code TEXT,
+  name TEXT,
+  unit TEXT,
+  current_quantity INTEGER,
+  minimum_quantity INTEGER,
+  quantity_gap INTEGER,
+  threshold_status TEXT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  IF NOT public.is_active_supervisor() THEN
+    RAISE EXCEPTION 'Acesso negado: somente supervisores ativos podem consultar o estoque critico.';
+  END IF;
+
+  RETURN QUERY
+  SELECT
+    item.id,
+    item.code,
+    item.name,
+    item.unit,
+    item.current_quantity,
+    item.minimum_quantity,
+    item.current_quantity - item.minimum_quantity,
+    CASE
+      WHEN item.current_quantity < item.minimum_quantity THEN 'below'
+      WHEN item.current_quantity = item.minimum_quantity THEN 'at_limit'
+      ELSE 'near'
+    END
+  FROM public.stock_items item
+  WHERE item.is_active = true
+    AND item.current_quantity <= item.minimum_quantity + GREATEST(COALESCE(p_near_margin, 1), 0)
+  ORDER BY
+    CASE WHEN item.current_quantity < item.minimum_quantity THEN 0
+         WHEN item.current_quantity = item.minimum_quantity THEN 1
+         ELSE 2 END,
+    (item.current_quantity - item.minimum_quantity) ASC,
+    item.name ASC;
+END;
+$$;
+
+REVOKE EXECUTE ON FUNCTION public.assistant_stock_threshold_overview(INTEGER)
+  FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.assistant_stock_threshold_overview(INTEGER)
+  TO authenticated, service_role;
+
 COMMIT;
