@@ -57,7 +57,7 @@ const TOOLS = [
     query: { type: 'string' },
     include_inactive: { type: 'boolean' },
   }, ['query']),
-  tool('search_work_sites', 'Busca obras por nome ou localizacao.', {
+  tool('search_work_sites', 'Busca obras por nome ou localizacao. Se o usuario disser apenas "obra", consulte com query vazia; quando existir exatamente uma obra ativa, use-a automaticamente.', {
     query: { type: 'string' },
     include_inactive: { type: 'boolean' },
   }, ['query']),
@@ -219,6 +219,7 @@ Regras obrigatorias:
 - Interprete "este mes" e outros periodos no calendario de America/Fortaleza. Informe claramente o intervalo considerado.
 - Para descobrir autoria ou campos alterados no backend, use search_audit_history; nao suponha a partir do estado atual.
 - Resolva nomes para IDs; se nao houver resultado, ofereca criar e colete os campos necessarios. Se houver mais de um resultado plausivel, pergunte qual e o correto.
+- Quando o destino for dito apenas como "obra", "a obra" ou "obra padrao", consulte as obras ativas. Se existir exatamente uma, selecione-a automaticamente e mostre o nome na confirmacao; nao pergunte qual obra. So pergunte quando houver duas ou mais obras ativas plausiveis.
 - Nunca invente item, pessoa, obra, retirada, saldo, codigo ou status.
 - Toda ferramenta de mutacao apenas prepara uma proposta. O servidor sempre pedira confirmacao ao usuario antes de executar.
 - Nao tente contornar a confirmacao e nao diga que algo foi executado antes de receber o resultado da ferramenta.
@@ -692,6 +693,21 @@ async function prefetchOperationalContext(db, userText) {
     })
   }
 
+  if (/\bobra(?:s)?\b|\bcanteiro\b/.test(normalized)) {
+    const activeWorkSites = await db.get('work_sites?select=id,name,location,is_active&is_active=eq.true&order=name.asc&limit=3')
+    prefetched.push({
+      source: 'active_work_sites',
+      data: {
+        count: activeWorkSites.length,
+        only_active_work_site: activeWorkSites.length === 1 ? activeWorkSites[0] : null,
+        candidates: activeWorkSites,
+        instruction: activeWorkSites.length === 1
+          ? 'Use esta obra automaticamente quando o usuario disser apenas obra; nao pergunte qual.'
+          : 'Pergunte qual obra somente se o usuario ainda nao tiver especificado uma das candidatas.',
+      },
+    })
+  }
+
   const withdrawalMatch = normalized.match(/quant(?:as|os)\s+(.+?)\s+(?:foram\s+)?retirad/)
     || normalized.match(/total\s+(?:de\s+)?(.+?)\s+retirad/)
   if (withdrawalMatch?.[1]) {
@@ -706,6 +722,16 @@ async function prefetchOperationalContext(db, userText) {
   }
 
   return prefetched
+}
+
+function onlyActiveWorkSite(prefetched) {
+  const entry = prefetched.find((item) => item.source === 'active_work_sites')
+  return entry?.data?.only_active_work_site || null
+}
+
+function redundantlyAsksForWorkSite(content) {
+  const normalized = normalizeText(content)
+  return /(?:para )?qual obra|qual e a obra|informe (?:a )?obra|nome da obra|qual destino/.test(normalized)
 }
 
 function confirmationSummary(name, args) {
@@ -1093,6 +1119,15 @@ export default async function handler(req, res) {
       const calls = assistantMessage.tool_calls || []
       if (calls.length === 0) {
         const content = assistantMessage.content || 'Não consegui concluir essa solicitação.'
+        const defaultWorkSite = onlyActiveWorkSite(prefetched)
+        if (defaultWorkSite && redundantlyAsksForWorkSite(content)) {
+          messages.push(assistantMessage)
+          messages.push({
+            role: 'system',
+            content: `CORRECAO OBRIGATORIA: existe exatamente uma obra ativa: ${defaultWorkSite.name} (id ${defaultWorkSite.id}). Use-a como destino, nao pergunte qual obra e prossiga coletando apenas outros dados realmente ausentes.`,
+          })
+          continue
+        }
         await saveMessage(stateDb, conversation.id, auth.user.id, 'assistant', content)
         sendJson(res, 200, { conversationId: conversation.id, message: content })
         return
