@@ -98,6 +98,13 @@ const TOOLS = [
     start_date: { type: 'string', description: 'Data inicial YYYY-MM-DD quando period=custom.' },
     end_date: { type: 'string', description: 'Data final inclusiva YYYY-MM-DD quando period=custom.' },
   }, ['item_query', 'period']),
+  tool('count_person_withdrawals', 'Conta retiradas em que uma pessoa exata foi o solicitante. Use para perguntas como "quantas retiradas o Wilson fez este mes"; nao use para somar unidades de itens.', {
+    person_id: { type: 'string' },
+    person_name: { type: 'string' },
+    period: { type: 'string', enum: ['current_month', 'previous_month', 'custom', 'all'] },
+    start_date: { type: 'string' },
+    end_date: { type: 'string' },
+  }, ['person_id', 'person_name', 'period']),
   tool('get_stock_threshold_overview', 'Consulta todos os itens ativos abaixo, no limite ou proximos do estoque minimo. Use para panorama de estoque critico; nao use uma busca paginada.', {
     near_margin: { type: 'integer', minimum: 0, maximum: 20, description: 'Quantidade acima do minimo ainda considerada proxima. Padrao 1.' },
   }),
@@ -214,6 +221,7 @@ const SYSTEM_PROMPT = `Voce e o assistente operacional do JamaaW Storage. Respon
 Regras obrigatorias:
 - Consulte as ferramentas antes de afirmar qualquer dado do app.
 - Para perguntas de total retirado, quantidade por mes, semana ou intervalo, use calculate_withdrawal_totals. Nunca calcule totais a partir de search_withdrawals ou de uma lista limitada.
+- Para contar quantas retiradas uma pessoa fez como solicitante, resolva a pessoa e use count_person_withdrawals. Diferencie numero de retiradas de quantidade de itens.
 - Resolva primeiro o item com search_stock_items e passe o stock_item_id para calculate_withdrawal_totals sempre que houver correspondencia exata.
 - Para estoque abaixo, no limite ou proximo do minimo, use get_stock_threshold_overview. Somente depois dessa consulta e permitido afirmar que os demais itens estao confortaveis.
 - Interprete "este mes" e outros periodos no calendario de America/Fortaleza. Informe claramente o intervalo considerado.
@@ -353,8 +361,22 @@ function restClient(config, token, apiKey = config.supabaseAnonKey) {
     return data
   }
 
+  async function count(path) {
+    const response = await fetch(`${config.supabaseUrl}/rest/v1/${path}`, {
+      headers: { ...headers, Prefer: 'count=exact', Range: '0-0', 'Range-Unit': 'items' },
+    })
+    if (!response.ok) {
+      const data = await response.json().catch(() => null)
+      throw new Error(data?.message || data?.error || `Falha no Supabase (${response.status}).`)
+    }
+    const match = /\/(\d+)$/.exec(response.headers.get('content-range') || '')
+    if (!match) throw new Error('O banco nao retornou a contagem exata solicitada.')
+    return Number(match[1])
+  }
+
   return {
     get: (path) => request(path),
+    count,
     insert: (table, payload) => request(table, { method: 'POST', headers: { Prefer: 'return=representation' }, body: JSON.stringify(payload) }),
     update: (table, query, payload) => request(`${table}?${query}`, { method: 'PATCH', headers: { Prefer: 'return=representation' }, body: JSON.stringify(payload) }),
     rpc: (name, payload) => request(`rpc/${name}`, { method: 'POST', body: JSON.stringify(payload) }),
@@ -644,6 +666,24 @@ async function executeReadTool(db, name, args) {
         definition: 'Somente retiradas com status approved ou completed; data de retirada, com criacao como fallback.',
       }
     }
+    case 'count_person_withdrawals': {
+      const period = resolvePeriod(args)
+      const params = new URLSearchParams({
+        select: 'id',
+        requested_by: `eq.${args.person_id}`,
+        status: 'in.(approved,completed)',
+      })
+      if (period.startAt && period.endAt) {
+        params.set('or', `(and(withdrawn_at.gte.${period.startAt},withdrawn_at.lt.${period.endAt}),and(withdrawn_at.is.null,created_at.gte.${period.startAt},created_at.lt.${period.endAt}))`)
+      }
+      return {
+        person_id: args.person_id,
+        person_name: args.person_name,
+        period,
+        withdrawal_count: await db.count(`withdrawals?${params.toString()}`),
+        definition: 'Retiradas approved ou completed em que a pessoa foi o solicitante; usa withdrawn_at e created_at como fallback.',
+      }
+    }
     case 'get_stock_threshold_overview': {
       const rows = await db.rpc('assistant_stock_threshold_overview', {
         p_near_margin: Math.max(0, Math.min(20, Number(args.near_margin ?? 1))),
@@ -732,6 +772,55 @@ function onlyActiveWorkSite(prefetched) {
 function redundantlyAsksForWorkSite(content) {
   const normalized = normalizeText(content)
   return /(?:para )?qual obra|qual e a obra|informe (?:a )?obra|nome da obra|qual destino/.test(normalized)
+}
+
+function fastPersonWithdrawalIntent(userText) {
+  const normalized = normalizeText(userText)
+  const currentMonth = /\bquantas?\s+retiradas?\s+(?:o\s+|a\s+)?(.+?)\s+(?:fez|realizou|solicitou)\s+(?:esse|este|neste)\s+mes\b/.exec(normalized)
+  if (currentMonth?.[1]) return { personQuery: currentMonth[1].trim(), period: 'current_month' }
+  const previousMonth = /\bquantas?\s+retiradas?\s+(?:o\s+|a\s+)?(.+?)\s+(?:fez|realizou|solicitou)\s+(?:no\s+)?mes\s+passado\b/.exec(normalized)
+  if (previousMonth?.[1]) return { personQuery: previousMonth[1].trim(), period: 'previous_month' }
+  return null
+}
+
+async function tryFastPersonWithdrawalCount(db, userText) {
+  const intent = fastPersonWithdrawalIntent(userText)
+  if (!intent) return null
+
+  const people = await executeReadTool(db, 'search_people', { query: intent.personQuery, include_inactive: false })
+  const exact = people.filter((person) => normalizeText(person.full_name) === normalizeText(intent.personQuery))
+  const candidates = exact.length === 1 ? exact : people
+
+  if (candidates.length === 0) {
+    return {
+      content: `## Pessoa não encontrada\nNão encontrei um colaborador ativo correspondente a **${intent.personQuery}**.`,
+      metadata: { fast_path: 'person_withdrawal_count', resolution: 'not_found' },
+    }
+  }
+
+  if (candidates.length > 1) {
+    return {
+      content: `## Qual colaborador?\nEncontrei mais de uma correspondência:\n${candidates.slice(0, 8).map((person) => `- **${person.full_name}**${person.employee_id ? ` — ${person.employee_id}` : ''}`).join('\n')}\n\nInforme o nome completo para eu contar corretamente.`,
+      metadata: { fast_path: 'person_withdrawal_count', resolution: 'ambiguous' },
+    }
+  }
+
+  const person = candidates[0]
+  const result = await executeReadTool(db, 'count_person_withdrawals', {
+    person_id: person.id,
+    person_name: person.full_name,
+    period: intent.period,
+  })
+  const count = Number(result.withdrawal_count || 0)
+  return {
+    content: `## Retiradas de ${person.full_name}\n**${count} ${count === 1 ? 'retirada' : 'retiradas'}** em **${result.period.label}**.\n\nCritério: retiradas concluídas ou aprovadas em que ${person.full_name} aparece como solicitante.`,
+    metadata: {
+      fast_path: 'person_withdrawal_count',
+      person_id: person.id,
+      period: result.period,
+      withdrawal_count: count,
+    },
+  }
 }
 
 function confirmationSummary(name, args) {
@@ -1084,6 +1173,14 @@ export default async function handler(req, res) {
 
     const attachmentMeta = attachments.map((item) => ({ name: item.name, type: item.type, size: item.size }))
     await saveMessage(stateDb, conversation.id, auth.user.id, 'user', userText || 'Analise os arquivos anexados.', attachmentMeta)
+    if (attachments.length === 0) {
+      const fastResponse = await tryFastPersonWithdrawalCount(auth.db, userText)
+      if (fastResponse) {
+        await saveMessage(stateDb, conversation.id, auth.user.id, 'assistant', fastResponse.content, [], fastResponse.metadata)
+        sendJson(res, 200, { conversationId: conversation.id, message: fastResponse.content })
+        return
+      }
+    }
     const [extracted, history, , prefetched] = await Promise.all([
       extractAttachments(config.kimiKey, attachments),
       conversationMessages(stateDb, conversation.id),
