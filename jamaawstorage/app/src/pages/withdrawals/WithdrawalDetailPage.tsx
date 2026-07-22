@@ -7,6 +7,7 @@ import {
   buildSavedWithdrawalTermDocuments,
   downloadIndividualWithdrawalTermPdfs,
   downloadWithdrawalTermPdf,
+  printWithdrawalTermPdf,
 } from './withdrawalTermPdf'
 import {
   Button,
@@ -187,7 +188,7 @@ export function WithdrawalDetailPage() {
   useEffect(() => {
     if (!withdrawal || !shouldAutoPrint || autoPrintHandledRef.current) return
     autoPrintHandledRef.current = true
-    void downloadWithdrawalTermPdf(buildSavedWithdrawalTermDocuments(withdrawal), {
+    void printWithdrawalTermPdf(buildSavedWithdrawalTermDocuments(withdrawal), {
       fileName: `${withdrawal.code}-termo-retirada.pdf`,
     })
   }, [shouldAutoPrint, withdrawal])

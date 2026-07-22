@@ -18,28 +18,16 @@
   }
 }
 
-/* Scroll precisa ser percebido: fino, mas nunca invisivel. */
+/* Rolagem continua funcional, mas sem trilhos visuais em nenhuma tela. */
 * {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(156, 163, 175, 0.32) transparent;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
 }
 
 *::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-*::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-*::-webkit-scrollbar-thumb {
-  border-radius: 999px;
-  background: rgba(156, 163, 175, 0.28);
-}
-
-*::-webkit-scrollbar-thumb:hover {
-  background: rgba(249, 115, 22, 0.45);
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 @media (min-width: 1024px) and (max-height: 850px) {

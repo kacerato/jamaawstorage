@@ -588,6 +588,75 @@ export interface Database {
           }
         ]
       }
+      ai_memories: {
+        Row: {
+          id: string
+          user_id: string
+          memory_key: string
+          memory_type: 'fact' | 'preference' | 'procedure' | 'alias' | 'rule'
+          title: string
+          content: string
+          trigger_terms: string[]
+          tags: string[]
+          importance: number
+          is_pinned: boolean
+          is_active: boolean
+          source_conversation_id: string | null
+          last_accessed_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          memory_key: string
+          memory_type?: 'fact' | 'preference' | 'procedure' | 'alias' | 'rule'
+          title: string
+          content: string
+          trigger_terms?: string[]
+          tags?: string[]
+          importance?: number
+          is_pinned?: boolean
+          is_active?: boolean
+          source_conversation_id?: string | null
+          last_accessed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          memory_key?: string
+          memory_type?: 'fact' | 'preference' | 'procedure' | 'alias' | 'rule'
+          title?: string
+          content?: string
+          trigger_terms?: string[]
+          tags?: string[]
+          importance?: number
+          is_pinned?: boolean
+          is_active?: boolean
+          source_conversation_id?: string | null
+          last_accessed_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_memories_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "ai_memories_source_conversation_id_fkey"
+            columns: ["source_conversation_id"]
+            isOneToOne: false
+            referencedRelation: "ai_conversations"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
   people: {
         Row: {
           id: string
@@ -1205,6 +1274,39 @@ export interface Database {
       p_action_id: string
     }
     Returns: Database['public']['Tables']['stock_items']['Row']
+  }
+  assistant_withdrawal_item_totals: {
+    Args: {
+      p_query?: string | null
+      p_stock_item_id?: string | null
+      p_start_at?: string | null
+      p_end_at?: string | null
+    }
+    Returns: {
+      stock_item_id: string
+      code: string
+      name: string
+      unit: string
+      total_quantity: number
+      withdrawal_count: number
+      first_withdrawal_at: string
+      last_withdrawal_at: string
+    }[]
+  }
+  assistant_stock_threshold_overview: {
+    Args: {
+      p_near_margin?: number
+    }
+    Returns: {
+      stock_item_id: string
+      code: string
+      name: string
+      unit: string
+      current_quantity: number
+      minimum_quantity: number
+      quantity_gap: number
+      threshold_status: 'below' | 'at_limit' | 'near'
+    }[]
   }
   update_stock_item_details_and_quantity: {
     Args: {

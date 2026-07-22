@@ -76,6 +76,7 @@ app/
 - **Veiculos**: frota, logs, fotos, documentos e analise por IA.
 - **Relatorios**: exportacoes e visoes consolidadas.
 - **Auditoria**: rastreio de alteracoes criticas.
+- **JAMAAW Assistente**: central operacional movel com anexos, memoria automatica, consultas agregadas, PDFs no padrao JamaaW e confirmacao obrigatoria para alteracoes.
 
 ## Variaveis de Ambiente
 
@@ -88,6 +89,7 @@ SUPABASE_SERVICE_ROLE_KEY=
 
 KIMI_API=
 KIMI_CHAT_MODEL=kimi-k3
+KIMI_REASONING_EFFORT=medium
 ZAI_API_KEY=
 VEHICLE_CV_SERVICE_URL=
 VEHICLE_CV_SERVICE_TOKEN=
@@ -101,12 +103,13 @@ TELEGRAM_CHANNEL_URL=
 
 - `VITE_SUPABASE_URL`: URL do projeto Supabase.
 - `VITE_SUPABASE_ANON_KEY`: chave anon publica do Supabase.
-- `SUPABASE_SERVICE_ROLE_KEY`: segredo exclusivo do backend para persistir conversas e confirmações. Nunca exponha com prefixo `VITE_`.
+- `SUPABASE_SERVICE_ROLE_KEY`: segredo exclusivo do backend para persistir conversas, memorias e confirmacoes. Nunca exponha com prefixo `VITE_`.
 
 ### Opcionais conforme recurso
 
 - `KIMI_API`: usada na importacao inteligente e no assistente operacional autenticado.
 - `KIMI_CHAT_MODEL`: modelo do chat; o padrao e `kimi-k3`.
+- `KIMI_REASONING_EFFORT`: equilibrio entre velocidade e raciocinio; o padrao do assistente e `medium`.
 - `VEHICLE_CV_SERVICE_URL`: URL do serviço Python em `vehicle-cv-service/`. Esta e a via rapida e deterministica para leitura de painel.
 - `VEHICLE_CV_SERVICE_TOKEN`: segredo compartilhado entre a Vercel e o serviço Python; use o mesmo valor nos dois ambientes.
 - `ZAI_API_KEY`: fallback visual usado somente quando a leitura Python estiver ausente ou abaixo da confianca minima.
