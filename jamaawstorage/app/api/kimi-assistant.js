@@ -1,6 +1,7 @@
 const KIMI_API_URL = 'https://api.moonshot.ai/v1'
 const KIMI_MODEL = process.env.KIMI_CHAT_MODEL || 'kimi-k3'
 const KIMI_REASONING_EFFORT = process.env.KIMI_REASONING_EFFORT || 'medium'
+const KIMI_FAST_REASONING_EFFORT = process.env.KIMI_FAST_REASONING_EFFORT || 'low'
 const MAX_TOOL_ROUNDS = 6
 const MAX_ATTACHMENT_BYTES = 4 * 1024 * 1024
 const APP_TIME_ZONE = 'America/Fortaleza'
@@ -107,6 +108,16 @@ const TOOLS = [
     period: { type: 'string', enum: ['today', 'yesterday', 'current_week', 'previous_week', 'current_month', 'previous_month', 'custom', 'all'] },
     start_date: { type: 'string' },
     end_date: { type: 'string' },
+  }, ['person_query', 'period']),
+  tool('list_person_withdrawals', 'Lista as retiradas correspondentes a uma contagem anterior, resolvendo pessoa, item e periodo internamente. Use para perguntas como "quais sao essas retiradas", inferindo os filtros da conversa anterior.', {
+    person_query: { type: 'string' },
+    person_id: { type: 'string' },
+    item_query: { type: 'string' },
+    stock_item_ids: { type: 'array', items: { type: 'string' } },
+    period: { type: 'string', enum: ['today', 'yesterday', 'current_week', 'previous_week', 'current_month', 'previous_month', 'custom', 'all'] },
+    start_date: { type: 'string' },
+    end_date: { type: 'string' },
+    limit: { type: 'integer', minimum: 1, maximum: 100 },
   }, ['person_query', 'period']),
   tool('get_stock_threshold_overview', 'Consulta todos os itens ativos abaixo, no limite ou proximos do estoque minimo. Use para panorama de estoque critico; nao use uma busca paginada.', {
     near_margin: { type: 'integer', minimum: 0, maximum: 20, description: 'Quantidade acima do minimo ainda considerada proxima. Padrao 1.' },
@@ -227,6 +238,7 @@ Regras obrigatorias:
 - Para contar quantas retiradas uma pessoa fez como solicitante, com ou sem filtro de item, chame count_person_withdrawals diretamente com person_query, item_query e period. Essa ferramenta resolve nomes internamente; nao use search_people ou search_stock_items antes dela.
 - Quando o usuario fizer duas ou mais perguntas de contagem na mesma mensagem, preserve cada periodo/filtro e chame count_person_withdrawals uma vez para cada combinacao, podendo emitir as chamadas em paralelo.
 - Se count_person_withdrawals retornar person_not_found, person_ambiguous ou item_not_found, explique a resolucao necessaria. Nunca transforme entidade nao encontrada em contagem zero.
+- Para continuacoes como "quais sao essas retiradas", recupere pessoa, item e periodo da conversa imediatamente anterior e chame list_person_withdrawals diretamente. Nao recompute por ferramentas genericas.
 - Resolva primeiro o item com search_stock_items e passe o stock_item_id para calculate_withdrawal_totals sempre que houver correspondencia exata.
 - Para estoque abaixo, no limite ou proximo do minimo, use get_stock_threshold_overview. Somente depois dessa consulta e permitido afirmar que os demais itens estao confortaveis.
 - Interprete "este mes" e outros periodos no calendario de America/Fortaleza. Informe claramente o intervalo considerado.
@@ -571,8 +583,14 @@ async function saveMessage(db, conversationId, userId, role, content, attachment
 }
 
 async function conversationMessages(db, conversationId) {
-  const rows = await db.get(`ai_messages?conversation_id=eq.${conversationId}&select=role,content&order=created_at.desc&limit=24`)
-  return [...rows].reverse().map((message) => ({ role: message.role, content: message.content }))
+  const rows = await db.get(`ai_messages?conversation_id=eq.${conversationId}&select=role,content,metadata&order=created_at.desc&limit=24`)
+  return [...rows].reverse().map((message) => {
+    const queryContexts = Array.isArray(message.metadata?.query_contexts) ? message.metadata.query_contexts : []
+    const structuredContext = queryContexts.length
+      ? `\n\n[CONTEXTO ESTRUTURADO DA CONSULTA ANTERIOR: ${JSON.stringify(queryContexts)}]`
+      : ''
+    return { role: message.role, content: `${message.content}${structuredContext}` }
+  })
 }
 
 async function extractAttachments(kimiKey, attachments) {
@@ -611,10 +629,10 @@ async function cleanupFiles(kimiKey, ids) {
   await Promise.allSettled(ids.map((id) => fetch(`${KIMI_API_URL}/files/${id}`, { method: 'DELETE', headers: { Authorization: `Bearer ${kimiKey}` } })))
 }
 
-async function callKimi(kimiKey, messages, promptCacheKey) {
+async function callKimi(kimiKey, messages, promptCacheKey, reasoningEffort = KIMI_REASONING_EFFORT) {
   const requestBody = {
     model: KIMI_MODEL,
-    reasoning_effort: KIMI_REASONING_EFFORT,
+    reasoning_effort: reasoningEffort,
     messages,
     tools: TOOLS,
     max_completion_tokens: 3500,
@@ -686,6 +704,57 @@ async function resolvePersonForAnalytics(db, args) {
   return { person: null, candidates: rows }
 }
 
+async function resolvePersonWithdrawalFilters(db, args) {
+  const period = resolvePeriod(args)
+  const resolvedPerson = await resolvePersonForAnalytics(db, args)
+  if (!resolvedPerson.person) {
+    return {
+      ok: false,
+      error_code: resolvedPerson.candidates.length > 1 ? 'person_ambiguous' : 'person_not_found',
+      person_query: args.person_query || args.person_name || null,
+      candidates: resolvedPerson.candidates.map((person) => ({ id: person.id, full_name: person.full_name, employee_id: person.employee_id })),
+      instruction: resolvedPerson.candidates.length > 1
+        ? 'Pergunte qual destas pessoas e a correta.'
+        : 'Informe que a pessoa nao foi encontrada; nao invente um cadastro.',
+    }
+  }
+
+  const person = resolvedPerson.person
+  let matchedItems = []
+  let stockItemIds = Array.isArray(args.stock_item_ids) ? cleanStringList(args.stock_item_ids, 100) : []
+  if (args.item_query && stockItemIds.length === 0) {
+    matchedItems = await searchStockItemsForAnalytics(db, args.item_query)
+    stockItemIds = matchedItems.map((item) => item.id)
+    if (stockItemIds.length === 0) {
+      return {
+        ok: false,
+        error_code: 'item_not_found',
+        person_id: person.id,
+        person_name: person.full_name,
+        item_query: args.item_query,
+        matched_items: [],
+        period,
+        instruction: 'Informe que o item nao foi encontrado; nao apresente isso como zero retiradas.',
+      }
+    }
+  }
+
+  return { ok: true, period, person, matchedItems, stockItemIds, itemQuery: args.item_query || null }
+}
+
+function personWithdrawalParams(filters, select) {
+  const params = new URLSearchParams({
+    select,
+    requested_by: `eq.${filters.person.id}`,
+    status: 'in.(approved,completed)',
+  })
+  if (filters.stockItemIds.length > 0) params.set('withdrawal_items.stock_item_id', `in.(${filters.stockItemIds.join(',')})`)
+  if (filters.period.startAt && filters.period.endAt) {
+    params.set('or', `(and(withdrawn_at.gte.${filters.period.startAt},withdrawn_at.lt.${filters.period.endAt}),and(withdrawn_at.is.null,created_at.gte.${filters.period.startAt},created_at.lt.${filters.period.endAt}))`)
+  }
+  return params
+}
+
 async function executeReadTool(db, name, args) {
   switch (name) {
     case 'search_stock_items': {
@@ -751,56 +820,49 @@ async function executeReadTool(db, name, args) {
       }
     }
     case 'count_person_withdrawals': {
-      const period = resolvePeriod(args)
-      const resolvedPerson = await resolvePersonForAnalytics(db, args)
-      if (!resolvedPerson.person) {
-        return {
-          ok: false,
-          error_code: resolvedPerson.candidates.length > 1 ? 'person_ambiguous' : 'person_not_found',
-          person_query: args.person_query || args.person_name || null,
-          candidates: resolvedPerson.candidates.map((person) => ({ id: person.id, full_name: person.full_name, employee_id: person.employee_id })),
-          instruction: resolvedPerson.candidates.length > 1
-            ? 'Pergunte qual destas pessoas e a correta.'
-            : 'Informe que a pessoa nao foi encontrada; nao invente um cadastro.',
-        }
-      }
-      const person = resolvedPerson.person
-      let matchedItems = []
-      let stockItemIds = Array.isArray(args.stock_item_ids) ? cleanStringList(args.stock_item_ids, 100) : []
-      if (args.item_query && stockItemIds.length === 0) {
-        matchedItems = await searchStockItemsForAnalytics(db, args.item_query)
-        stockItemIds = matchedItems.map((item) => item.id)
-        if (stockItemIds.length === 0) {
-          return {
-            ok: false,
-            error_code: 'item_not_found',
-            person_id: person.id,
-            person_name: person.full_name,
-            item_query: args.item_query,
-            matched_items: [],
-            period,
-            instruction: 'Informe que o item nao foi encontrado; nao apresente isso como zero retiradas.',
-          }
-        }
-      }
-      const params = new URLSearchParams({
-        select: stockItemIds.length > 0 ? 'id,withdrawal_items!inner(stock_item_id)' : 'id',
-        requested_by: `eq.${person.id}`,
-        status: 'in.(approved,completed)',
-      })
-      if (stockItemIds.length > 0) params.set('withdrawal_items.stock_item_id', `in.(${stockItemIds.join(',')})`)
-      if (period.startAt && period.endAt) {
-        params.set('or', `(and(withdrawn_at.gte.${period.startAt},withdrawn_at.lt.${period.endAt}),and(withdrawn_at.is.null,created_at.gte.${period.startAt},created_at.lt.${period.endAt}))`)
-      }
+      const filters = await resolvePersonWithdrawalFilters(db, args)
+      if (!filters.ok) return filters
+      const select = filters.stockItemIds.length > 0 ? 'id,withdrawal_items!inner(stock_item_id)' : 'id'
+      const params = personWithdrawalParams(filters, select)
       return {
         ok: true,
-        person_id: person.id,
-        person_name: person.full_name,
-        item_query: args.item_query || null,
-        matched_items: matchedItems.map((item) => ({ id: item.id, code: item.code, name: item.name })),
-        period,
+        person_id: filters.person.id,
+        person_name: filters.person.full_name,
+        item_query: filters.itemQuery,
+        matched_items: filters.matchedItems.map((item) => ({ id: item.id, code: item.code, name: item.name })),
+        stock_item_ids: filters.stockItemIds,
+        period: filters.period,
         withdrawal_count: await db.count(`withdrawals?${params.toString()}`),
-        definition: `Retiradas approved ou completed em que a pessoa foi o solicitante${stockItemIds.length > 0 ? ' e que contem ao menos um dos itens filtrados' : ''}; usa withdrawn_at e created_at como fallback.`,
+        definition: `Retiradas approved ou completed em que a pessoa foi o solicitante${filters.stockItemIds.length > 0 ? ' e que contem ao menos um dos itens filtrados' : ''}; usa withdrawn_at e created_at como fallback.`,
+      }
+    }
+    case 'list_person_withdrawals': {
+      const filters = await resolvePersonWithdrawalFilters(db, args)
+      if (!filters.ok) return filters
+      const itemFields = 'id,quantity,unit,destination_type,collaborator:people!withdrawal_items_collaborator_id_fkey(full_name),work_site:work_sites!withdrawal_items_work_site_id_fkey(name),stock_item:stock_items(id,code,name)'
+      const itemEmbed = filters.stockItemIds.length > 0
+        ? `withdrawal_items!inner(${itemFields})`
+        : `withdrawal_items(${itemFields})`
+      const listParams = personWithdrawalParams(filters, `id,code,status,withdrawn_at,created_at,destination_type,collaborator:people!withdrawals_collaborator_id_fkey(full_name),work_site:work_sites(name),${itemEmbed}`)
+      listParams.set('order', 'withdrawn_at.desc.nullslast,created_at.desc')
+      listParams.set('limit', String(Math.min(Math.max(Number(args.limit || 50), 1), 100)))
+      const countSelect = filters.stockItemIds.length > 0 ? 'id,withdrawal_items!inner(stock_item_id)' : 'id'
+      const countParams = personWithdrawalParams(filters, countSelect)
+      const [withdrawals, totalCount] = await Promise.all([
+        db.get(`withdrawals?${listParams.toString()}`),
+        db.count(`withdrawals?${countParams.toString()}`),
+      ])
+      return {
+        ok: true,
+        person_id: filters.person.id,
+        person_name: filters.person.full_name,
+        item_query: filters.itemQuery,
+        matched_items: filters.matchedItems.map((item) => ({ id: item.id, code: item.code, name: item.name })),
+        stock_item_ids: filters.stockItemIds,
+        period: filters.period,
+        total_count: totalCount,
+        returned_count: withdrawals.length,
+        withdrawals,
       }
     }
     case 'get_stock_threshold_overview': {
@@ -838,6 +900,114 @@ async function executeReadTool(db, name, args) {
       return { period, events: await db.get(`audit_logs?${params.toString()}`) }
     }
     default: throw new Error(`Ferramenta de consulta nao reconhecida: ${name}`)
+  }
+}
+
+function formatAnalyticsResolutionError(result) {
+  if (result.error_code === 'person_ambiguous') {
+    return `## Qual colaborador?\n${result.candidates.map((person) => `- **${person.full_name}**${person.employee_id ? ` — ${person.employee_id}` : ''}`).join('\n')}\n\nInforme qual deles é o correto.`
+  }
+  if (result.error_code === 'person_not_found') {
+    return `## Pessoa não encontrada\nNão encontrei colaborador ativo correspondente a **${markdownCell(result.person_query || 'nome informado')}**.`
+  }
+  if (result.error_code === 'item_not_found') {
+    return `## Item não encontrado\nIdentifiquei **${markdownCell(result.person_name)}**, mas não encontrei item correspondente a **${markdownCell(result.item_query)}**.`
+  }
+  return 'Não foi possível resolver os filtros dessa consulta.'
+}
+
+function analyticsItemLabel(result) {
+  if (result.matched_items?.length) {
+    return result.matched_items.map((item) => `${item.name}${item.code ? ` (${item.code})` : ''}`).join(', ')
+  }
+  return result.item_query || null
+}
+
+function formatCountPersonWithdrawals(result) {
+  if (!result.ok) return formatAnalyticsResolutionError(result)
+  const count = Number(result.withdrawal_count || 0)
+  const itemLabel = analyticsItemLabel(result)
+  return [
+    `## Retiradas de ${markdownCell(result.person_name)}`,
+    `**${count} ${count === 1 ? 'retirada' : 'retiradas'}**${itemLabel ? ` contendo **${markdownCell(itemLabel)}**` : ''} em **${markdownCell(result.period.label)}**.`,
+    '',
+    `Critério: retiradas concluídas ou aprovadas em que ${markdownCell(result.person_name)} aparece como solicitante${itemLabel ? ' e que contêm o item filtrado' : ''}.`,
+  ].join('\n')
+}
+
+function formatWithdrawalDate(value) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return new Intl.DateTimeFormat('pt-BR', { timeZone: APP_TIME_ZONE, dateStyle: 'short' }).format(date)
+}
+
+function withdrawalDestinationLabel(withdrawal) {
+  const destinations = (withdrawal.withdrawal_items || []).map((item) =>
+    item.destination_type === 'collaborator'
+      ? item.collaborator?.full_name
+      : item.destination_type === 'work_site'
+        ? item.work_site?.name
+        : null,
+  ).filter(Boolean)
+  if (destinations.length) return [...new Set(destinations)].join(', ')
+  return withdrawal.destination_type === 'collaborator'
+    ? withdrawal.collaborator?.full_name || 'Colaborador'
+    : withdrawal.work_site?.name || 'Obra'
+}
+
+function formatListPersonWithdrawals(result) {
+  if (!result.ok) return formatAnalyticsResolutionError(result)
+  const itemLabel = analyticsItemLabel(result)
+  if (!result.withdrawals?.length) {
+    return `## Retiradas de ${markdownCell(result.person_name)}\nNenhuma retirada${itemLabel ? ` contendo **${markdownCell(itemLabel)}**` : ''} foi encontrada em **${markdownCell(result.period.label)}**.`
+  }
+
+  const rows = result.withdrawals.map((withdrawal) => {
+    const items = (withdrawal.withdrawal_items || []).map((item) =>
+      `${item.stock_item?.name || 'Item'}: ${item.quantity} ${item.unit || 'un'}`,
+    ).join('; ')
+    return `| ${markdownCell(withdrawal.code)} | ${formatWithdrawalDate(withdrawal.withdrawn_at || withdrawal.created_at)} | ${markdownCell(items)} | ${markdownCell(withdrawalDestinationLabel(withdrawal))} |`
+  })
+  const partialNotice = result.returned_count < result.total_count
+    ? `\nMostrando ${result.returned_count} de ${result.total_count} retiradas.`
+    : ''
+  return [
+    `## Retiradas de ${markdownCell(result.person_name)}`,
+    `${result.total_count} ${result.total_count === 1 ? 'retirada encontrada' : 'retiradas encontradas'}${itemLabel ? ` contendo **${markdownCell(itemLabel)}**` : ''} em **${markdownCell(result.period.label)}**.`,
+    '',
+    '| Retirada | Data | Itens | Destino |',
+    '|---|---|---|---|',
+    ...rows,
+    partialNotice,
+  ].filter((line) => line !== '').join('\n')
+}
+
+function analyticsQueryContext(name, result) {
+  if (!result?.ok) return null
+  return {
+    tool: name,
+    person_id: result.person_id,
+    person_name: result.person_name,
+    item_query: result.item_query,
+    stock_item_ids: result.stock_item_ids,
+    period: result.period,
+  }
+}
+
+function directReadToolResponse(toolResults) {
+  const formatters = {
+    count_person_withdrawals: formatCountPersonWithdrawals,
+    list_person_withdrawals: formatListPersonWithdrawals,
+  }
+  if (!toolResults.length || !toolResults.every(({ call, result }) => formatters[call.function.name] && !result?.error)) return null
+  const content = toolResults.map(({ call, result }) => formatters[call.function.name](result)).join('\n\n')
+  return {
+    content,
+    metadata: {
+      direct_tool_response: true,
+      query_contexts: toolResults.map(({ call, result }) => analyticsQueryContext(call.function.name, result)).filter(Boolean),
+    },
   }
 }
 
@@ -1230,14 +1400,14 @@ export default async function handler(req, res) {
 
     const attachmentMeta = attachments.map((item) => ({ name: item.name, type: item.type, size: item.size }))
     await saveMessage(stateDb, conversation.id, auth.user.id, 'user', userText || 'Analise os arquivos anexados.', attachmentMeta)
-    const [extracted, history, , prefetched] = await Promise.all([
+    const [extracted, history, , prefetched, memories] = await Promise.all([
       extractAttachments(config.kimiKey, attachments),
       conversationMessages(stateDb, conversation.id),
       autoRememberStableInformation(stateDb, auth.user.id, conversation.id, userText),
       prefetchOperationalContext(auth.db, userText),
+      relevantMemories(stateDb, auth.user.id, userText),
     ])
     uploadedIds = extracted.uploadedIds
-    const memories = await relevantMemories(stateDb, auth.user.id, userText)
     const now = new Intl.DateTimeFormat('pt-BR', {
       timeZone: APP_TIME_ZONE,
       dateStyle: 'full',
@@ -1260,8 +1430,16 @@ export default async function handler(req, res) {
       }
     }
 
+    const initialReasoningEffort = attachments.length === 0 && userText.length <= 500
+      ? KIMI_FAST_REASONING_EFFORT
+      : KIMI_REASONING_EFFORT
     for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-      const assistantMessage = await callKimi(config.kimiKey, messages, conversation.id)
+      const assistantMessage = await callKimi(
+        config.kimiKey,
+        messages,
+        conversation.id,
+        round === 0 ? initialReasoningEffort : KIMI_REASONING_EFFORT,
+      )
       const calls = assistantMessage.tool_calls || []
       if (calls.length === 0) {
         const content = assistantMessage.content || 'Não consegui concluir essa solicitação.'
@@ -1326,6 +1504,12 @@ export default async function handler(req, res) {
           return { call, result: { error: error instanceof Error ? error.message : 'Falha na consulta.' } }
         }
       }))
+      const directResponse = directReadToolResponse(toolResults)
+      if (directResponse) {
+        await saveMessage(stateDb, conversation.id, auth.user.id, 'assistant', directResponse.content, [], directResponse.metadata)
+        sendJson(res, 200, { conversationId: conversation.id, message: directResponse.content })
+        return
+      }
       for (const { call, result } of toolResults) {
         messages.push({ role: 'tool', tool_call_id: call.id, content: JSON.stringify(result).slice(0, 16000) })
       }
