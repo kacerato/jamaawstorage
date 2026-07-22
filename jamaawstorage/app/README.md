@@ -76,6 +76,7 @@ app/
 - **Veiculos**: frota, logs, fotos, documentos e analise por IA.
 - **Relatorios**: exportacoes e visoes consolidadas.
 - **Auditoria**: rastreio de alteracoes criticas.
+- **JAMAAW Assistente**: central operacional movel com anexos, memoria por gatilhos, consultas agregadas e confirmacao obrigatoria para alteracoes.
 
 ## Variaveis de Ambiente
 
@@ -101,7 +102,7 @@ TELEGRAM_CHANNEL_URL=
 
 - `VITE_SUPABASE_URL`: URL do projeto Supabase.
 - `VITE_SUPABASE_ANON_KEY`: chave anon publica do Supabase.
-- `SUPABASE_SERVICE_ROLE_KEY`: segredo exclusivo do backend para persistir conversas e confirmações. Nunca exponha com prefixo `VITE_`.
+- `SUPABASE_SERVICE_ROLE_KEY`: segredo exclusivo do backend para persistir conversas, memorias e confirmacoes. Nunca exponha com prefixo `VITE_`.
 
 ### Opcionais conforme recurso
 
