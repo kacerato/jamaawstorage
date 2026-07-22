@@ -98,9 +98,11 @@ const TOOLS = [
     start_date: { type: 'string', description: 'Data inicial YYYY-MM-DD quando period=custom.' },
     end_date: { type: 'string', description: 'Data final inclusiva YYYY-MM-DD quando period=custom.' },
   }, ['item_query', 'period']),
-  tool('count_person_withdrawals', 'Conta retiradas em que uma pessoa exata foi o solicitante. Use para perguntas como "quantas retiradas o Wilson fez este mes"; nao use para somar unidades de itens.', {
+  tool('count_person_withdrawals', 'Conta retiradas em que uma pessoa exata foi o solicitante, opcionalmente contendo determinados itens. Use para perguntas como "quantas retiradas de bobina o Wilson fez este mes"; nao use para somar unidades.', {
     person_id: { type: 'string' },
     person_name: { type: 'string' },
+    item_query: { type: 'string' },
+    stock_item_ids: { type: 'array', items: { type: 'string' } },
     period: { type: 'string', enum: ['current_month', 'previous_month', 'custom', 'all'] },
     start_date: { type: 'string' },
     end_date: { type: 'string' },
@@ -221,7 +223,7 @@ const SYSTEM_PROMPT = `Voce e o assistente operacional do JamaaW Storage. Respon
 Regras obrigatorias:
 - Consulte as ferramentas antes de afirmar qualquer dado do app.
 - Para perguntas de total retirado, quantidade por mes, semana ou intervalo, use calculate_withdrawal_totals. Nunca calcule totais a partir de search_withdrawals ou de uma lista limitada.
-- Para contar quantas retiradas uma pessoa fez como solicitante, resolva a pessoa e use count_person_withdrawals. Diferencie numero de retiradas de quantidade de itens.
+- Para contar quantas retiradas uma pessoa fez como solicitante, com ou sem filtro de item, resolva pessoa e itens separadamente e use count_person_withdrawals. Diferencie numero de retiradas de quantidade de unidades.
 - Resolva primeiro o item com search_stock_items e passe o stock_item_id para calculate_withdrawal_totals sempre que houver correspondencia exata.
 - Para estoque abaixo, no limite ou proximo do minimo, use get_stock_threshold_overview. Somente depois dessa consulta e permitido afirmar que os demais itens estao confortaveis.
 - Interprete "este mes" e outros periodos no calendario de America/Fortaleza. Informe claramente o intervalo considerado.
@@ -602,6 +604,26 @@ function queryPath(table, select, query, extra = '') {
   return `${table}?${params.toString()}`
 }
 
+async function searchStockItemsForAnalytics(db, query) {
+  const select = 'id,code,name,category,unit,is_active'
+  const path = queryPath('stock_items', select, query, '(name.ilike.{q},code.ilike.{q},category.ilike.{q})')
+  let rows = await db.get(`${path}&order=name.asc&limit=500`)
+  const tokens = cleanSearch(query).split(/\s+/).filter((token) => token.length >= 2)
+  if (!rows.length && tokens.length > 1) {
+    const groups = await Promise.all(tokens.map(async (token) => {
+      const tokenPath = queryPath('stock_items', select, token, '(name.ilike.{q},code.ilike.{q},category.ilike.{q})')
+      return db.get(`${tokenPath}&order=name.asc&limit=500`)
+    }))
+    rows = groups[0]?.filter((item) => groups.every((group) => group.some((candidate) => candidate.id === item.id))) || []
+  }
+  const singularQuery = singularSearch(query)
+  if (!rows.length && singularQuery && singularQuery !== cleanSearch(query)) {
+    const singularPath = queryPath('stock_items', select, singularQuery, '(name.ilike.{q},code.ilike.{q},category.ilike.{q})')
+    rows = await db.get(`${singularPath}&order=name.asc&limit=500`)
+  }
+  return rows
+}
+
 async function executeReadTool(db, name, args) {
   switch (name) {
     case 'search_stock_items': {
@@ -668,20 +690,40 @@ async function executeReadTool(db, name, args) {
     }
     case 'count_person_withdrawals': {
       const period = resolvePeriod(args)
+      let matchedItems = []
+      let stockItemIds = Array.isArray(args.stock_item_ids) ? cleanStringList(args.stock_item_ids, 100) : []
+      if (args.item_query && stockItemIds.length === 0) {
+        matchedItems = await searchStockItemsForAnalytics(db, args.item_query)
+        stockItemIds = matchedItems.map((item) => item.id)
+        if (stockItemIds.length === 0) {
+          return {
+            person_id: args.person_id,
+            person_name: args.person_name,
+            item_query: args.item_query,
+            matched_items: [],
+            period,
+            withdrawal_count: 0,
+            definition: 'Nenhum item correspondeu ao filtro informado.',
+          }
+        }
+      }
       const params = new URLSearchParams({
-        select: 'id',
+        select: stockItemIds.length > 0 ? 'id,withdrawal_items!inner(stock_item_id)' : 'id',
         requested_by: `eq.${args.person_id}`,
         status: 'in.(approved,completed)',
       })
+      if (stockItemIds.length > 0) params.set('withdrawal_items.stock_item_id', `in.(${stockItemIds.join(',')})`)
       if (period.startAt && period.endAt) {
         params.set('or', `(and(withdrawn_at.gte.${period.startAt},withdrawn_at.lt.${period.endAt}),and(withdrawn_at.is.null,created_at.gte.${period.startAt},created_at.lt.${period.endAt}))`)
       }
       return {
         person_id: args.person_id,
         person_name: args.person_name,
+        item_query: args.item_query || null,
+        matched_items: matchedItems.map((item) => ({ id: item.id, code: item.code, name: item.name })),
         period,
         withdrawal_count: await db.count(`withdrawals?${params.toString()}`),
-        definition: 'Retiradas approved ou completed em que a pessoa foi o solicitante; usa withdrawn_at e created_at como fallback.',
+        definition: `Retiradas approved ou completed em que a pessoa foi o solicitante${stockItemIds.length > 0 ? ' e que contem ao menos um dos itens filtrados' : ''}; usa withdrawn_at e created_at como fallback.`,
       }
     }
     case 'get_stock_threshold_overview': {
@@ -774,26 +816,58 @@ function redundantlyAsksForWorkSite(content) {
   return /(?:para )?qual obra|qual e a obra|informe (?:a )?obra|nome da obra|qual destino/.test(normalized)
 }
 
+const WITHDRAWAL_QUESTION_STOP_WORDS = new Set([
+  'a', 'as', 'atual', 'com', 'contem', 'contendo', 'da', 'das', 'de', 'do', 'dos', 'e', 'em',
+  'envolvendo', 'esse', 'esta', 'este', 'fez', 'item', 'itens', 'material', 'materiais', 'mes',
+  'neste', 'no', 'o', 'onde', 'os', 'para', 'passado', 'pela', 'pelo', 'por', 'quantas',
+  'quantidade', 'que', 'realizou', 'referente', 'relacionadas', 'relacionado', 'retirada',
+  'retiradas', 'solicitou', 'tem', 'teve', 'tinha', 'total',
+])
+
 function fastPersonWithdrawalIntent(userText) {
   const normalized = normalizeText(userText)
-  const currentMonth = /\bquantas?\s+retiradas?\s+(?:o\s+|a\s+)?(.+?)\s+(?:fez|realizou|solicitou)\s+(?:esse|este|neste)\s+mes\b/.exec(normalized)
-  if (currentMonth?.[1]) return { personQuery: currentMonth[1].trim(), period: 'current_month' }
-  const previousMonth = /\bquantas?\s+retiradas?\s+(?:o\s+|a\s+)?(.+?)\s+(?:fez|realizou|solicitou)\s+(?:no\s+)?mes\s+passado\b/.exec(normalized)
-  if (previousMonth?.[1]) return { personQuery: previousMonth[1].trim(), period: 'previous_month' }
+  if (!/\bquantas?\b/.test(normalized) || !/\bretiradas?\b/.test(normalized)) return null
+  if (/\bmes passado\b/.test(normalized)) return { normalized, period: 'previous_month' }
+  if (/\b(?:esse|este|neste) mes\b/.test(normalized)) return { normalized, period: 'current_month' }
   return null
+}
+
+function scorePersonMention(person, normalizedQuestion) {
+  const normalizedName = normalizeText(person.full_name)
+  const questionTokens = new Set(normalizedQuestion.split(' '))
+  const nameTokens = normalizedName.split(' ').filter((token) => token.length >= 3)
+  let score = normalizedQuestion.includes(normalizedName) ? 100 : 0
+  nameTokens.forEach((token, index) => {
+    if (questionTokens.has(token)) score += index === 0 ? 8 : 2
+  })
+  if (person.employee_id && normalizedQuestion.includes(normalizeText(person.employee_id))) score += 50
+  return score
+}
+
+function extractItemQuery(normalizedQuestion, person) {
+  const personTokens = new Set(normalizeText(`${person.full_name} ${person.employee_id || ''}`).split(' '))
+  return normalizedQuestion
+    .split(' ')
+    .filter((token) => token.length >= 2 && !WITHDRAWAL_QUESTION_STOP_WORDS.has(token) && !personTokens.has(token))
+    .join(' ')
+    .trim()
 }
 
 async function tryFastPersonWithdrawalCount(db, userText) {
   const intent = fastPersonWithdrawalIntent(userText)
   if (!intent) return null
 
-  const people = await executeReadTool(db, 'search_people', { query: intent.personQuery, include_inactive: false })
-  const exact = people.filter((person) => normalizeText(person.full_name) === normalizeText(intent.personQuery))
-  const candidates = exact.length === 1 ? exact : people
+  const people = await db.get('people?select=id,full_name,employee_id,is_active&is_active=eq.true&order=full_name.asc&limit=300')
+  const ranked = people
+    .map((person) => ({ person, score: scorePersonMention(person, intent.normalized) }))
+    .filter(({ score }) => score > 0)
+    .sort((left, right) => right.score - left.score)
+  const topScore = ranked[0]?.score || 0
+  const candidates = ranked.filter(({ score }) => score === topScore).map(({ person }) => person)
 
   if (candidates.length === 0) {
     return {
-      content: `## Pessoa não encontrada\nNão encontrei um colaborador ativo correspondente a **${intent.personQuery}**.`,
+      content: '## Pessoa não identificada\nNão consegui identificar qual colaborador ativo você mencionou. Informe o nome ou a matrícula.',
       metadata: { fast_path: 'person_withdrawal_count', resolution: 'not_found' },
     }
   }
@@ -806,19 +880,35 @@ async function tryFastPersonWithdrawalCount(db, userText) {
   }
 
   const person = candidates[0]
+  const itemQuery = extractItemQuery(intent.normalized, person)
+  let matchedItems = []
+  if (itemQuery) {
+    matchedItems = await searchStockItemsForAnalytics(db, itemQuery)
+    if (matchedItems.length === 0) {
+      return {
+        content: `## Item não encontrado\nIdentifiquei **${person.full_name}**, mas não encontrei item correspondente a **${itemQuery}**.`,
+        metadata: { fast_path: 'person_withdrawal_count', resolution: 'item_not_found', person_id: person.id, item_query: itemQuery },
+      }
+    }
+  }
   const result = await executeReadTool(db, 'count_person_withdrawals', {
     person_id: person.id,
     person_name: person.full_name,
     period: intent.period,
+    item_query: itemQuery || undefined,
+    stock_item_ids: matchedItems.map((item) => item.id),
   })
   const count = Number(result.withdrawal_count || 0)
+  const itemLabel = itemQuery ? ` contendo **${itemQuery}**` : ''
   return {
-    content: `## Retiradas de ${person.full_name}\n**${count} ${count === 1 ? 'retirada' : 'retiradas'}** em **${result.period.label}**.\n\nCritério: retiradas concluídas ou aprovadas em que ${person.full_name} aparece como solicitante.`,
+    content: `## Retiradas de ${person.full_name}\n**${count} ${count === 1 ? 'retirada' : 'retiradas'}**${itemLabel} em **${result.period.label}**.\n\nCritério: retiradas concluídas ou aprovadas em que ${person.full_name} aparece como solicitante${itemQuery ? ` e que possuem item correspondente a ${itemQuery}` : ''}.`,
     metadata: {
       fast_path: 'person_withdrawal_count',
       person_id: person.id,
       period: result.period,
       withdrawal_count: count,
+      item_query: itemQuery || null,
+      stock_item_ids: matchedItems.map((item) => item.id),
     },
   }
 }
