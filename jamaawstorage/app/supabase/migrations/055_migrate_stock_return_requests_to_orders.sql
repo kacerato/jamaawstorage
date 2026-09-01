@@ -25,7 +25,10 @@ SELECT
   date_trunc('minute', request.created_at) AS grouped_at,
   min(request.created_at) AS created_at,
   max(request.approved_at) AS approved_at,
-  max(request.approved_by) AS approved_by,
+  -- UUID nao e ordenavel por max(); o supervisor relevante e o da aprovacao
+  -- mais recente da leva, entao a escolha vem de um ORDER BY explicito.
+  (array_agg(request.approved_by ORDER BY request.approved_at DESC NULLS LAST)
+    FILTER (WHERE request.approved_by IS NOT NULL))[1] AS approved_by,
   -- Se todo o conjunto ja foi resolvido, a devolucao esta encerrada.
   bool_and(request.status IN ('approved', 'cancelled')) AS fully_resolved,
   bool_or(request.status = 'cancelled') AS has_cancelled,
@@ -99,7 +102,9 @@ SELECT
     WHEN count(DISTINCT request.item_condition) > 1 THEN 'used'
     ELSE min(request.item_condition)
   END,
-  min(request.origin_withdrawal_item_id),
+  -- Mesma restricao de UUID: pega a primeira retirada de origem informada.
+  (array_agg(request.origin_withdrawal_item_id ORDER BY request.created_at)
+    FILTER (WHERE request.origin_withdrawal_item_id IS NOT NULL))[1],
   min(request.item_photo_url),
   string_agg(DISTINCT nullif(trim(request.notes), ''), ' | '),
   min(request.created_at),

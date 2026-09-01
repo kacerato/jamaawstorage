@@ -1480,6 +1480,37 @@ export interface Database {
     }
     Returns: number
   }
+  preview_kit_assignment_by_job_title: {
+    Args: {
+      p_kit_id: string
+      p_job_title: string
+    }
+    Returns: {
+      person_id: string
+      person_name: string
+      employee_id: string | null
+      stock_item_id: string
+      stock_item_name: string
+      stock_item_code: string | null
+      unit: string
+      kit_quantity: number
+      owned_quantity: number
+      missing_quantity: number
+      available_in_stock: number
+    }[]
+  }
+  assign_kit_to_job_title: {
+    Args: {
+      p_kit_id: string
+      p_job_title: string
+    }
+    Returns: {
+      person_id: string
+      person_name: string
+      assigned_quantity: number
+      skipped_reason: string | null
+    }[]
+  }
   create_return_draft: {
     Args: {
       p_source_type: StockReturnSourceType

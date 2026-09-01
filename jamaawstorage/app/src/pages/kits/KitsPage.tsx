@@ -17,6 +17,7 @@ import {
 } from '../../components/ui'
 import { KitIcon } from '../../components/icons'
 import { KitForm, type KitFormItem } from './KitForm'
+import { KitAssignmentModal } from './KitAssignmentModal'
 
 
 type KitItemInsert = TablesInsert<'kit_items'>
@@ -50,6 +51,7 @@ export function KitsPage({
   const [selectedKit, setSelectedKit] = useState<KitWithItems | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [assignmentKit, setAssignmentKit] = useState<KitWithItems | null>(null)
 
   const fetchKits = useCallback(async () => {
     const shouldShowFullLoading = kits.length === 0
@@ -460,6 +462,19 @@ export function KitsPage({
                   >
                     Editar
                   </Button>
+                  {kit.is_active && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setAssignmentKit(kit)
+                      }}
+                    >
+                      Entregar por função
+                    </Button>
+                  )}
                   <Button
                     type="button"
                     variant={kit.is_active ? 'danger' : 'primary'}
@@ -735,6 +750,17 @@ export function KitsPage({
           </div>
         )}
       </Modal>
+
+      {assignmentKit && (
+        <KitAssignmentModal
+          kit={assignmentKit}
+          isOpen
+          onClose={() => {
+            setAssignmentKit(null)
+            void fetchKits()
+          }}
+        />
+      )}
     </div>
   )
 }
