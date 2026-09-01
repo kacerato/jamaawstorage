@@ -90,8 +90,8 @@ export function WithdrawalDetailPage() {
     }
 
     const { data, error: returnsError } = await supabase
-      .from('stock_return_requests')
-      .select('origin_withdrawal_item_id, quantity, approved_quantity')
+      .from('stock_return_items')
+      .select('origin_withdrawal_item_id, quantity, stock_returns(status)')
       .in('origin_withdrawal_item_id', items.map((item) => item.id))
 
     if (returnsError) {
@@ -99,12 +99,21 @@ export function WithdrawalDetailPage() {
       return
     }
 
-    const nextTotals = (data ?? []).reduce<Record<string, ReturnTotals>>((totals, entry) => {
-      if (entry.origin_withdrawal_item_id) {
+    const rows = (data ?? []) as unknown as {
+      origin_withdrawal_item_id: string | null
+      quantity: number
+      stock_returns: { status: string } | null
+    }[]
+
+    // Cancelada nao conta: o material voltou para quem tinha. Concluida e a
+    // unica situacao em que a quantidade ja entrou de fato no estoque.
+    const nextTotals = rows.reduce<Record<string, ReturnTotals>>((totals, entry) => {
+      const status = entry.stock_returns?.status
+      if (entry.origin_withdrawal_item_id && status !== 'cancelled') {
         const previous = totals[entry.origin_withdrawal_item_id] ?? { registered: 0, returnedToStock: 0 }
         totals[entry.origin_withdrawal_item_id] = {
           registered: previous.registered + entry.quantity,
-          returnedToStock: previous.returnedToStock + entry.approved_quantity,
+          returnedToStock: previous.returnedToStock + (status === 'completed' ? entry.quantity : 0),
         }
       }
       return totals
