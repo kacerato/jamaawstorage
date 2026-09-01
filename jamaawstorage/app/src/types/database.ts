@@ -3,6 +3,10 @@ export type AppRole = 'supervisor' | 'leader' | 'collaborator'
 export type WithdrawalDestinationType = 'collaborator' | 'work_site'
 export type StockReturnSourceType = 'collaborator' | 'work_site'
 export type StockReturnRequestStatus = 'pending' | 'held' | 'approved' | 'cancelled'
+
+export type StockReturnStatus = 'draft' | 'awaiting_triage' | 'triaged' | 'completed' | 'cancelled'
+export type StockReturnReason = 'general' | 'termination' | 'work_site_closure' | 'exchange'
+export type StockItemCondition = 'new' | 'used' | 'damaged'
 export type StockConditionCategory = 'new' | 'used' | 'damaged'
 export type WithdrawalDocumentRequirementStatus = 'pending' | 'attached' | 'rejected' | 'replaced' | 'not_required'
 export type WithdrawalPersonDocumentStatus = 'active' | 'replaced' | 'rejected'
@@ -148,6 +152,123 @@ export interface Database {
             columns: ["stock_item_id"]
             isOneToOne: false
             referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      stock_returns: {
+        Row: {
+          id: string
+          code: string | null
+          source_type: StockReturnSourceType
+          source_person_id: string | null
+          source_work_site_id: string | null
+          status: StockReturnStatus
+          reason: StockReturnReason
+          notes: string | null
+          triage_notes: string | null
+          source_label_snapshot: string | null
+          created_by: string | null
+          received_by: string | null
+          received_at: string | null
+          triaged_by: string | null
+          triaged_at: string | null
+          completed_by: string | null
+          completed_at: string | null
+          cancelled_by: string | null
+          cancelled_at: string | null
+          cancellation_reason: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "stock_returns_source_person_id_fkey"
+            columns: ["source_person_id"]
+            isOneToOne: false
+            referencedRelation: "people"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_returns_source_work_site_id_fkey"
+            columns: ["source_work_site_id"]
+            isOneToOne: false
+            referencedRelation: "work_sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_returns_received_by_fkey"
+            columns: ["received_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_returns_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      stock_return_items: {
+        Row: {
+          id: string
+          stock_return_id: string
+          stock_item_id: string
+          quantity: number
+          reported_condition: StockItemCondition
+          origin_withdrawal_item_id: string | null
+          item_photo_url: string | null
+          notes: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "stock_return_items_stock_return_id_fkey"
+            columns: ["stock_return_id"]
+            isOneToOne: false
+            referencedRelation: "stock_returns"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_return_items_stock_item_id_fkey"
+            columns: ["stock_item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "stock_return_items_origin_withdrawal_item_id_fkey"
+            columns: ["origin_withdrawal_item_id"]
+            isOneToOne: false
+            referencedRelation: "withdrawal_items"
+            referencedColumns: ["id"]
+          }
+        ]
+      }
+      stock_return_item_conditions: {
+        Row: {
+          id: string
+          stock_return_item_id: string
+          condition: StockItemCondition
+          quantity: number
+          created_at: string
+        }
+        Insert: never
+        Update: never
+        Relationships: [
+          {
+            foreignKeyName: "stock_return_item_conditions_stock_return_item_id_fkey"
+            columns: ["stock_return_item_id"]
+            isOneToOne: false
+            referencedRelation: "stock_return_items"
             referencedColumns: ["id"]
           }
         ]
@@ -1359,41 +1480,97 @@ export interface Database {
     }
     Returns: number
   }
-  process_stock_return_request: {
+  preview_kit_assignment_by_job_title: {
     Args: {
-      p_request_id: string
-      p_approve_quantity: number
-      p_hold_quantity: number
-      p_triage_notes?: string | null
-      p_approved_condition?: 'new' | 'used' | 'damaged' | null
-      p_hold_condition?: 'used' | 'damaged' | null
+      p_kit_id: string
+      p_job_title: string
     }
-    Returns: Database['public']['Tables']['stock_return_requests']['Row']
+    Returns: {
+      person_id: string
+      person_name: string
+      employee_id: string | null
+      stock_item_id: string
+      stock_item_name: string
+      stock_item_code: string | null
+      unit: string
+      kit_quantity: number
+      owned_quantity: number
+      missing_quantity: number
+      available_in_stock: number
+    }[]
+  }
+  assign_kit_to_job_title: {
+    Args: {
+      p_kit_id: string
+      p_job_title: string
+    }
+    Returns: {
+      person_id: string
+      person_name: string
+      assigned_quantity: number
+      skipped_reason: string | null
+    }[]
+  }
+  create_return_draft: {
+    Args: {
+      p_source_type: StockReturnSourceType
+      p_source_person_id: string | null
+      p_source_work_site_id: string | null
+      p_items: {
+        stock_item_id: string
+        quantity: number
+        reported_condition?: StockItemCondition
+        origin_withdrawal_item_id?: string | null
+        notes?: string | null
+      }[]
+      p_reason?: StockReturnReason
+      p_notes?: string | null
+    }
+    Returns: Database['public']['Tables']['stock_returns']['Row']
+  }
+  submit_return_for_triage: {
+    Args: {
+      p_return_id: string
+    }
+    Returns: Database['public']['Tables']['stock_returns']['Row']
+  }
+  save_return_triage: {
+    Args: {
+      p_return_id: string
+      p_triage: {
+        stock_return_item_id: string
+        conditions: Partial<Record<StockItemCondition, number>>
+      }[]
+      p_triage_notes?: string | null
+    }
+    Returns: Database['public']['Tables']['stock_returns']['Row']
+  }
+  complete_return: {
+    Args: {
+      p_return_id: string
+    }
+    Returns: Database['public']['Tables']['stock_returns']['Row']
+  }
+  cancel_return: {
+    Args: {
+      p_return_id: string
+      p_reason?: string | null
+    }
+    Returns: Database['public']['Tables']['stock_returns']['Row']
+  }
+  delete_return_draft: {
+    Args: {
+      p_return_id: string
+    }
+    Returns: void
   }
   register_linked_stock_return: {
     Args: {
       p_withdrawal_item_id: string
       p_quantity: number
-      p_item_condition?: 'used' | 'damaged'
+      p_item_condition?: StockItemCondition
     }
-    Returns: Database['public']['Tables']['stock_return_requests']['Row']
-  }
-  process_held_stock_return_request: {
-    Args: {
-      p_request_id: string
-      p_approve_quantity: number
-      p_hold_quantity: number
-      p_triage_notes?: string | null
-      p_approved_condition?: 'new' | 'used' | 'damaged' | null
-      p_hold_condition?: 'used' | 'damaged' | null
-    }
-    Returns: Database['public']['Tables']['stock_return_requests']['Row']
-  }
-  delete_stock_return_request: {
-    Args: {
-      p_request_id: string
-    }
-    Returns: void
+    Returns: Database['public']['Tables']['stock_returns']['Row']
   }
   create_completed_withdrawal: {
     Args: {

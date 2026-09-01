@@ -6,6 +6,7 @@ import { DashboardPage } from './pages/dashboard'
 import { StockPage } from './pages/stock'
 import { PeopleRoutes } from './pages/people'
 import { WithdrawalRoutes } from './pages/withdrawals'
+import { ReturnRoutes } from './pages/returns'
 import { ReportsPage } from './pages/reports'
 import { AuditPage } from './pages/audit'
 import { SupervisorsPage } from './pages/supervisors'
@@ -29,6 +30,7 @@ function App() {
             <Route path="/stock" element={<StockPage />} />
             <Route path="/people/*" element={<PeopleRoutes />} />
             <Route path="/withdrawals/*" element={<WithdrawalRoutes />} />
+            <Route path="/returns/*" element={<ReturnRoutes />} />
             <Route path="/kits" element={<Navigate to="/stock?tab=kits" replace />} />
             <Route path="/worksites" element={<Navigate to="/withdrawals/new" replace />} />
             <Route path="/reports" element={<ReportsPage />} />

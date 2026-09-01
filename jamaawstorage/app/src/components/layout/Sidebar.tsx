@@ -25,6 +25,7 @@ const navItems: NavItem[] = [
   { label: 'Colaboradores', path: '/people', icon: <UsersIcon size={20} /> },
   { label: 'Supervisores', path: '/supervisors', icon: <UsersIcon size={20} /> },
   { label: 'Retiradas', path: '/withdrawals', icon: <ClipboardIcon size={20} /> },
+  { label: 'Devoluções', path: '/returns', icon: <PackageIcon size={20} /> },
   { label: 'Carros', path: '/vehicles', icon: <Car size={20} /> },
   { label: 'Relatórios', path: '/reports', icon: <ChartIcon size={20} /> },
   { label: 'Auditoria', path: '/audit', icon: <SignatureIcon size={20} /> },

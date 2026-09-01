@@ -49,14 +49,12 @@ type PendingWithdrawalRow = {
 
 type ReturnNotificationRow = {
   id: string
-  quantity: number
-  approved_quantity: number
-  held_quantity: number
-  item_condition: 'used' | 'damaged'
-  status: 'pending' | 'held' | 'approved'
+  code: string | null
+  status: 'awaiting_triage' | 'triaged'
+  source_label_snapshot: string | null
   created_at: string
   updated_at: string
-  stock_item: Pick<Tables<'stock_items'>, 'name' | 'code' | 'unit' | 'svg_icon_key'> | null
+  stock_return_items: { id: string }[]
 }
 
 type RecentItemRow = Pick<Tables<'stock_items'>, 'id' | 'name' | 'code' | 'created_at' | 'svg_icon_key'>
@@ -196,9 +194,9 @@ export function useNotifications() {
       ] = await Promise.all([
         supabase.rpc('check_low_stock'),
         supabase
-          .from('stock_return_requests')
-          .select('id, quantity, approved_quantity, held_quantity, item_condition, status, created_at, updated_at, stock_item:stock_items(name, code, unit, svg_icon_key)')
-          .in('status', ['pending', 'held'])
+          .from('stock_returns')
+          .select('id, code, status, source_label_snapshot, created_at, updated_at, stock_return_items(id)')
+          .in('status', ['awaiting_triage', 'triaged'])
           .order('updated_at', { ascending: false })
           .limit(8),
         supabase
@@ -289,21 +287,16 @@ export function useNotifications() {
           itemIconKey: item.svg_icon_key,
         })),
         ...returnRequests.map((request) => {
-          const remaining = Math.max(request.quantity - request.approved_quantity - request.held_quantity, 0)
-          const held = request.held_quantity
-          const itemName = request.stock_item?.name ?? 'Item devolvido'
-          const itemCode = request.stock_item?.code ? ` (${request.stock_item.code})` : ''
-          const unit = request.stock_item?.unit ?? 'un'
+          const itemCount = request.stock_return_items?.length ?? 0
+          const origin = request.source_label_snapshot ?? 'origem nao informada'
+          const awaitingTriage = request.status === 'awaiting_triage'
           return {
             id: `stock-return-${request.status}-${request.id}`,
-            type: request.status === 'held' ? 'stock_return_held' as const : 'stock_return_pending' as const,
-            title: request.status === 'held' ? 'Item em triagem' : 'Devolucao pendente',
-            description: request.status === 'held'
-              ? `${itemName}${itemCode}: ${held} ${unit} em triagem como ${request.item_condition === 'damaged' ? 'avaria' : 'usado'}`
-              : `${itemName}${itemCode}: ${remaining} ${unit} aguardando decisao`,
+            type: awaitingTriage ? 'stock_return_pending' as const : 'stock_return_held' as const,
+            title: awaitingTriage ? 'Devolucao aguardando triagem' : 'Devolucao pronta para confirmar',
+            description: `${request.code ?? 'Devolucao'} - ${origin}: ${itemCount} item(ns)`,
             createdAt: request.updated_at,
-            linkPath: '/stock?tab=returns',
-            itemIconKey: request.stock_item?.svg_icon_key,
+            linkPath: `/returns/${request.id}`,
           }
         }),
         ...vehicleNotifications,
@@ -428,7 +421,7 @@ export function useNotifications() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'withdrawal_items' }, () => {
         void refetch()
       })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_return_requests' }, () => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'stock_returns' }, () => {
         void refetch()
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'vehicle_maintenance_alerts' }, () => {

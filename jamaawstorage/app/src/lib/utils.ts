@@ -76,6 +76,25 @@ interface PrintSectionedTableDocumentOptions {
   sections: PrintTableSection[]
 }
 
+export interface ReturnReceiptItem {
+  code: string | null
+  name: string
+  unit: string
+  quantity: number
+  reportedCondition: 'new' | 'used' | 'damaged'
+}
+
+export interface ReturnReceiptOptions {
+  returnCode: string
+  sourceLabel: string
+  sourceKind: 'collaborator' | 'work_site'
+  reason: string
+  receivedAt: string
+  receivedByName: string
+  notes?: string | null
+  items: ReturnReceiptItem[]
+}
+
 const REPORT_NAVY = '#061846'
 const REPORT_MUTED = '#545866'
 const REPORT_GRID = '#c8ceda'
@@ -450,4 +469,161 @@ export async function imageFileToDataUrl(
 ): Promise<string> {
   const blob = await optimizeImageFileToJpegBlob(file, options)
   return blobToDataUrl(blob)
+}
+
+const RETURN_CONDITION_LABELS: Record<ReturnReceiptItem['reportedCondition'], string> = {
+  new: 'Novo',
+  used: 'Usado',
+  damaged: 'Avariado',
+}
+
+const RETURN_REASON_LABELS: Record<string, string> = {
+  general: 'Devolução avulsa',
+  termination: 'Desligamento do colaborador',
+  work_site_closure: 'Encerramento de obra',
+  exchange: 'Troca de material',
+}
+
+/**
+ * Termo de devolução: comprova a entrega do material no almoxarifado e conduz a
+ * etapa seguinte. Não é anexado de volta ao sistema — a triagem segue sem ele.
+ */
+export async function openReturnReceiptDocument({
+  returnCode,
+  sourceLabel,
+  sourceKind,
+  reason,
+  receivedAt,
+  receivedByName,
+  notes,
+  items,
+}: ReturnReceiptOptions): Promise<void> {
+  const generatedLabel = new Date().toLocaleString('pt-BR')
+  const { doc, startY, margin } = await createReportPdf({
+    title: 'Termo de Devolução de Materiais',
+    subtitle: `${returnCode} · ${sourceKind === 'collaborator' ? 'Colaborador' : 'Obra'}: ${sourceLabel}`,
+    filename: returnCode,
+    generatedLabel,
+    orientation: 'portrait',
+  })
+
+  const pageWidth = doc.internal.pageSize.getWidth()
+  const contentWidth = pageWidth - margin * 2
+  let cursorY = startY
+
+  const summaryRows: [string, string][] = [
+    ['Motivo', RETURN_REASON_LABELS[reason] ?? reason],
+    ['Recebido em', receivedAt],
+    ['Recebido por', receivedByName],
+  ]
+
+  doc.setFontSize(9)
+  summaryRows.forEach(([label, value]) => {
+    doc.setFont('helvetica', 'bold')
+    doc.setTextColor(REPORT_MUTED)
+    doc.text(`${label}:`, margin, cursorY)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(REPORT_NAVY)
+    doc.text(value, margin + 28, cursorY)
+    cursorY += 5
+  })
+
+  const totalUnits = items.reduce((total, item) => total + item.quantity, 0)
+
+  autoTable(doc, {
+    startY: cursorY + 4,
+    head: [['Código', 'Item', 'Estado declarado', 'Quantidade']],
+    body: items.map((item) => [
+      item.code ?? '-',
+      item.name,
+      RETURN_CONDITION_LABELS[item.reportedCondition],
+      formatQuantity(item.quantity, item.unit),
+    ]),
+    foot: [['', `${items.length} item(ns)`, 'Total', String(totalUnits)]],
+    styles: {
+      font: 'helvetica',
+      fontSize: 8,
+      cellPadding: 2.4,
+      overflow: 'linebreak',
+      valign: 'top',
+      lineColor: hexToRgb(REPORT_GRID),
+      lineWidth: 0.12,
+      textColor: hexToRgb('#111111'),
+    },
+    headStyles: {
+      fillColor: hexToRgb(REPORT_NAVY),
+      textColor: [255, 255, 255],
+      fontStyle: 'bold',
+      fontSize: 7.5,
+    },
+    footStyles: {
+      fillColor: hexToRgb(REPORT_LIGHT_BAND),
+      textColor: hexToRgb(REPORT_NAVY),
+      fontStyle: 'bold',
+      fontSize: 8,
+    },
+    alternateRowStyles: { fillColor: hexToRgb('#fafbfd') },
+    margin: { left: margin, right: margin, top: margin, bottom: 16 },
+    didDrawPage: () => drawReportFooter(doc),
+  })
+
+  cursorY = getAutoTableFinalY(doc) + 10
+
+  if (notes && notes.trim()) {
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(REPORT_MUTED)
+    doc.text('Observações', margin, cursorY)
+    doc.setFont('helvetica', 'normal')
+    doc.setTextColor(hexToRgb('#111111')[0], hexToRgb('#111111')[1], hexToRgb('#111111')[2])
+    const noteLines = doc.splitTextToSize(notes.trim(), contentWidth)
+    doc.text(noteLines, margin, cursorY + 5)
+    cursorY += 5 + noteLines.length * 4 + 6
+  }
+
+  // O termo precisa das duas assinaturas em uma página só; se o espaço acabou,
+  // elas vão para a próxima em vez de espremer no rodapé.
+  const signatureBlockHeight = 34
+  if (cursorY + signatureBlockHeight > doc.internal.pageSize.getHeight() - 20) {
+    doc.addPage()
+    drawReportFooter(doc)
+    cursorY = 24
+  }
+
+  doc.setFont('helvetica', 'normal')
+  doc.setFontSize(7.5)
+  doc.setTextColor(REPORT_MUTED)
+  const declaration = doc.splitTextToSize(
+    'Declaro que entreguei ao almoxarifado os materiais relacionados acima, nas quantidades e estados indicados. '
+    + 'A classificação definitiva de cada item será feita na conferência interna.',
+    contentWidth,
+  )
+  doc.text(declaration, margin, cursorY)
+  cursorY += declaration.length * 3.6 + 14
+
+  const signatureWidth = (contentWidth - 14) / 2
+  const signatures: [string, string][] = [
+    [sourceLabel, sourceKind === 'collaborator' ? 'Colaborador' : 'Responsável pela obra'],
+    [receivedByName, 'Almoxarifado'],
+  ]
+
+  signatures.forEach(([name, role], index) => {
+    const blockX = margin + index * (signatureWidth + 14)
+
+    doc.setDrawColor(...hexToRgb(REPORT_GRID))
+    doc.setLineWidth(0.3)
+    doc.line(blockX, cursorY, blockX + signatureWidth, cursorY)
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(8)
+    doc.setTextColor(REPORT_NAVY)
+    doc.text(name, blockX + signatureWidth / 2, cursorY + 5, { align: 'center' })
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(7)
+    doc.setTextColor(REPORT_MUTED)
+    doc.text(role, blockX + signatureWidth / 2, cursorY + 9.5, { align: 'center' })
+  })
+
+  doc.save(normalizePdfFilename(`termo-devolucao-${returnCode}`))
 }
