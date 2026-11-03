@@ -20,8 +20,10 @@ import {
   PackageIcon,
   SignatureIcon,
   UserIcon,
+  UsersIcon,
 } from '../../components/icons'
 import { ItemSelector, KitSelector } from './index'
+import { BulkItemSelector, type BulkWithdrawalLine } from './BulkItemSelector'
 import {
   buildDraftWithdrawalTermDocuments,
   downloadIndividualWithdrawalTermPdfs,
@@ -126,7 +128,10 @@ export function EditWithdrawalPage() {
   const [items, setItems] = useState<EditableWithdrawalItem[]>([])
 
   const [showItemSelector, setShowItemSelector] = useState(false)
+  const [showBulkSelector, setShowBulkSelector] = useState(false)
   const [showKitSelector, setShowKitSelector] = useState(false)
+  const [bulkFeedback, setBulkFeedback] = useState<string | null>(null)
+  const [groupQuantityDrafts, setGroupQuantityDrafts] = useState<Record<string, string>>({})
   const [kitShortages, setKitShortages] = useState<KitShortage[]>([])
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
   const [splitQuantity, setSplitQuantity] = useState('')
@@ -385,6 +390,92 @@ export function EditWithdrawalPage() {
     setShowItemSelector(false)
     setSaveError(null)
     setKitShortages([])
+  }
+
+  const plannedQuantitiesByStockItem = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const item of items) {
+      totals.set(item.stock_item_id, (totals.get(item.stock_item_id) ?? 0) + item.quantity)
+    }
+    return totals
+  }, [items])
+
+  const itemGroups = useMemo(() => {
+    const map = new Map<string, { stock_item: StockItemRow; entries: EditableWithdrawalItem[] }>()
+
+    for (const entry of items) {
+      const existing = map.get(entry.stock_item_id)
+      if (existing) {
+        existing.entries.push(entry)
+        continue
+      }
+      map.set(entry.stock_item_id, { stock_item: entry.stock_item, entries: [entry] })
+    }
+
+    return Array.from(map.values())
+  }, [items])
+
+  const handleAddBulkLines = (lines: BulkWithdrawalLine[]) => {
+    const nextItems = [...items]
+    let createdCount = 0
+    let mergedCount = 0
+
+    for (const line of lines) {
+      const candidate: EditableWithdrawalItem = {
+        entry_id: createEntryId(),
+        withdrawal_item_id: null,
+        stock_item_id: line.stock_item.id,
+        quantity: line.quantity,
+        unit: line.stock_item.unit,
+        lot_id: null,
+        stock_item: line.stock_item,
+        destination_type: line.destination_type,
+        collaborator_id: line.collaborator_id,
+        work_site_id: line.work_site_id,
+      }
+
+      const duplicateKey = makeEntryDuplicateKey(candidate)
+      const existingIndex = nextItems.findIndex((item) => makeEntryDuplicateKey(item) === duplicateKey)
+
+      if (existingIndex >= 0) {
+        nextItems[existingIndex] = {
+          ...nextItems[existingIndex],
+          quantity: nextItems[existingIndex].quantity + line.quantity,
+        }
+        mergedCount += 1
+        continue
+      }
+
+      nextItems.push(candidate)
+      createdCount += 1
+    }
+
+    setItems(nextItems)
+    setKitShortages([])
+    setSaveError(null)
+    setBulkFeedback(
+      mergedCount > 0
+        ? `${createdCount} linha(s) adicionada(s) e ${mergedCount} somada(s) a destinos que ja existiam.`
+        : `${createdCount} linha(s) adicionada(s) a retirada.`,
+    )
+    setShowBulkSelector(false)
+  }
+
+  const handleRemoveStockItemGroup = (stockItemId: string) => {
+    setBulkFeedback(null)
+    if (items.some((item) => item.entry_id === editingItemId && item.stock_item_id === stockItemId)) {
+      setEditingItemId(null)
+    }
+    setItems((current) => current.filter((item) => item.stock_item_id !== stockItemId))
+    setSaveError(null)
+  }
+
+  const handleApplyQuantityToGroup = (stockItemId: string, quantity: number) => {
+    if (quantity <= 0) return
+    setItems((current) =>
+      current.map((item) => (item.stock_item_id === stockItemId ? { ...item, quantity } : item)),
+    )
+    setSaveError(null)
   }
 
   const handleAddKit = (kit: KitWithItems) => {
@@ -681,7 +772,18 @@ export function EditWithdrawalPage() {
                   <h3 className="text-lg font-semibold text-white">Itens da Retirada</h3>
                 </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={<UsersIcon size={16} />}
+                  onClick={() => {
+                    setBulkFeedback(null)
+                    setShowBulkSelector(true)
+                  }}
+                >
+                  Adicionar em massa
+                </Button>
                 <Button
                   variant="secondary"
                   size="sm"
@@ -701,6 +803,12 @@ export function EditWithdrawalPage() {
               </div>
             </div>
 
+            {bulkFeedback && (
+              <Alert variant="success" className="mb-4">
+                {bulkFeedback}
+              </Alert>
+            )}
+
             {kitShortages.length > 0 && (
               <Alert variant="warning" title={`Kit "${kitShortages[0].kitName}" adicionado parcialmente`} className="mb-4">
                 Foram incluidos os itens disponiveis. Faltaram: {kitShortages.map((shortage) => (
@@ -716,70 +824,131 @@ export function EditWithdrawalPage() {
                 Nenhum item mantido na retirada. Adicione pelo menos um item para salvar.
               </div>
             ) : (
-              <div className="space-y-3">
-                {items.map((item) => {
-                  const maxAvailable = computeMaxAvailable(item)
-                  const overStock = item.quantity > maxAvailable
+              <div className="space-y-4">
+                {itemGroups.map((itemGroup) => {
+                  const { stock_item: stockItem, entries } = itemGroup
+                  const groupTotal = entries.reduce((sum, entry) => sum + entry.quantity, 0)
+                  const maxAvailable = computeMaxAvailable(entries[0])
+                  const groupOverStock = groupTotal > maxAvailable
 
                   return (
                     <div
-                      key={item.entry_id}
-                      className={`grid gap-4 rounded-2xl border p-4 transition-colors lg:grid-cols-[minmax(0,1fr)_170px_150px] ${
-                        overStock
+                      key={stockItem.id}
+                      className={`rounded-2xl border p-4 transition-colors ${
+                        groupOverStock
                           ? 'border-red-400/30 bg-red-500/8'
-                          : 'border-white/8 bg-white/3 hover:bg-white/5'
+                          : 'border-white/8 bg-white/3'
                       }`}
                     >
-                      <div className="min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Badge variant={item.destination_type === 'work_site' ? 'info' : 'primary'} size="sm">
-                            {item.destination_type === 'work_site' ? 'Obra' : 'Colaborador'}
-                          </Badge>
-                          {overStock ? <Badge variant="danger" size="sm">Saldo excedido</Badge> : null}
+                      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h4 className="truncate text-base font-semibold text-white">{stockItem.name}</h4>
+                            <Badge variant={groupOverStock ? 'danger' : 'primary'} size="sm">
+                              {groupTotal} {stockItem.unit} para {entries.length} destino(s)
+                            </Badge>
+                            {groupOverStock ? <Badge variant="danger" size="sm">Saldo excedido</Badge> : null}
+                          </div>
+                          <p className="mt-1 text-xs text-gray-500">{stockItem.category ?? 'Sem categoria'}</p>
+                          <div className="mt-3 grid grid-cols-2 gap-2 sm:max-w-xs">
+                            <MiniMetric label="Total" value={`${groupTotal} ${stockItem.unit}`} danger={groupOverStock} />
+                            <MiniMetric label="Saldo livre" value={`${maxAvailable} ${stockItem.unit}`} danger={groupOverStock} />
+                          </div>
                         </div>
-                        <h4 className="mt-2 truncate text-base font-semibold text-white">{item.stock_item.name}</h4>
-                        <p className="mt-1 text-xs text-gray-500">{item.stock_item.category ?? 'Sem categoria'}</p>
-                        <div className="mt-3 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-                          <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">Destino</p>
-                          <p className="mt-1 truncate text-sm font-medium text-white">
-                            {item.destination_type === 'collaborator'
-                              ? collaborators.find((collaborator) => collaborator.id === item.collaborator_id)?.full_name ?? 'Colaborador nao selecionado'
-                              : selectedWorkSiteLabel(workSites, item.work_site_id ?? '')}
-                          </p>
+
+                        <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+                          {entries.length > 1 && (
+                            <>
+                              <label className="text-xs text-gray-400">Aplicar a todos</label>
+                              <input
+                                type="number"
+                                min={1}
+                                placeholder="-"
+                                value={groupQuantityDrafts[stockItem.id] ?? ''}
+                                onChange={(event) => {
+                                  setGroupQuantityDrafts((prev) => ({ ...prev, [stockItem.id]: event.target.value }))
+                                }}
+                                className="w-16 rounded-xl border border-gray-700 bg-gray-950 px-2 py-1.5 text-center text-sm text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
+                              />
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                disabled={!(Number(groupQuantityDrafts[stockItem.id]) > 0)}
+                                onClick={() => {
+                                  const value = parseInt(groupQuantityDrafts[stockItem.id] ?? '', 10)
+                                  if (Number.isNaN(value) || value <= 0) return
+
+                                  handleApplyQuantityToGroup(stockItem.id, value)
+                                  setGroupQuantityDrafts((prev) => {
+                                    const next = { ...prev }
+                                    delete next[stockItem.id]
+                                    return next
+                                  })
+                                }}
+                              >
+                                Aplicar
+                              </Button>
+                            </>
+                          )}
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleRemoveStockItemGroup(stockItem.id)}
+                          >
+                            Remover item
+                          </Button>
                         </div>
                       </div>
 
-                      <div className="grid grid-cols-2 gap-2 lg:block lg:space-y-2">
-                        <MiniMetric label="Qtd" value={`${item.quantity} ${item.unit}`} />
-                        <MiniMetric label="Saldo livre" value={`${maxAvailable} ${item.unit}`} danger={overStock} />
-                      </div>
+                      <div className="mt-4 space-y-2">
+                        {entries.map((item) => (
+                          <div
+                            key={item.entry_id}
+                            className="flex flex-col gap-3 rounded-xl border border-white/8 bg-black/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+                          >
+                            <div className="flex min-w-0 items-center gap-2">
+                              <Badge variant={item.destination_type === 'work_site' ? 'info' : 'primary'} size="sm">
+                                {item.destination_type === 'work_site' ? 'Obra' : 'Colaborador'}
+                              </Badge>
+                              <span className="min-w-0 truncate text-sm font-medium text-white">
+                                {item.destination_type === 'collaborator'
+                                  ? collaborators.find((collaborator) => collaborator.id === item.collaborator_id)?.full_name ?? 'Colaborador nao selecionado'
+                                  : selectedWorkSiteLabel(workSites, item.work_site_id ?? '')}
+                              </span>
+                            </div>
 
-                      <div className="flex flex-wrap items-center justify-end gap-2 lg:flex-col lg:items-stretch">
-                        <Button
-                          type="button"
-                          variant="secondary"
-                          size="sm"
-                          onClick={() => openItemAdjustModal(item.entry_id)}
-                        >
-                          Ajustar
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          disabled={item.quantity <= 1}
-                          onClick={() => openItemAdjustModal(item.entry_id, 'split')}
-                        >
-                          Separar
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => handleRemoveItem(item.entry_id)}
-                        >
-                          Remover
-                        </Button>
+                            <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
+                              <span className="text-sm text-gray-300">{item.quantity} {item.unit}</span>
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => openItemAdjustModal(item.entry_id)}
+                              >
+                                Ajustar
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                disabled={item.quantity <= 1}
+                                onClick={() => openItemAdjustModal(item.entry_id, 'split')}
+                              >
+                                Separar
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleRemoveItem(item.entry_id)}
+                              >
+                                Remover
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   )
@@ -800,7 +969,8 @@ export function EditWithdrawalPage() {
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-2xl border border-white/8 bg-[#111217] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Itens</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{items.length}</p>
+              <p className="mt-2 text-2xl font-semibold text-white">{itemGroups.length}</p>
+              <p className="mt-1 text-xs text-gray-500">{items.length} linha(s)</p>
             </div>
             <div className="rounded-2xl border border-white/8 bg-[#111217] px-4 py-3">
               <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Unidades</p>
@@ -874,6 +1044,24 @@ export function EditWithdrawalPage() {
         size="lg"
       >
         <ItemSelector onSelect={handleAddItem} selectedIds={selectedIds} />
+      </Modal>
+
+      <Modal
+        isOpen={showBulkSelector}
+        onClose={() => setShowBulkSelector(false)}
+        title="Adicionar em massa"
+        size="xl"
+      >
+        <BulkItemSelector
+          collaborators={collaborators}
+          workSites={workSites}
+          defaultWorkSiteId={workSiteId}
+          allWorkSites
+          plannedQuantities={plannedQuantitiesByStockItem}
+          stockCreditByItem={originalQuantities}
+          onConfirm={handleAddBulkLines}
+          onCancel={() => setShowBulkSelector(false)}
+        />
       </Modal>
 
       <Modal

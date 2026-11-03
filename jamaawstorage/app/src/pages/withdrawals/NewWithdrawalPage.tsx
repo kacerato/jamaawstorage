@@ -18,6 +18,7 @@ import {
 import {
   ClipboardIcon,
   UserIcon,
+  UsersIcon,
   PackageIcon,
   SignatureIcon,
   KitIcon,
@@ -26,6 +27,7 @@ import { cn, DEFAULT_IMAGE_UPLOAD_OPTIONS, generateWithdrawalCodePreview } from 
 import { uploadImageToStorage, validateWithdrawalPdf } from '../../lib/storage'
 import { ItemSelector } from './ItemSelector'
 import { KitSelector } from './KitSelector'
+import { BulkItemSelector, type BulkWithdrawalLine } from './BulkItemSelector'
 import {
   buildDraftWithdrawalTermDocuments,
   downloadIndividualWithdrawalTermPdfs,
@@ -228,7 +230,10 @@ export function NewWithdrawalPage() {
 
   const [items, setItems] = useState<WithdrawalItemEntry[]>([])
   const [showItemSelector, setShowItemSelector] = useState(false)
+  const [showBulkSelector, setShowBulkSelector] = useState(false)
   const [showKitSelector, setShowKitSelector] = useState(false)
+  const [bulkFeedback, setBulkFeedback] = useState<string | null>(null)
+  const [groupQuantityDrafts, setGroupQuantityDrafts] = useState<Record<string, string>>({})
   const [compositionWarnings, setCompositionWarnings] = useState<WithdrawalCompositionWarning[]>([])
   const [showCompositionConfirm, setShowCompositionConfirm] = useState(false)
 
@@ -335,6 +340,36 @@ export function NewWithdrawalPage() {
     return Array.from(map.values())
   }, [items])
 
+  const itemGroups = useMemo(() => {
+    const map = new Map<string, { stock_item: StockItemRow; entries: WithdrawalItemEntry[] }>()
+
+    for (const entry of items) {
+      const existing = map.get(entry.stock_item_id)
+      if (existing) {
+        existing.entries.push(entry)
+        continue
+      }
+      map.set(entry.stock_item_id, { stock_item: entry.stock_item, entries: [entry] })
+    }
+
+    return Array.from(map.values())
+  }, [items])
+
+  const handleRemoveStockItemGroup = (stockItemId: string) => {
+    setCompositionWarnings([])
+    setBulkFeedback(null)
+    setItems((prev) => prev.filter((item) => item.stock_item_id !== stockItemId))
+  }
+
+  const handleApplyQuantityToGroup = (stockItemId: string, quantity: number) => {
+    if (quantity <= 0) return
+    setCompositionWarnings([])
+    setKitShortages([])
+    setItems((prev) =>
+      prev.map((item) => (item.stock_item_id === stockItemId ? { ...item, quantity } : item)),
+    )
+  }
+
   const createDraftEntry = (stockItem: StockItemRow): WithdrawalItemEntry | null => {
     if (draftDestinationType === 'collaborator' && !draftCollaboratorId) {
       setStepErrors((prev) => ({
@@ -379,6 +414,64 @@ export function NewWithdrawalPage() {
       return next
     })
     setShowItemSelector(false)
+  }
+
+  const plannedQuantitiesByStockItem = useMemo(() => {
+    const totals = new Map<string, number>()
+    for (const item of items) {
+      totals.set(item.stock_item_id, (totals.get(item.stock_item_id) ?? 0) + item.quantity)
+    }
+    return totals
+  }, [items])
+
+  const handleAddBulkLines = (lines: BulkWithdrawalLine[]) => {
+    const nextItems = [...items]
+    let createdCount = 0
+    let mergedCount = 0
+
+    for (const line of lines) {
+      const candidate: WithdrawalItemEntry = {
+        entry_id: createEntryId(),
+        stock_item_id: line.stock_item.id,
+        lot_id: null,
+        quantity: line.quantity,
+        unit: line.stock_item.unit,
+        stock_item: line.stock_item,
+        destination_type: line.destination_type,
+        collaborator_id: line.collaborator_id,
+        work_site_id: line.work_site_id,
+      }
+
+      const duplicateKey = makeEntryDuplicateKey(candidate)
+      const existingIndex = nextItems.findIndex((item) => makeEntryDuplicateKey(item) === duplicateKey)
+
+      if (existingIndex >= 0) {
+        nextItems[existingIndex] = {
+          ...nextItems[existingIndex],
+          quantity: nextItems[existingIndex].quantity + line.quantity,
+        }
+        mergedCount += 1
+        continue
+      }
+
+      nextItems.push(candidate)
+      createdCount += 1
+    }
+
+    setItems(nextItems)
+    setCompositionWarnings([])
+    setKitShortages([])
+    setStepErrors((prev) => {
+      const next = { ...prev }
+      delete next.items
+      return next
+    })
+    setBulkFeedback(
+      mergedCount > 0
+        ? `${createdCount} linha(s) adicionada(s) e ${mergedCount} somada(s) a destinos que ja existiam.`
+        : `${createdCount} linha(s) adicionada(s) a retirada.`,
+    )
+    setShowBulkSelector(false)
   }
 
   const handleAddKit = (kit: KitWithItems) => {
@@ -1067,7 +1160,18 @@ export function NewWithdrawalPage() {
               <InfoTip text="Cada item pode ter destino proprio. Isso permite uma unica retirada com colaboradores e obras diferentes." />
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<UsersIcon size={16} />}
+              onClick={() => {
+                setBulkFeedback(null)
+                setShowBulkSelector(true)
+              }}
+            >
+              Retirada em Massa
+            </Button>
             <Button
               variant="secondary"
               size="sm"
@@ -1093,6 +1197,12 @@ export function NewWithdrawalPage() {
           </Alert>
         )}
 
+        {bulkFeedback && (
+          <Alert variant="success" className="mb-4">
+            {bulkFeedback}
+          </Alert>
+        )}
+
         {kitShortages.length > 0 && (
           <Alert variant="warning" title={`Kit "${kitShortages[0].kitName}" adicionado parcialmente`} className="mb-4">
             Foram incluidos os itens disponiveis. Faltaram: {kitShortages.map((shortage) => (
@@ -1107,119 +1217,177 @@ export function NewWithdrawalPage() {
           <div className="flex flex-col items-center justify-center py-8 text-center">
             <PackageIcon size={40} className="mb-2 text-gray-600" />
             <p className="text-sm text-gray-400">Nenhum item adicionado.</p>
+            <p className="mt-1 max-w-sm text-xs text-gray-500">
+              Para entregar o mesmo item a varias pessoas, use "Retirada em Massa": escolha o item uma vez e marque todos os destinatarios.
+            </p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Item</th>
-                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Destino</th>
-                  <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Estoque</th>
-                  <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Qtd</th>
-                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Unidade</th>
-                  <th className="px-3 py-2 text-right text-sm font-medium text-gray-300">Acao</th>
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((item) => {
-                  const entryKey = item.entry_id
-                  const isOverStock = item.quantity > item.stock_item.current_quantity
-                  const isLowStock = item.stock_item.minimum_quantity > 0 && item.stock_item.current_quantity <= item.stock_item.minimum_quantity
-                  const composition = buildWithdrawalComposition(item.stock_item, item.quantity)
-                  const willUseRestrictedStock = compositionNeedsConfirmation(composition)
+          <div className="space-y-4">
+            {itemGroups.map((itemGroup) => {
+              const { stock_item: stockItem, entries } = itemGroup
+              const groupTotal = entries.reduce((sum, entry) => sum + entry.quantity, 0)
+              const isOverStock = groupTotal > stockItem.current_quantity
+              const isLowStock = stockItem.minimum_quantity > 0 && stockItem.current_quantity <= stockItem.minimum_quantity
+              const composition = buildWithdrawalComposition(stockItem, groupTotal)
+              const willUseRestrictedStock = compositionNeedsConfirmation(composition)
 
-                  return (
-                    <tr key={entryKey} className="border-b border-gray-800">
-                      <td className="px-3 py-2 text-sm text-white">
-                        <div className="flex flex-col gap-2">
-                          <span>{item.stock_item.name}</span>
-                          <div className="flex flex-wrap gap-1.5">
-                            <Badge variant="success" size="sm">Novo {numericQuantity(item.stock_item.quantity_new)}</Badge>
-                            <Badge variant="info" size="sm">Usado {numericQuantity(item.stock_item.quantity_used)}</Badge>
-                            <Badge variant="danger" size="sm">Avaria {numericQuantity(item.stock_item.quantity_damaged)}</Badge>
-                          </div>
-                          {willUseRestrictedStock && (
-                            <p className="text-xs text-amber-300">
-                              Esta retirada vai usar {composition.usedQty > 0 ? `${composition.usedQty} usado(s)` : ''}
-                              {composition.usedQty > 0 && composition.damagedQty > 0 ? ' e ' : ''}
-                              {composition.damagedQty > 0 ? `${composition.damagedQty} com avaria` : ''}.
-                            </p>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-400">
-                        <select
-                          value={encodeDestination(item.destination_type, item.collaborator_id, item.work_site_id)}
-                          onChange={(event) => {
-                            handleUpdateDestination(entryKey, event.target.value)
-                            setStepErrors((prev) => {
-                              const next = { ...prev }
-                              delete next.items
-                              return next
-                            })
-                          }}
-                          className="w-full min-w-[240px] rounded border border-gray-700 bg-gray-900 px-2 py-1 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
-                        >
-                          {destinationOptions.map((option) => (
-                            <option key={option.value} value={option.value}>
-                              {option.label}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <Badge variant={isLowStock ? 'danger' : 'default'} size="sm">
-                          {item.stock_item.current_quantity} {item.stock_item.unit}
+              return (
+                <div
+                  key={stockItem.id}
+                  className={cn(
+                    'rounded-2xl border p-4',
+                    isOverStock ? 'border-red-500/40 bg-red-500/6' : 'border-white/8 bg-white/3',
+                  )}
+                >
+                  <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="font-medium text-white">{stockItem.name}</p>
+                        <Badge variant={isOverStock ? 'danger' : 'primary'} size="sm">
+                          {groupTotal} {stockItem.unit} para {entries.length} destino(s)
                         </Badge>
-                      </td>
-                      <td className="px-3 py-2 text-center">
-                        <input
-                          type="number"
-                          min={1}
-                          max={item.stock_item.current_quantity}
-                          value={item.quantity}
-                          onChange={(event) => {
-                            const value = parseInt(event.target.value, 10)
-                            if (!Number.isNaN(value) && value >= 0) {
-                              handleUpdateQuantity(entryKey, value)
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        <Badge variant="success" size="sm">Novo {numericQuantity(stockItem.quantity_new)}</Badge>
+                        <Badge variant="info" size="sm">Usado {numericQuantity(stockItem.quantity_used)}</Badge>
+                        <Badge variant="danger" size="sm">Avaria {numericQuantity(stockItem.quantity_damaged)}</Badge>
+                        <Badge variant={isLowStock ? 'danger' : 'default'} size="sm">
+                          Estoque {stockItem.current_quantity} {stockItem.unit}
+                        </Badge>
+                      </div>
+                      {willUseRestrictedStock && (
+                        <p className="mt-2 text-xs text-amber-300">
+                          Esta retirada vai usar {composition.usedQty > 0 ? `${composition.usedQty} usado(s)` : ''}
+                          {composition.usedQty > 0 && composition.damagedQty > 0 ? ' e ' : ''}
+                          {composition.damagedQty > 0 ? `${composition.damagedQty} com avaria` : ''}.
+                        </p>
+                      )}
+                    </div>
+
+                    <div className="flex flex-shrink-0 items-center gap-2">
+                      {entries.length > 1 && (
+                        <>
+                          <label className="text-xs text-gray-400">Aplicar a todos</label>
+                          <input
+                            type="number"
+                            min={1}
+                            placeholder="-"
+                            value={groupQuantityDrafts[stockItem.id] ?? ''}
+                            onChange={(event) => {
+                              setGroupQuantityDrafts((prev) => ({ ...prev, [stockItem.id]: event.target.value }))
+                            }}
+                            className="w-16 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            disabled={!(Number(groupQuantityDrafts[stockItem.id]) > 0)}
+                            onClick={() => {
+                              const value = parseInt(groupQuantityDrafts[stockItem.id] ?? '', 10)
+                              if (Number.isNaN(value) || value <= 0) return
+
+                              handleApplyQuantityToGroup(stockItem.id, value)
+                              setGroupQuantityDrafts((prev) => {
+                                const next = { ...prev }
+                                delete next[stockItem.id]
+                                return next
+                              })
                               setStepErrors((prev) => {
                                 const next = { ...prev }
                                 delete next.items
                                 return next
                               })
-                            }
-                          }}
-                          className={cn(
-                            'w-20 rounded border bg-gray-900 px-2 py-1 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50',
-                            isOverStock ? 'border-red-500' : 'border-gray-700',
-                          )}
-                        />
-                      </td>
-                      <td className="px-3 py-2 text-sm text-gray-300">{item.unit}</td>
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          onClick={() => handleRemoveItem(entryKey)}
-                          className="rounded p-1 text-red-400 transition-colors hover:bg-red-500/10"
+                            }}
+                          >
+                            Aplicar
+                          </Button>
+                        </>
+                      )}
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleRemoveStockItemGroup(stockItem.id)}
+                      >
+                        Remover item
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 space-y-2">
+                    {entries.map((item) => {
+                      const entryKey = item.entry_id
+
+                      return (
+                        <div
+                          key={entryKey}
+                          className="flex flex-col gap-2 rounded-xl border border-white/6 bg-gray-900/60 p-3 sm:flex-row sm:items-center sm:gap-3"
                         >
-                          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M4 4L14 14M14 4L4 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                          </svg>
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                          <select
+                            value={encodeDestination(item.destination_type, item.collaborator_id, item.work_site_id)}
+                            onChange={(event) => {
+                              handleUpdateDestination(entryKey, event.target.value)
+                              setStepErrors((prev) => {
+                                const next = { ...prev }
+                                delete next.items
+                                return next
+                              })
+                            }}
+                            className="min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                          >
+                            {destinationOptions.map((option) => (
+                              <option key={option.value} value={option.value}>
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+
+                          <div className="flex flex-shrink-0 items-center gap-2">
+                            <input
+                              type="number"
+                              min={1}
+                              max={stockItem.current_quantity}
+                              value={item.quantity}
+                              onChange={(event) => {
+                                const value = parseInt(event.target.value, 10)
+                                if (!Number.isNaN(value) && value >= 0) {
+                                  handleUpdateQuantity(entryKey, value)
+                                  setStepErrors((prev) => {
+                                    const next = { ...prev }
+                                    delete next.items
+                                    return next
+                                  })
+                                }
+                              }}
+                              className="w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                            />
+                            <span className="w-12 text-xs text-gray-400">{item.unit}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveItem(entryKey)}
+                              aria-label="Remover destino"
+                              className="rounded p-1 text-red-400 transition-colors hover:bg-red-500/10"
+                            >
+                              <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M4 4L14 14M14 4L4 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         )}
 
         {items.length > 0 && (
           <div className="mt-3 flex items-center justify-between border-t border-gray-700 pt-3">
             <span className="text-sm text-gray-400">
-              {items.length} item(ns) distribuidos em {groups.length} destino(s)
+              {itemGroups.length} item(ns) em {items.length} linha(s) para {groups.length} destino(s)
             </span>
             <span className="text-sm font-medium text-white">
               {items.reduce((sum, item) => sum + item.quantity, 0)} unidades
@@ -1235,6 +1403,22 @@ export function NewWithdrawalPage() {
         size="lg"
       >
         <ItemSelector onSelect={handleAddItem} selectedIds={new Set<string>()} />
+      </Modal>
+
+      <Modal
+        isOpen={showBulkSelector}
+        onClose={() => setShowBulkSelector(false)}
+        title="Retirada em Massa"
+        size="xl"
+      >
+        <BulkItemSelector
+          collaborators={collaborators}
+          workSites={workSites}
+          defaultWorkSiteId={defaultWorkSiteId}
+          plannedQuantities={plannedQuantitiesByStockItem}
+          onConfirm={handleAddBulkLines}
+          onCancel={() => setShowBulkSelector(false)}
+        />
       </Modal>
 
       <Modal
