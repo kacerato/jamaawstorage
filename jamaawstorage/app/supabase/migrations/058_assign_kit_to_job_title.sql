@@ -1,17 +1,17 @@
 BEGIN;
 
 -- ---------------------------------------------------------------------------
--- Entrega de kit por funcao, completando o que falta.
+-- Registro de kit por funcao no inventario individual, completando o que falta.
 --
--- O problema que isso resolve: entregar um kit para quem ja tem parte dele
--- acumula. Se o kit pede 2 alicates e o colaborador ja tem 1, a entrega precisa
--- ser de 1, nao de 2. A lacuna e calculada por item, no banco, comparando o kit
--- com person_inventories.
+-- O problema que isso resolve: registrar um kit para quem ja tem parte dele
+-- acumula. Se o kit pede 2 alicates e o colaborador ja tem 1, registra-se 1,
+-- nao 2. A lacuna e calculada por item, no banco, comparando o kit com
+-- person_inventories.
 --
--- Quem ja tem tudo nao recebe nada e nao gera retirada.
+-- Quem ja tem tudo nao recebe nada.
 -- ---------------------------------------------------------------------------
 
--- Previa da entrega: mostra o que cada pessoa receberia, sem movimentar nada.
+-- Previa: mostra o que seria registrado para cada pessoa, sem gravar nada.
 -- A tela usa isso para o supervisor conferir antes de confirmar.
 CREATE OR REPLACE FUNCTION public.preview_kit_assignment_by_job_title(
   p_kit_id UUID,
@@ -30,11 +30,19 @@ RETURNS TABLE (
   missing_quantity INTEGER,
   available_in_stock INTEGER
 )
-LANGUAGE sql
+LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
 SET search_path = public
 AS $$
+BEGIN
+  -- A permissao e verificada aqui, nao no WHERE: como filtro ela apenas zeraria
+  -- o resultado, e a tela mostraria "nenhum colaborador" em vez do acesso negado.
+  IF NOT public.is_active_supervisor() THEN
+    RAISE EXCEPTION 'Acesso negado: somente supervisores ativos podem consultar entregas de kit.';
+  END IF;
+
+  RETURN QUERY
   SELECT
     person.id,
     person.full_name,
@@ -57,19 +65,22 @@ AS $$
     AND person.job_title = p_job_title
     AND person.is_active = true
     AND person.role = 'collaborator'
-    AND public.is_active_supervisor()
   ORDER BY person.full_name, stock_item.name;
+END;
 $$;
 
 REVOKE EXECUTE ON FUNCTION public.preview_kit_assignment_by_job_title(UUID, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.preview_kit_assignment_by_job_title(UUID, TEXT) TO authenticated, service_role;
 
 -- ---------------------------------------------------------------------------
--- Aplica o kit a todos os colaboradores ativos de uma funcao.
+-- Registra o kit no inventario individual de cada colaborador da funcao.
 --
--- Reaproveita assign_inventory_items_to_person: ela ja cria a retirada
--- 'completed' que os triggers existentes usam para baixar o estoque e creditar
--- o inventario. Duplicar essa logica aqui abriria espaco para divergencia.
+-- NAO movimenta estoque: o material ja esta em posse dos colaboradores ha tempos
+-- e nunca foi registrado. Isto e acerto de cadastro, nao saida de almoxarifado.
+--
+-- O corpo evita lacos e aliases porque os parametros OUT (person_id, ...)
+-- colidem com colunas das tabelas envolvidas; uma instrucao unica com CTEs
+-- calcula a lacuna e grava sem ambiguidade.
 -- ---------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.assign_kit_to_job_title(
   p_kit_id UUID,
@@ -85,11 +96,9 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path = public
 AS $$
+#variable_conflict use_column
 DECLARE
-  target_person RECORD;
-  missing_items JSONB;
-  shortage_name TEXT;
-  moved_quantity INTEGER;
+  affected JSONB;
 BEGIN
   IF NOT public.is_active_supervisor() THEN
     RAISE EXCEPTION 'Acesso negado: somente supervisores ativos podem entregar kits.';
@@ -107,67 +116,52 @@ BEGIN
     RAISE EXCEPTION 'Este kit nao possui itens.';
   END IF;
 
-  FOR target_person IN
-    SELECT id, full_name
-    FROM public.people
-    WHERE job_title = p_job_title
-      AND is_active = true
-      AND role = 'collaborator'
-    ORDER BY full_name
-  LOOP
-    -- Lacuna deste colaborador: so o que falta para chegar na quantidade do kit.
-    SELECT jsonb_agg(
-      jsonb_build_object(
-        'stock_item_id', kit_item.stock_item_id,
-        'quantity', kit_item.quantity - COALESCE(inventory.quantity, 0)
-      )
-    )
-    INTO missing_items
-    FROM public.kit_items kit_item
-    LEFT JOIN public.person_inventories inventory
-      ON inventory.person_id = target_person.id
-     AND inventory.stock_item_id = kit_item.stock_item_id
-    WHERE kit_item.kit_id = p_kit_id
-      AND kit_item.quantity - COALESCE(inventory.quantity, 0) > 0;
+  WITH gaps AS (
+    SELECT
+      p.id AS pid,
+      ki.stock_item_id AS sid,
+      (ki.quantity - COALESCE(pi.quantity, 0))::INTEGER AS missing
+    FROM public.people p
+    CROSS JOIN public.kit_items ki
+    LEFT JOIN public.person_inventories pi
+      ON pi.person_id = p.id
+     AND pi.stock_item_id = ki.stock_item_id
+    WHERE ki.kit_id = p_kit_id
+      AND p.job_title = p_job_title
+      AND p.is_active = true
+      AND p.role = 'collaborator'
+      AND ki.quantity - COALESCE(pi.quantity, 0) > 0
+  ),
+  written AS (
+    INSERT INTO public.person_inventories (person_id, stock_item_id, quantity)
+    SELECT g.pid, g.sid, g.missing FROM gaps g
+    ON CONFLICT (person_id, stock_item_id) DO UPDATE
+    SET quantity = public.person_inventories.quantity + EXCLUDED.quantity,
+        updated_at = now()
+    RETURNING 1
+  )
+  SELECT jsonb_object_agg(pid::TEXT, total)
+    INTO affected
+  FROM (
+    SELECT pid, sum(missing)::INTEGER AS total
+    FROM gaps
+    GROUP BY pid
+  ) s
+  WHERE (SELECT count(*) FROM written) >= 0;
 
-    IF missing_items IS NULL THEN
-      person_id := target_person.id;
-      person_name := target_person.full_name;
-      assigned_quantity := 0;
-      skipped_reason := 'Ja possui o kit completo.';
-      RETURN NEXT;
-      CONTINUE;
-    END IF;
+  affected := COALESCE(affected, '{}'::jsonb);
 
-    -- Estoque insuficiente nao aborta o lote inteiro: os demais colaboradores
-    -- ainda recebem, e este aparece no retorno com o motivo.
-    SELECT stock_item.name
-      INTO shortage_name
-    FROM jsonb_array_elements(missing_items) entry
-    JOIN public.stock_items stock_item
-      ON stock_item.id = (entry->>'stock_item_id')::UUID
-    WHERE stock_item.current_quantity < (entry->>'quantity')::INTEGER
-    LIMIT 1;
-
-    IF shortage_name IS NOT NULL THEN
-      person_id := target_person.id;
-      person_name := target_person.full_name;
-      assigned_quantity := 0;
-      skipped_reason := format('Estoque insuficiente para: %s.', shortage_name);
-      RETURN NEXT;
-      CONTINUE;
-    END IF;
-
-    moved_quantity := public.assign_inventory_items_to_person(target_person.id, missing_items);
-
-    person_id := target_person.id;
-    person_name := target_person.full_name;
-    assigned_quantity := moved_quantity;
-    skipped_reason := NULL;
-    RETURN NEXT;
-  END LOOP;
-
-  RETURN;
+  RETURN QUERY
+  SELECT
+    p.id,
+    p.full_name,
+    COALESCE((affected->>p.id::TEXT)::INTEGER, 0),
+    CASE WHEN affected->>p.id::TEXT IS NULL THEN 'Ja possui o kit completo.' END
+  FROM public.people p
+  WHERE p.job_title = p_job_title
+    AND p.is_active = true
+    AND p.role = 'collaborator'
+  ORDER BY p.full_name;
 END;
 $$;
 
@@ -175,6 +169,6 @@ REVOKE EXECUTE ON FUNCTION public.assign_kit_to_job_title(UUID, TEXT) FROM PUBLI
 GRANT EXECUTE ON FUNCTION public.assign_kit_to_job_title(UUID, TEXT) TO authenticated, service_role;
 
 COMMENT ON FUNCTION public.assign_kit_to_job_title(UUID, TEXT) IS
-  'Entrega um kit a todos os colaboradores ativos de uma funcao, completando apenas a diferenca entre o kit e o que cada um ja possui.';
+  'Registra no inventario individual os itens do kit que faltam a cada colaborador da funcao. Acerto de cadastro: nao movimenta estoque.';
 
 COMMIT;

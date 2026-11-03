@@ -472,7 +472,7 @@ export function KitsPage({
                         setAssignmentKit(kit)
                       }}
                     >
-                      Entregar por função
+                      Registrar por função
                     </Button>
                   )}
                   <Button

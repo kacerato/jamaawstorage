@@ -31,7 +31,6 @@ interface PersonPreview {
   employeeId: string | null
   rows: PreviewRow[]
   totalMissing: number
-  hasShortage: boolean
 }
 
 const JOB_TITLE_OPTIONS = [
@@ -46,8 +45,8 @@ interface KitAssignmentModalProps {
 }
 
 /**
- * Entrega de kit por função. Completa apenas a diferença entre o kit e o que
- * cada colaborador já tem — quem já está completo não recebe nada.
+ * Registra no inventário individual os itens do kit que faltam a cada
+ * colaborador da função. É acerto de cadastro: não movimenta estoque.
  */
 export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalProps) {
   const [jobTitle, setJobTitle] = useState('cabista')
@@ -91,12 +90,10 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
         employeeId: row.employee_id,
         rows: [],
         totalMissing: 0,
-        hasShortage: false,
       }
 
       existing.rows.push(row)
       existing.totalMissing += row.missing_quantity
-      if (row.missing_quantity > row.available_in_stock) existing.hasShortage = true
 
       grouped.set(row.person_id, existing)
     })
@@ -106,7 +103,6 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
 
   const peopleToReceive = useMemo(() => people.filter((person) => person.totalMissing > 0), [people])
   const peopleComplete = useMemo(() => people.filter((person) => person.totalMissing === 0), [people])
-  const shortageCount = useMemo(() => peopleToReceive.filter((person) => person.hasShortage).length, [peopleToReceive])
 
   const handleApply = async () => {
     setApplying(true)
@@ -131,7 +127,7 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
   const jobTitleLabel = JOB_TITLE_OPTIONS.find((option) => option.value === jobTitle)?.label ?? jobTitle
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title={`Entregar "${kit.name}" por função`} size="lg">
+    <Modal isOpen={isOpen} onClose={onClose} title={`Registrar "${kit.name}" por função`} size="lg">
       <div className="flex flex-col gap-4">
         <Select
           label="Função"
@@ -144,7 +140,7 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
 
         {result ? (
           <div className="flex flex-col gap-2">
-            <Alert variant="success">Entrega concluída.</Alert>
+            <Alert variant="success">Inventário atualizado.</Alert>
             <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-700">
               {result.map((row) => (
                 <div
@@ -176,16 +172,11 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
               {peopleComplete.length > 0 && (
                 <Badge variant="default">{peopleComplete.length} já completos</Badge>
               )}
-              {shortageCount > 0 && (
-                <Badge variant="warning">{shortageCount} com estoque insuficiente</Badge>
-              )}
             </div>
 
-            {shortageCount > 0 && (
-              <Alert variant="warning">
-                Colaboradores sem estoque suficiente serão pulados. Os demais recebem normalmente.
-              </Alert>
-            )}
+            <Alert variant="info">
+              Isto registra os itens no inventário individual sem movimentar o estoque.
+            </Alert>
 
             <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-700">
               {peopleToReceive.length === 0 ? (
@@ -202,7 +193,7 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
                           <span className="ml-2 font-mono text-xs text-gray-500">{person.employeeId}</span>
                         )}
                       </span>
-                      <Badge variant={person.hasShortage ? 'warning' : 'primary'} size="sm">
+                      <Badge variant="primary" size="sm">
                         {person.totalMissing} un
                       </Badge>
                     </div>
@@ -213,12 +204,8 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
                         .map((row) => (
                           <div key={row.stock_item_id} className="flex justify-between text-xs">
                             <span className="text-gray-400">{row.stock_item_name}</span>
-                            <span
-                              className={
-                                row.missing_quantity > row.available_in_stock ? 'text-amber-300' : 'text-gray-300'
-                              }
-                            >
-                              tem {row.owned_quantity} de {row.kit_quantity} · entregar{' '}
+                            <span className="text-gray-300">
+                              tem {row.owned_quantity} de {row.kit_quantity} · registrar{' '}
                               {formatQuantity(row.missing_quantity, row.unit)}
                             </span>
                           </div>
@@ -237,7 +224,7 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
           </Button>
           {!result && (
             <Button onClick={handleApply} disabled={applying || loading || peopleToReceive.length === 0}>
-              {applying ? 'Entregando...' : `Entregar para ${peopleToReceive.length}`}
+              {applying ? 'Registrando...' : `Registrar para ${peopleToReceive.length}`}
             </Button>
           )}
         </div>
