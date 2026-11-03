@@ -178,17 +178,14 @@ function MiniMetric({
 function SectionHeading({
   eyebrow,
   title,
-  description,
 }: {
   eyebrow: string
   title: string
-  description?: string
 }) {
   return (
     <div>
       <p className="label-mono">{eyebrow}</p>
       <h3 className="mt-1 text-lg font-semibold text-ink">{title}</h3>
-      {description && <p className="mt-1 text-sm text-ink-dim">{description}</p>}
     </div>
   )
 }
@@ -726,7 +723,6 @@ export function DashboardPage() {
                 <SectionHeading
                   eyebrow="Reposicao"
                   title="Estoque baixo"
-                  description="Itens que estao no limite ou abaixo do minimo."
                 />
                 <div className="flex shrink-0 items-center gap-2">
                   <Badge
@@ -814,7 +810,6 @@ export function DashboardPage() {
                 <SectionHeading
                   eyebrow="Movimento"
                   title="Retiradas recentes"
-                  description="Ultimos registros com destino, quantidade e status."
                 />
                 <button
                   type="button"
