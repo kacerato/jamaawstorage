@@ -233,10 +233,10 @@ export function WorksitesPage() {
       sortable: true,
       render: (_value: unknown, row: WorksiteWithStats) => (
         <div className="flex items-center gap-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gray-800 text-orange-500">
+          <div className="flex h-8 w-8 items-center justify-center rounded-none bg-surface text-ink">
             <BuildingIcon size={16} />
           </div>
-          <span className="font-medium text-white">{row.name}</span>
+          <span className="font-medium text-ink">{row.name}</span>
         </div>
       ),
     },
@@ -256,7 +256,7 @@ export function WorksitesPage() {
     {
       key: 'total_withdrawals',
       header: 'Retiradas',
-      render: (value: unknown) => <span className="text-gray-300">{value as number}</span>,
+      render: (value: unknown) => <span className="text-ink-dim">{value as number}</span>,
     },
     {
       key: 'created_at',
@@ -284,8 +284,8 @@ export function WorksitesPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Obras</h2>
-          <p className="mt-1 text-sm text-gray-400">Cadastro de obras e destinos para retiradas</p>
+          <h2 className="text-2xl font-bold text-ink">Obras</h2>
+          <p className="mt-1 text-sm text-ink-dim">Cadastro de obras e destinos para retiradas</p>
         </div>
         <Button
           onClick={() => {
@@ -316,7 +316,7 @@ export function WorksitesPage() {
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as 'all' | 'active' | 'inactive')}
-            className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+            className="w-full appearance-none rounded-none border border-line bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-line"
           >
             <option value="all">Todas</option>
             <option value="active">Ativas</option>
@@ -326,8 +326,8 @@ export function WorksitesPage() {
       </div>
 
       {refreshing && (
-        <div className="inline-flex items-center gap-2 text-xs text-orange-200/75">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+        <div className="inline-flex items-center gap-2 text-xs text-ink">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-blaze" />
           Atualizando obras...
         </div>
       )}
@@ -400,7 +400,7 @@ export function WorksitesPage() {
               <DetailField label="Total de Retiradas" value={selectedWorksite.total_withdrawals} />
             </div>
 
-            <div className="flex gap-3 border-t border-gray-700 pt-4">
+            <div className="flex gap-3 border-t border-line pt-4">
               <Button
                 size="sm"
                 variant="outline"
@@ -424,8 +424,8 @@ export function WorksitesPage() {
               </Button>
             </div>
 
-            <div className="border-t border-gray-700 pt-4">
-              <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-white">
+            <div className="border-t border-line pt-4">
+              <h3 className="mb-3 flex items-center gap-2 text-base font-semibold text-ink">
                 <PackageIcon size={18} />
                 Histórico de Retiradas
               </h3>
@@ -434,31 +434,31 @@ export function WorksitesPage() {
                   <Spinner />
                 </div>
               ) : withdrawalHistory.length === 0 ? (
-                <p className="py-4 text-sm text-gray-400">Nenhuma retirada registrada para esta obra.</p>
+                <p className="py-4 text-sm text-ink-dim">Nenhuma retirada registrada para esta obra.</p>
               ) : (
-                <div className="overflow-hidden rounded-xl border border-gray-700">
+                <div className="overflow-hidden rounded-none border border-line">
                   <table className="w-full">
                     <thead>
-                      <tr className="bg-gray-800">
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Código</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Solicitante</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Status</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Itens</th>
-                        <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Data</th>
+                      <tr className="bg-surface">
+                        <th className="px-4 py-3 text-left text-sm font-medium text-ink-dim">Código</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-ink-dim">Solicitante</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-ink-dim">Status</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-ink-dim">Itens</th>
+                        <th className="px-4 py-3 text-left text-sm font-medium text-ink-dim">Data</th>
                       </tr>
                     </thead>
                     <tbody>
                       {withdrawalHistory.map((withdrawal) => (
-                        <tr key={withdrawal.id} className="border-t border-gray-800">
-                          <td className="px-4 py-3 text-sm font-mono text-orange-400">{withdrawal.code}</td>
-                          <td className="px-4 py-3 text-sm text-gray-300">{withdrawal.requester_name}</td>
+                        <tr key={withdrawal.id} className="border-t border-line">
+                          <td className="px-4 py-3 text-sm font-mono text-ink">{withdrawal.code}</td>
+                          <td className="px-4 py-3 text-sm text-ink-dim">{withdrawal.requester_name}</td>
                           <td className="px-4 py-3 text-sm">
                             <Badge variant={statusBadgeMap[withdrawal.status] ?? 'default'} dot>
                               {statusLabelMap[withdrawal.status] ?? withdrawal.status}
                             </Badge>
                           </td>
-                          <td className="px-4 py-3 text-sm text-gray-300">{withdrawal.items_count}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-400">{formatDate(withdrawal.created_at)}</td>
+                          <td className="px-4 py-3 text-sm text-ink-dim">{withdrawal.items_count}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-ink-dim">{formatDate(withdrawal.created_at)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -489,9 +489,9 @@ function ConfirmToggleModal({
   return (
     <Modal isOpen={true} onClose={onCancel} title={isDeactivating ? 'Desativar Obra' : 'Reativar Obra'} size="sm">
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-gray-300">
+        <p className="text-sm text-ink-dim">
           Tem certeza que deseja {isDeactivating ? 'desativar' : 'reativar'} a obra{' '}
-          <span className="font-medium text-white">{worksite.name}</span>?
+          <span className="font-medium text-ink">{worksite.name}</span>?
         </p>
         <div className="flex justify-end gap-3">
           <Button type="button" variant="secondary" onClick={onCancel}>
@@ -509,8 +509,8 @@ function ConfirmToggleModal({
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div>
-      <p className="text-sm font-medium text-gray-400">{label}</p>
-      <div className="mt-1 text-base text-gray-300">{value}</div>
+      <p className="text-sm font-medium text-ink-dim">{label}</p>
+      <div className="mt-1 text-base text-ink-dim">{value}</div>
     </div>
   )
 }

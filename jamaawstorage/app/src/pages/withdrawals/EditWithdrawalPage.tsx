@@ -717,12 +717,12 @@ export function EditWithdrawalPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-bold text-white">Editar Retirada</h2>
+            <h2 className="text-2xl font-bold text-ink">Editar Retirada</h2>
             <Badge variant="warning" dot>
               {withdrawal.code}
             </Badge>
           </div>
-          <p className="mt-1 text-sm text-gray-400">
+          <p className="mt-1 text-sm text-ink-dim">
             Ajuste itens, destinos e observacoes.
           </p>
         </div>
@@ -735,8 +735,8 @@ export function EditWithdrawalPage() {
         <div className="flex flex-col gap-6">
           <Card variant="bordered" padding="lg">
             <div className="mb-4 flex items-center gap-2">
-              <UserIcon size={18} className="text-orange-300" />
-              <h3 className="text-lg font-semibold text-white">Solicitacao</h3>
+              <UserIcon size={18} className="text-ink" />
+              <h3 className="text-lg font-semibold text-ink">Solicitacao</h3>
             </div>
 
             <div className="grid gap-4">
@@ -752,12 +752,12 @@ export function EditWithdrawalPage() {
               />
 
               <div>
-                <label className="text-sm font-medium text-gray-300">Observacoes</label>
+                <label className="text-sm font-medium text-ink-dim">Observacoes</label>
                 <textarea
                   value={notes}
                   onChange={(event) => setNotes(event.target.value)}
                   rows={4}
-                  className="mt-1.5 w-full rounded-xl border border-white/8 bg-[#0d0d10] px-3 py-2 text-sm text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
+                  className="mt-1.5 w-full rounded-none border border-line bg-void px-3 py-2 text-sm text-ink outline-none transition-colors focus:border-ink focus:ring-2 focus:ring-line"
                   placeholder="Observacoes opcionais para a retirada"
                 />
               </div>
@@ -768,8 +768,8 @@ export function EditWithdrawalPage() {
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <div className="flex items-center gap-2">
-                  <PackageIcon size={18} className="text-orange-300" />
-                  <h3 className="text-lg font-semibold text-white">Itens da Retirada</h3>
+                  <PackageIcon size={18} className="text-ink" />
+                  <h3 className="text-lg font-semibold text-ink">Itens da Retirada</h3>
                 </div>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -820,7 +820,7 @@ export function EditWithdrawalPage() {
             )}
 
             {items.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-10 text-center text-sm text-gray-500">
+              <div className="rounded-none border border-dashed border-line bg-surface px-4 py-10 text-center text-sm text-ink-mute">
                 Nenhum item mantido na retirada. Adicione pelo menos um item para salvar.
               </div>
             ) : (
@@ -834,22 +834,22 @@ export function EditWithdrawalPage() {
                   return (
                     <div
                       key={stockItem.id}
-                      className={`rounded-2xl border p-4 transition-colors ${
+                      className={`rounded-none border p-4 transition-colors ${
                         groupOverStock
-                          ? 'border-red-400/30 bg-red-500/8'
-                          : 'border-white/8 bg-white/3'
+                          ? 'border-crit bg-crit/15'
+                          : 'border-line bg-surface'
                       }`}
                     >
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h4 className="truncate text-base font-semibold text-white">{stockItem.name}</h4>
+                            <h4 className="truncate text-base font-semibold text-ink">{stockItem.name}</h4>
                             <Badge variant={groupOverStock ? 'danger' : 'primary'} size="sm">
                               {groupTotal} {stockItem.unit} para {entries.length} destino(s)
                             </Badge>
                             {groupOverStock ? <Badge variant="danger" size="sm">Saldo excedido</Badge> : null}
                           </div>
-                          <p className="mt-1 text-xs text-gray-500">{stockItem.category ?? 'Sem categoria'}</p>
+                          <p className="mt-1 text-xs text-ink-mute">{stockItem.category ?? 'Sem categoria'}</p>
                           <div className="mt-3 grid grid-cols-2 gap-2 sm:max-w-xs">
                             <MiniMetric label="Total" value={`${groupTotal} ${stockItem.unit}`} danger={groupOverStock} />
                             <MiniMetric label="Saldo livre" value={`${maxAvailable} ${stockItem.unit}`} danger={groupOverStock} />
@@ -859,7 +859,7 @@ export function EditWithdrawalPage() {
                         <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
                           {entries.length > 1 && (
                             <>
-                              <label className="text-xs text-gray-400">Aplicar a todos</label>
+                              <label className="text-xs text-ink-dim">Aplicar a todos</label>
                               <input
                                 type="number"
                                 min={1}
@@ -868,7 +868,7 @@ export function EditWithdrawalPage() {
                                 onChange={(event) => {
                                   setGroupQuantityDrafts((prev) => ({ ...prev, [stockItem.id]: event.target.value }))
                                 }}
-                                className="w-16 rounded-xl border border-gray-700 bg-gray-950 px-2 py-1.5 text-center text-sm text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
+                                className="w-16 rounded-none border border-line bg-void px-2 py-1.5 text-center text-sm text-ink outline-none transition-colors focus:border-ink focus:ring-2 focus:ring-line"
                               />
                               <Button
                                 type="button"
@@ -906,13 +906,13 @@ export function EditWithdrawalPage() {
                         {entries.map((item) => (
                           <div
                             key={item.entry_id}
-                            className="flex flex-col gap-3 rounded-xl border border-white/8 bg-black/20 p-3 sm:flex-row sm:items-center sm:justify-between"
+                            className="flex flex-col gap-3 rounded-none border border-line bg-void p-3 sm:flex-row sm:items-center sm:justify-between"
                           >
                             <div className="flex min-w-0 items-center gap-2">
                               <Badge variant={item.destination_type === 'work_site' ? 'info' : 'primary'} size="sm">
                                 {item.destination_type === 'work_site' ? 'Obra' : 'Colaborador'}
                               </Badge>
-                              <span className="min-w-0 truncate text-sm font-medium text-white">
+                              <span className="min-w-0 truncate text-sm font-medium text-ink">
                                 {item.destination_type === 'collaborator'
                                   ? collaborators.find((collaborator) => collaborator.id === item.collaborator_id)?.full_name ?? 'Colaborador nao selecionado'
                                   : selectedWorkSiteLabel(workSites, item.work_site_id ?? '')}
@@ -920,7 +920,7 @@ export function EditWithdrawalPage() {
                             </div>
 
                             <div className="flex flex-shrink-0 flex-wrap items-center gap-2">
-                              <span className="text-sm text-gray-300">{item.quantity} {item.unit}</span>
+                              <span className="text-sm text-ink-dim">{item.quantity} {item.unit}</span>
                               <Button
                                 type="button"
                                 variant="secondary"
@@ -959,30 +959,30 @@ export function EditWithdrawalPage() {
 
           <Card variant="bordered" padding="lg">
             <div className="flex items-center gap-2">
-              <SignatureIcon size={18} className="text-orange-300" />
-              <h3 className="text-lg font-semibold text-white">Assinaturas e Comprovantes</h3>
+              <SignatureIcon size={18} className="text-ink" />
+              <h3 className="text-lg font-semibold text-ink">Assinaturas e Comprovantes</h3>
             </div>
           </Card>
         </div>
 
         <div className="flex flex-col gap-4">
           <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-2xl border border-white/8 bg-[#111217] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Itens</p>
-              <p className="mt-2 text-2xl font-semibold text-white">{itemGroups.length}</p>
-              <p className="mt-1 text-xs text-gray-500">{items.length} linha(s)</p>
+            <div className="rounded-none border border-line bg-surface px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-ink-mute">Itens</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{itemGroups.length}</p>
+              <p className="mt-1 text-xs text-ink-mute">{items.length} linha(s)</p>
             </div>
-            <div className="rounded-2xl border border-white/8 bg-[#111217] px-4 py-3">
-              <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Unidades</p>
-              <p className="mt-2 text-2xl font-semibold text-orange-300">{totalUnits}</p>
+            <div className="rounded-none border border-line bg-surface px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-ink-mute">Unidades</p>
+              <p className="mt-2 text-2xl font-semibold text-ink">{totalUnits}</p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-[#111217] p-4 text-sm text-gray-300">
-            <p className="font-medium text-white">Destinos da retirada</p>
+          <div className="rounded-none border border-line bg-surface p-4 text-sm text-ink-dim">
+            <p className="font-medium text-ink">Destinos da retirada</p>
             <div className="mt-3 space-y-2">
               {groups.map((group) => (
-                <div key={group.key} className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                <div key={group.key} className="flex items-center justify-between gap-3 rounded-none border border-line bg-void px-3 py-2">
                   <span className="truncate">
                     {group.destination_type === 'collaborator'
                       ? collaborators.find((collaborator) => collaborator.id === group.collaborator_id)?.full_name ?? 'Colaborador'
@@ -996,8 +996,8 @@ export function EditWithdrawalPage() {
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-[#111217] p-4">
-            <p className="font-medium text-white">Termo de retirada PDF</p>
+          <div className="rounded-none border border-line bg-surface p-4">
+            <p className="font-medium text-ink">Termo de retirada PDF</p>
             <div className="mt-4 flex flex-col gap-2">
               <Button
                 type="button"
@@ -1084,11 +1084,11 @@ export function EditWithdrawalPage() {
       >
         {editingItem ? (
           <div className="space-y-5">
-            <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
+            <div className="rounded-none border border-line bg-surface p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0">
-                  <h3 className="truncate text-lg font-semibold text-white">{editingItem.stock_item.name}</h3>
-                  <p className="mt-1 text-sm text-gray-400">{editingItem.stock_item.category ?? 'Sem categoria'}</p>
+                  <h3 className="truncate text-lg font-semibold text-ink">{editingItem.stock_item.name}</h3>
+                  <p className="mt-1 text-sm text-ink-dim">{editingItem.stock_item.category ?? 'Sem categoria'}</p>
                 </div>
                 <Badge variant={editingItem.destination_type === 'work_site' ? 'info' : 'primary'}>
                   {editingItem.destination_type === 'work_site' ? 'Obra' : 'Colaborador'}
@@ -1097,14 +1097,14 @@ export function EditWithdrawalPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-[170px_minmax(0,1fr)]">
-              <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+              <div className="rounded-none border border-line bg-void p-4">
                 <SectionLabel label="Quantidade" info="Altere o total desta linha. Para mandar parte para outro destino, use Separar quantidade." />
                 <input
                   type="number"
                   min={1}
                   value={editingItem.quantity}
                   onChange={(event) => handleUpdateQuantity(editingItem.entry_id, Number(event.target.value))}
-                  className="mt-2 w-full rounded-2xl border border-gray-700 bg-gray-950 px-4 py-3 text-center text-lg font-semibold text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/30"
+                  className="mt-2 w-full rounded-none border border-line bg-void px-4 py-3 text-center text-lg font-semibold text-ink outline-none transition-colors focus:border-ink focus:ring-2 focus:ring-line"
                 />
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   <MiniMetric label="Saldo" value={`${computeMaxAvailable(editingItem)} ${editingItem.unit}`} />
@@ -1112,7 +1112,7 @@ export function EditWithdrawalPage() {
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+              <div className="rounded-none border border-line bg-void p-4">
                 <Select
                   label="Destino"
                   value={encodeDestination(editingItem.destination_type, editingItem.collaborator_id, editingItem.work_site_id)}
@@ -1123,12 +1123,12 @@ export function EditWithdrawalPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-orange-400/15 bg-orange-500/6 p-4">
+            <div className="rounded-none border border-line bg-surface p-4">
               <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
                 <div className="min-w-0 flex-1">
                   <div className="mb-2 flex items-center justify-between gap-3">
                     <SectionLabel label="Separar quantidade" info="Cria uma nova linha com a quantidade escolhida. Depois escolha o destino dessa nova linha." className="mb-0" />
-                    <span className="text-xs text-gray-500">Max. {maxSplitQuantity(editingItem)} {editingItem.unit}</span>
+                    <span className="text-xs text-ink-mute">Max. {maxSplitQuantity(editingItem)} {editingItem.unit}</span>
                   </div>
                   <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
                     <input
@@ -1139,7 +1139,7 @@ export function EditWithdrawalPage() {
                       value={splitQuantity}
                       onChange={(event) => setSplitQuantity(event.target.value)}
                       placeholder="Qtd"
-                      className="h-10 rounded-xl border border-orange-400/20 bg-black/25 px-3 text-sm text-white outline-none transition-colors placeholder:text-gray-600 focus:border-orange-400/70 focus:ring-2 focus:ring-orange-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="h-10 rounded-none border border-line bg-void px-3 text-sm text-ink outline-none transition-colors placeholder:text-ink-mute focus:border-ink focus:ring-2 focus:ring-line disabled:cursor-not-allowed disabled:opacity-50"
                     />
                     <div className="grid grid-cols-3 gap-2">
                       {[
@@ -1152,7 +1152,7 @@ export function EditWithdrawalPage() {
                           type="button"
                           disabled={editingItem.quantity <= 1}
                           onClick={() => setSplitQuantity(String(option.value))}
-                          className="h-10 rounded-xl border border-white/8 bg-black/20 px-3 text-xs font-medium text-gray-300 transition-colors hover:border-orange-400/35 hover:bg-orange-500/10 hover:text-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+                          className="h-10 rounded-none border border-line bg-void px-3 text-xs font-medium text-ink-dim transition-colors hover:border-ink-mute hover:bg-surface hover:text-ink disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {option.label}
                         </button>
@@ -1171,7 +1171,7 @@ export function EditWithdrawalPage() {
               </div>
             </div>
 
-            <div className="flex flex-col-reverse gap-3 border-t border-white/8 pt-4 sm:flex-row sm:justify-between">
+            <div className="flex flex-col-reverse gap-3 border-t border-line pt-4 sm:flex-row sm:justify-between">
               <Button
                 type="button"
                 variant="ghost"
@@ -1203,9 +1203,9 @@ function MiniMetric({
   danger?: boolean
 }) {
   return (
-    <div className={`rounded-xl border px-3 py-2 ${danger ? 'border-red-400/25 bg-red-500/10' : 'border-white/8 bg-black/20'}`}>
-      <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">{label}</p>
-      <p className={`mt-1 truncate text-sm font-semibold ${danger ? 'text-red-300' : 'text-white'}`}>{value}</p>
+    <div className={`rounded-none border px-3 py-2 ${danger ? 'border-crit bg-crit/15' : 'border-line bg-void'}`}>
+      <p className="text-[10px] uppercase tracking-[0.18em] text-ink-mute">{label}</p>
+      <p className={`mt-1 truncate text-sm font-semibold ${danger ? 'text-crit' : 'text-ink'}`}>{value}</p>
     </div>
   )
 }

@@ -279,15 +279,15 @@ export function KitsPage({
         <div>
           {embedded ? (
             <>
-              <h3 className="text-xl font-semibold text-white">Kits de Retirada</h3>
-              <p className="mt-1 text-sm text-gray-400">
+              <h3 className="text-xl font-semibold text-ink">Kits de Retirada</h3>
+              <p className="mt-1 text-sm text-ink-dim">
                 Monte e ajuste kits no mesmo contexto do estoque
               </p>
             </>
           ) : (
             <>
-              <h2 className="text-2xl font-bold text-white">Kits de Retirada</h2>
-              <p className="mt-1 text-sm text-gray-400">
+              <h2 className="text-2xl font-bold text-ink">Kits de Retirada</h2>
+              <p className="mt-1 text-sm text-ink-dim">
                 Gerencie kits de EPIs pré-montados para retiradas rápidas
               </p>
             </>
@@ -339,7 +339,7 @@ export function KitsPage({
           <select
             value={statusFilter}
             onChange={(event) => setStatusFilter(event.target.value as 'active' | 'inactive' | 'all')}
-            className="rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+            className="rounded-none border border-line bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-line"
           >
             <option value="active">Ativos</option>
             <option value="inactive">Inativos</option>
@@ -347,8 +347,8 @@ export function KitsPage({
           </select>
         </div>
         {refreshing && (
-          <div className="mt-3 inline-flex items-center gap-2 text-xs text-orange-200/75">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+          <div className="mt-3 inline-flex items-center gap-2 text-xs text-ink">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-blaze" />
             Atualizando kits...
           </div>
         )}
@@ -357,7 +357,7 @@ export function KitsPage({
       {loading ? (
         <div className="flex flex-col items-center justify-center py-24">
           <Spinner size="lg" />
-          <p className="mt-4 text-sm text-gray-400">Carregando kits...</p>
+          <p className="mt-4 text-sm text-ink-dim">Carregando kits...</p>
         </div>
       ) : filteredKits.length === 0 && searchQuery === '' ? (
         <EmptyState
@@ -385,20 +385,20 @@ export function KitsPage({
                 padding="none"
               >
                 <div
-                  className="cursor-pointer p-4 transition-colors hover:bg-gray-800/50"
+                  className="cursor-pointer p-4 transition-colors hover:bg-surface"
                   onClick={() => handleOpenDetail(kit)}
                 >
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg bg-orange-500/20">
-                        <KitIcon size={20} className="text-orange-400" />
+                      <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-none bg-surface">
+                        <KitIcon size={20} className="text-ink" />
                       </div>
                       <div className="min-w-0">
-                        <h3 className="truncate text-base font-semibold text-white">
+                        <h3 className="truncate text-base font-semibold text-ink">
                           {kit.name}
                         </h3>
                         {kit.description && (
-                          <p className="mt-0.5 truncate text-sm text-gray-400">
+                          <p className="mt-0.5 truncate text-sm text-ink-dim">
                             {kit.description}
                           </p>
                         )}
@@ -423,11 +423,11 @@ export function KitsPage({
                       {previewItems.map((ki) => (
                         <div
                           key={ki.id}
-                          className="flex items-center justify-between rounded-lg bg-gray-800/50 px-3 py-1.5"
+                          className="flex items-center justify-between rounded-none bg-surface px-3 py-1.5"
                         >
                           <div className="flex items-center gap-2">
                             <ItemVisual iconKey={ki.stock_items?.svg_icon_key} size={18} />
-                            <span className="text-sm text-gray-300">
+                            <span className="text-sm text-ink-dim">
                               {ki.stock_items?.name ?? 'Item'}
                             </span>
                             {ki.stock_items?.category && (
@@ -436,13 +436,13 @@ export function KitsPage({
                               </Badge>
                             )}
                           </div>
-                          <span className="text-sm font-medium text-gray-400">
+                          <span className="text-sm font-medium text-ink-dim">
                             {ki.quantity} {ki.stock_items?.unit ?? 'un'}
                           </span>
                         </div>
                       ))}
                       {itemCount > previewItems.length && (
-                        <div className="rounded-lg border border-dashed border-white/8 bg-white/3 px-3 py-2 text-xs text-gray-400">
+                        <div className="rounded-none border border-dashed border-line bg-surface px-3 py-2 text-xs text-ink-dim">
                           +{itemCount - previewItems.length} item(ns) no detalhe do kit
                         </div>
                       )}
@@ -450,7 +450,7 @@ export function KitsPage({
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 border-t border-gray-700 px-4 py-3">
+                <div className="flex items-center gap-2 border-t border-line px-4 py-3">
                   <Button
                     type="button"
                     variant="ghost"
@@ -551,11 +551,11 @@ export function KitsPage({
             {submitError}
           </Alert>
         )}
-        <p className="text-gray-300">
+        <p className="text-ink-dim">
           {selectedKit?.is_active ? (
             <>
               Tem certeza que deseja desativar o kit{' '}
-              <span className="font-semibold text-white">
+              <span className="font-semibold text-ink">
                 {selectedKit?.name}
               </span>
               ? O kit não aparecerá nas retiradas enquanto estiver inativo.
@@ -563,7 +563,7 @@ export function KitsPage({
           ) : (
             <>
               Tem certeza que deseja ativar o kit{' '}
-              <span className="font-semibold text-white">
+              <span className="font-semibold text-ink">
                 {selectedKit?.name}
               </span>
               ?
@@ -599,15 +599,15 @@ export function KitsPage({
           <div className="flex flex-col gap-6">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
+                <p className="text-xs font-medium uppercase text-ink-mute">
                   Nome
                 </p>
-                <p className="mt-1 text-sm font-semibold text-white">
+                <p className="mt-1 text-sm font-semibold text-ink">
                   {selectedKit.name}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
+                <p className="text-xs font-medium uppercase text-ink-mute">
                   Status
                 </p>
                 <p className="mt-1">
@@ -622,58 +622,58 @@ export function KitsPage({
               </div>
               {selectedKit.description && (
                 <div className="sm:col-span-2">
-                  <p className="text-xs font-medium uppercase text-gray-500">
+                  <p className="text-xs font-medium uppercase text-ink-mute">
                     Descrição
                   </p>
-                  <p className="mt-1 text-sm text-gray-300">
+                  <p className="mt-1 text-sm text-ink-dim">
                     {selectedKit.description}
                   </p>
                 </div>
               )}
               <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
+                <p className="text-xs font-medium uppercase text-ink-mute">
                   Criado em
                 </p>
-                <p className="mt-1 text-sm text-gray-300">
+                <p className="mt-1 text-sm text-ink-dim">
                   {formatDateTime(selectedKit.created_at)}
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase text-gray-500">
+                <p className="text-xs font-medium uppercase text-ink-mute">
                   Atualizado em
                 </p>
-                <p className="mt-1 text-sm text-gray-300">
+                <p className="mt-1 text-sm text-ink-dim">
                   {formatDateTime(selectedKit.updated_at)}
                 </p>
               </div>
             </div>
 
             <div>
-              <h4 className="mb-2 text-sm font-semibold text-white">
+              <h4 className="mb-2 text-sm font-semibold text-ink">
                 Itens do Kit ({selectedKit.kit_items?.length ?? 0})
               </h4>
               {(!selectedKit.kit_items || selectedKit.kit_items.length === 0) ? (
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-ink-mute">
                   Nenhum item neste kit
                 </p>
               ) : (
-                <div className="overflow-hidden rounded-lg border border-gray-700">
+                <div className="overflow-hidden rounded-none border border-line">
                   <table className="w-full">
                     <thead>
-                      <tr className="bg-gray-800">
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
+                      <tr className="bg-surface">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">
                           Icone
                         </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">
                           Item
                         </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">
                           Categoria
                         </th>
-                        <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">
+                        <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">
                           Estoque Atual
                         </th>
-                        <th className="px-3 py-2 text-right text-xs font-medium text-gray-400">
+                        <th className="px-3 py-2 text-right text-xs font-medium text-ink-dim">
                           Qtd no Kit
                         </th>
                       </tr>
@@ -687,12 +687,12 @@ export function KitsPage({
                         return (
                           <tr
                             key={ki.id}
-                            className="border-t border-gray-800"
+                            className="border-t border-line"
                           >
-                            <td className="px-3 py-2 text-sm text-white">
+                            <td className="px-3 py-2 text-sm text-ink">
                               <ItemVisual iconKey={ki.stock_items?.svg_icon_key} size={24} />
                             </td>
-                            <td className="px-3 py-2 text-sm text-white">
+                            <td className="px-3 py-2 text-sm text-ink">
                               {ki.stock_items?.name ?? '—'}
                             </td>
                             <td className="px-3 py-2 text-sm">
@@ -705,8 +705,8 @@ export function KitsPage({
                                 className={cn(
                                   'font-medium',
                                   isLowStock
-                                    ? 'text-red-400'
-                                    : 'text-gray-300'
+                                    ? 'text-crit'
+                                    : 'text-ink-dim'
                                 )}
                               >
                                 {ki.stock_items
@@ -717,7 +717,7 @@ export function KitsPage({
                                   : '—'}
                               </span>
                             </td>
-                            <td className="px-3 py-2 text-right text-sm font-medium text-orange-400">
+                            <td className="px-3 py-2 text-right text-sm font-medium text-ink">
                               {ki.quantity} {ki.stock_items?.unit ?? 'un'}
                             </td>
                           </tr>
@@ -729,7 +729,7 @@ export function KitsPage({
               )}
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-gray-700 pt-4">
+            <div className="flex items-center justify-end gap-3 border-t border-line pt-4">
               <Button
                 variant="secondary"
                 onClick={() => {

@@ -68,10 +68,10 @@ export function InfoTip({ text }: InfoTipProps) {
           setIsOpen((current) => !current)
           window.requestAnimationFrame(updatePosition)
         }}
-        className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-lg border text-gray-400 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/35 ${
+        className={`inline-flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-none border text-ink-mute transition-colors focus:outline-none focus:ring-2 focus:ring-ink/30 ${
           isOpen
-            ? 'border-orange-400/45 bg-orange-500/15 text-orange-200'
-            : 'border-white/10 bg-white/5 hover:border-orange-400/35 hover:bg-white/8 hover:text-orange-200'
+            ? 'border-ink bg-surface text-ink'
+            : 'border-line bg-surface hover:border-ink-mute hover:text-ink-dim'
         }`}
         aria-label="Informacao"
         aria-expanded={isOpen}
@@ -80,12 +80,12 @@ export function InfoTip({ text }: InfoTipProps) {
       </button>
       {isOpen && position ? createPortal(
         <div
-          className="fixed z-[80] w-72 rounded-2xl border border-white/10 bg-[#17181c] p-3 text-xs leading-relaxed text-gray-300 shadow-2xl shadow-black/45"
+          className="fixed z-[80] w-72 rounded-none border border-line bg-surface p-3 text-xs leading-relaxed text-ink-dim shadow-2xl shadow-black/45"
           style={{ left: position.left, top: position.top }}
           role="tooltip"
         >
           <div
-            className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-white/10 bg-[#17181c] ${
+            className={`absolute left-1/2 h-3 w-3 -translate-x-1/2 rotate-45 border-line bg-surface ${
               position.placement === 'bottom'
                 ? '-top-1.5 border-l border-t'
                 : '-bottom-1.5 border-b border-r'

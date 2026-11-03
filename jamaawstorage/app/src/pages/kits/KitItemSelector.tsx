@@ -73,8 +73,8 @@ export function KitItemSelector({ onSelect, selectedIds }: KitItemSelectorProps)
       />
 
       {refreshing && (
-        <div className="inline-flex items-center gap-2 text-xs text-orange-200/75">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+        <div className="inline-flex items-center gap-2 text-xs text-ink">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-blaze" />
           Atualizando itens...
         </div>
       )}
@@ -86,18 +86,18 @@ export function KitItemSelector({ onSelect, selectedIds }: KitItemSelectorProps)
       )}
 
       {!loading && items.length === 0 && search.trim() !== '' && (
-        <p className="py-4 text-center text-sm text-gray-400">
+        <p className="py-4 text-center text-sm text-ink-dim">
           Nenhum item encontrado para &quot;{search}&quot;
         </p>
       )}
 
       {!loading && items.length === 0 && search.trim() === '' && (
-        <p className="py-4 text-center text-sm text-gray-400">
+        <p className="py-4 text-center text-sm text-ink-dim">
           Nenhum item disponível
         </p>
       )}
 
-      <div className="max-h-64 overflow-y-auto rounded-2xl border border-white/8 bg-[#0d0d0f]/70">
+      <div className="max-h-64 overflow-y-auto rounded-none border border-line bg-void/70">
         {items.map((item) => {
           const alreadySelected = selectedIds.has(item.id)
           const isLowStock = item.minimum_quantity > 0 && item.current_quantity <= item.minimum_quantity
@@ -109,18 +109,18 @@ export function KitItemSelector({ onSelect, selectedIds }: KitItemSelectorProps)
               disabled={alreadySelected}
               onClick={() => onSelect(item)}
               className={`
-                flex w-full items-center gap-3 border-b border-white/6 px-4 py-3 text-left transition-colors last:border-b-0
-                ${alreadySelected ? 'cursor-not-allowed opacity-40' : 'cursor-pointer hover:bg-white/5'}
+                flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left transition-colors last:border-b-0
+                ${alreadySelected ? 'cursor-not-allowed opacity-40' : 'cursor-pointer hover:bg-surface'}
               `}
             >
-              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-orange-400/12 bg-orange-500/12">
+              <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-none border border-line bg-surface">
                 <ItemVisual iconKey={item.svg_icon_key} size={24} />
               </div>
               <div className="min-w-0 flex-1">
-                <p className="truncate text-sm font-medium text-white">
+                <p className="truncate text-sm font-medium text-ink">
                   {item.name}
                 </p>
-                <p className="truncate text-xs text-gray-400">
+                <p className="truncate text-xs text-ink-dim">
                   {item.category ?? 'Sem categoria'}
                 </p>
               </div>
@@ -135,7 +135,7 @@ export function KitItemSelector({ onSelect, selectedIds }: KitItemSelectorProps)
                     Adicionado
                   </Badge>
                 )}
-                <span className="text-sm text-gray-300">
+                <span className="text-sm text-ink-dim">
                   {item.current_quantity} {item.unit}
                 </span>
               </div>

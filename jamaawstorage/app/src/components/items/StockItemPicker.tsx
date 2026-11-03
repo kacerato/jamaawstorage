@@ -63,11 +63,11 @@ export function StockItemPicker<TItem extends StockItemPickerRow>({
       />
 
       {filteredItems.length === 0 ? (
-        <div className="rounded-2xl border border-dashed border-white/10 bg-[#0d0d10] px-4 py-8 text-center text-sm text-gray-500">
+        <div className="rounded-none border border-dashed border-line bg-void px-4 py-8 text-center text-sm text-ink-mute">
           {search.trim() ? `Nenhum item encontrado para "${search}".` : emptyMessage}
         </div>
       ) : (
-        <div className="max-h-72 overflow-y-auto rounded-2xl border border-white/8 bg-[#0d0d10]/90">
+        <div className="max-h-72 overflow-y-auto rounded-none border border-line bg-void/90">
           {filteredItems.map((item) => {
             const disabled = disabledIds?.has(item.id) ?? false
             const active = selectedId === item.id
@@ -80,28 +80,28 @@ export function StockItemPicker<TItem extends StockItemPickerRow>({
                 disabled={disabled}
                 onClick={() => onSelect(item)}
                 className={cn(
-                  'flex w-full items-center gap-3 border-b border-white/6 px-4 py-3 text-left transition-colors last:border-b-0',
+                  'flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left transition-colors last:border-b-0',
                   disabled
                     ? 'cursor-not-allowed opacity-45'
                     : active
-                      ? 'bg-orange-500/12'
-                      : 'hover:bg-white/5',
+                      ? 'bg-surface'
+                      : 'hover:bg-surface',
                 )}
               >
-                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-2xl border border-orange-400/12 bg-orange-500/10">
+                <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-none border border-line bg-surface">
                   <ItemVisual iconKey={item.svg_icon_key} size={26} />
                 </div>
 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center gap-2">
-                    <p className="truncate text-sm font-medium text-white">{item.name}</p>
+                    <p className="truncate text-sm font-medium text-ink">{item.name}</p>
                     {item.code ? (
-                      <span className="rounded-full border border-white/8 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-gray-400">
+                      <span className="rounded-none border border-line bg-void px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-dim">
                         {item.code}
                       </span>
                     ) : null}
                   </div>
-                  <p className="mt-1 truncate text-xs text-gray-500">
+                  <p className="mt-1 truncate text-xs text-ink-mute">
                     {item.category ?? 'Sem categoria'} • {item.unit}
                   </p>
                 </div>
@@ -119,7 +119,7 @@ export function StockItemPicker<TItem extends StockItemPickerRow>({
                       </Badge>
                     ) : null}
                   </div>
-                  <span className="text-sm text-gray-300">
+                  <span className="text-sm text-ink-dim">
                     {item.current_quantity} {item.unit}
                   </span>
                 </div>

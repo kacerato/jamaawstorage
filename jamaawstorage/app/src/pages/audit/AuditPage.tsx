@@ -259,43 +259,43 @@ export function AuditPage() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h2 className="text-2xl font-bold text-white">Log de Auditoria</h2>
-        <p className="mt-1 text-sm text-gray-400">Somente eventos e campos importantes.</p>
+        <h2 className="text-2xl font-bold text-ink">Log de Auditoria</h2>
+        <p className="mt-1 text-sm text-ink-dim">Somente eventos e campos importantes.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
         <Card variant="bordered" padding="md">
-          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Eventos nesta pagina</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{logs.length}</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-mute">Eventos nesta pagina</p>
+          <p className="mt-2 text-2xl font-semibold text-ink">{logs.length}</p>
         </Card>
         <Card variant="bordered" padding="md">
-          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Campos alterados</p>
-          <p className="mt-2 text-2xl font-semibold text-orange-300">{changedFieldCount}</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-mute">Campos alterados</p>
+          <p className="mt-2 text-2xl font-semibold text-ink">{changedFieldCount}</p>
         </Card>
         <Card variant="bordered" padding="md">
-          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">Total filtrado</p>
-          <p className="mt-2 text-2xl font-semibold text-white">{totalCount}</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-mute">Total filtrado</p>
+          <p className="mt-2 text-2xl font-semibold text-ink">{totalCount}</p>
         </Card>
       </div>
 
-      <div className="rounded-xl border border-gray-700 bg-gray-900 p-4">
+      <div className="rounded-none border border-line bg-surface p-4">
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-300">Data inicio</label>
+            <label className="text-sm font-medium text-ink-dim">Data inicio</label>
             <input
               type="date"
               value={dateFrom}
               onChange={(event) => setDateFrom(event.target.value)}
-              className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+              className="w-full rounded-none border border-line bg-void px-3 py-2 text-sm text-ink focus:border-ink focus:outline-none focus:ring-2 focus:ring-line"
             />
           </div>
           <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-gray-300">Data fim</label>
+            <label className="text-sm font-medium text-ink-dim">Data fim</label>
             <input
               type="date"
               value={dateTo}
               onChange={(event) => setDateTo(event.target.value)}
-              className="w-full rounded-lg border border-gray-700 bg-gray-950 px-3 py-2 text-sm text-white focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+              className="w-full rounded-none border border-line bg-void px-3 py-2 text-sm text-ink focus:border-ink focus:outline-none focus:ring-2 focus:ring-line"
             />
           </div>
           <Select label="Acao" value={actionFilter} onChange={(event) => setActionFilter(event.target.value)} options={ACTION_OPTIONS} />
@@ -322,7 +322,7 @@ export function AuditPage() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-14">
           <Spinner size="lg" />
-          <p className="mt-4 text-sm text-gray-400">Carregando auditoria...</p>
+          <p className="mt-4 text-sm text-ink-dim">Carregando auditoria...</p>
         </div>
       ) : logs.length === 0 ? (
         <EmptyState
@@ -342,19 +342,19 @@ export function AuditPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <ActionBadge action={log.action} />
-                      <span className="text-sm font-semibold text-orange-200">{entityTitle(log)}</span>
-                      <span className="text-sm font-medium text-white">{log.user_name}</span>
-                      <span className="text-xs text-gray-500">{formatDateTime(log.created_at)}</span>
+                      <span className="text-sm font-semibold text-ink">{entityTitle(log)}</span>
+                      <span className="text-sm font-medium text-ink">{log.user_name}</span>
+                      <span className="text-xs text-ink-mute">{formatDateTime(log.created_at)}</span>
                     </div>
 
                     <div className="mt-3 flex flex-wrap gap-2">
                       {changed.slice(0, 6).map((field) => (
-                        <span key={field} className="rounded-full border border-orange-500/15 bg-orange-500/10 px-2.5 py-1 text-[11px] text-orange-200">
+                        <span key={field} className="rounded-none border border-line bg-surface px-2.5 py-1 text-[11px] text-ink">
                           {labelForKey(field)}
                         </span>
                       ))}
                       {changed.length > 6 && (
-                        <span className="rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-[11px] text-gray-400">
+                        <span className="rounded-none border border-line bg-surface px-2.5 py-1 text-[11px] text-ink-dim">
                           +{changed.length - 6}
                         </span>
                       )}
@@ -363,7 +363,7 @@ export function AuditPage() {
                     {highlights.length > 0 && (
                       <div className="mt-4 grid grid-cols-1 gap-2 md:grid-cols-2">
                         {highlights.map((item) => (
-                          <div key={item} className="rounded-2xl border border-white/8 bg-white/4 px-3 py-2 text-sm text-gray-300">
+                          <div key={item} className="rounded-none border border-line bg-surface px-3 py-2 text-sm text-ink-dim">
                             {item}
                           </div>
                         ))}
@@ -379,14 +379,14 @@ export function AuditPage() {
 
       {totalCount > 0 && (
         <div className="flex items-center justify-between">
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-ink-dim">
             {page * PAGE_SIZE + 1}-{Math.min((page + 1) * PAGE_SIZE, totalCount)} de {totalCount} eventos
           </p>
           <div className="flex items-center gap-2">
             <Button size="sm" variant="secondary" disabled={page === 0} onClick={() => setPage((value) => value - 1)}>
               Anterior
             </Button>
-            <span className="text-sm text-gray-400">Pagina {page + 1} de {totalPages}</span>
+            <span className="text-sm text-ink-dim">Pagina {page + 1} de {totalPages}</span>
             <Button size="sm" variant="secondary" disabled={page >= totalPages - 1} onClick={() => setPage((value) => value + 1)}>
               Proxima
             </Button>

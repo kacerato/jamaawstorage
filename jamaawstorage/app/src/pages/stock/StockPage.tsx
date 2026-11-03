@@ -451,9 +451,9 @@ export function StockPage() {
   }
 
   const quantityColor = (current: number, minimum: number) => {
-    if (minimum <= 0 || current > minimum) return 'text-emerald-400'
-    if (current === minimum) return 'text-orange-400'
-    return 'text-red-400'
+    if (minimum <= 0 || current > minimum) return 'text-ok'
+    if (current === minimum) return 'text-ink'
+    return 'text-crit'
   }
 
   const categoryBadgeVariant = (category: string | null): 'primary' | 'info' | 'success' | 'default' => {
@@ -485,7 +485,7 @@ export function StockPage() {
       header: 'Código',
       sortable: true,
       render: (_value: unknown, row: StockRowRecord) => (
-        <span className="font-mono text-sm text-orange-400">{row.code}</span>
+        <span className="font-mono text-sm text-ink">{row.code}</span>
       ),
     },
     {
@@ -496,11 +496,11 @@ export function StockPage() {
         <div className="flex items-center gap-2">
           {row.is_low_stock && (
             <span className="relative flex h-2.5 w-2.5">
-              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-orange-500" />
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-blaze opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-blaze" />
             </span>
           )}
-          <span className="font-medium text-white">
+          <span className="font-medium text-ink">
             {stockItemDisplayName(row as unknown as StockItemRow)}
           </span>
         </div>
@@ -519,7 +519,7 @@ export function StockPage() {
       key: 'ca_nr',
       header: 'CA/NR',
       render: (_value: unknown, row: StockRowRecord) => (
-        <span className="text-gray-300">{row.ca_nr ?? '-'}</span>
+        <span className="text-ink-dim">{row.ca_nr ?? '-'}</span>
       ),
     },
     {
@@ -549,21 +549,21 @@ export function StockPage() {
       key: 'minimum_quantity',
       header: 'Qtd Mínima',
       render: (_value: unknown, row: StockRowRecord) => (
-        <span className="text-gray-400">{formatQuantity(row.minimum_quantity, row.unit)}</span>
+        <span className="text-ink-dim">{formatQuantity(row.minimum_quantity, row.unit)}</span>
       ),
     },
     {
       key: 'unit',
       header: 'Unidade',
       render: (_value: unknown, row: StockRowRecord) => (
-        <span className="text-gray-300">{row.unit}</span>
+        <span className="text-ink-dim">{row.unit}</span>
       ),
     },
   ]
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="sticky top-16 z-20 flex gap-1 overflow-x-auto border-b border-white/8 bg-[#090a0d]/95 py-2 backdrop-blur-xl">
+      <div className="sticky top-16 z-20 flex gap-1 overflow-x-auto border-b border-line bg-void/95 py-2">
         <button
           type="button"
           onClick={() => setSearchParams((prev) => {
@@ -572,8 +572,8 @@ export function StockPage() {
             return next
           })}
           className={cn(
-            'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'items' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+            'rounded-none px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === 'items' ? 'bg-surface text-ink' : 'text-ink-dim hover:bg-surface hover:text-ink'
           )}
         >
           Itens
@@ -586,8 +586,8 @@ export function StockPage() {
             return next
           })}
           className={cn(
-            'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'kits' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+            'rounded-none px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === 'kits' ? 'bg-surface text-ink' : 'text-ink-dim hover:bg-surface hover:text-ink'
           )}
         >
           Kits
@@ -600,8 +600,8 @@ export function StockPage() {
             return next
           })}
           className={cn(
-            'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'movements' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+            'rounded-none px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === 'movements' ? 'bg-surface text-ink' : 'text-ink-dim hover:bg-surface hover:text-ink'
           )}
         >
           Movimentações
@@ -614,8 +614,8 @@ export function StockPage() {
             return next
           })}
           className={cn(
-            'rounded-2xl px-4 py-2 text-sm font-medium transition-colors',
-            activeTab === 'returns' ? 'bg-white/8 text-white shadow-sm shadow-black/10' : 'text-gray-400 hover:bg-white/5 hover:text-white'
+            'rounded-none px-4 py-2 text-sm font-medium transition-colors',
+            activeTab === 'returns' ? 'bg-surface text-ink' : 'text-ink-dim hover:bg-surface hover:text-ink'
           )}
         >
           Pendências de devolução
@@ -632,8 +632,8 @@ export function StockPage() {
         <>
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Gestão de Estoque</h2>
-          <p className="mt-1 text-sm text-gray-400">
+          <h2 className="text-2xl font-bold text-ink">Gestão de Estoque</h2>
+          <p className="mt-1 text-sm text-ink-dim">
             Gerencie os itens do almoxarifado e seus níveis de estoque
           </p>
         </div>
@@ -701,7 +701,7 @@ export function StockPage() {
             <select
               value={categoryFilter}
               onChange={(event) => setCategoryFilter(event.target.value)}
-              className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+              className="w-full appearance-none rounded-none border border-line bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-line"
             >
               {CATEGORY_FILTER_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -712,7 +712,7 @@ export function StockPage() {
             <select
               value={statusFilter}
               onChange={(event) => setStatusFilter(event.target.value)}
-              className="w-full appearance-none rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+              className="w-full appearance-none rounded-none border border-line bg-surface px-3 py-2 text-sm text-ink transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-line"
             >
               {STATUS_FILTER_OPTIONS.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -723,8 +723,8 @@ export function StockPage() {
           </div>
         </div>
         {refreshing && (
-          <div className="mt-3 inline-flex items-center gap-2 text-xs text-orange-200/75">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+          <div className="mt-3 inline-flex items-center gap-2 text-xs text-ink">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-blaze" />
             Atualizando itens...
           </div>
         )}
@@ -733,7 +733,7 @@ export function StockPage() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-24">
           <Spinner size="lg" />
-          <p className="mt-4 text-sm text-gray-400">Carregando itens...</p>
+          <p className="mt-4 text-sm text-ink-dim">Carregando itens...</p>
         </div>
       ) : items.length === 0 && searchQuery === '' && categoryFilter === '' ? (
         <EmptyState
@@ -759,8 +759,8 @@ export function StockPage() {
           />
 
           {totalCount > PAGE_SIZE && (
-            <div className="flex items-center justify-between border-t border-gray-700 pt-4">
-              <p className="text-sm text-gray-400">
+            <div className="flex items-center justify-between border-t border-line pt-4">
+              <p className="text-sm text-ink-dim">
                 Mostrando {currentPage * PAGE_SIZE + 1} - {Math.min((currentPage + 1) * PAGE_SIZE, totalCount)} de {totalCount} itens
               </p>
               <div className="flex items-center gap-2">
@@ -776,7 +776,7 @@ export function StockPage() {
                 >
                   Anterior
                 </Button>
-                <span className="text-sm text-gray-400">
+                <span className="text-sm text-ink-dim">
                   Página {currentPage + 1} de {Math.ceil(totalCount / PAGE_SIZE)}
                 </span>
                 <Button
@@ -843,21 +843,21 @@ export function StockPage() {
             {submitError}
           </Alert>
         )}
-        <p className="text-gray-300">
-          Escolha o que fazer com <span className="font-semibold text-white">{selectedItem?.name}</span>.
+        <p className="text-ink-dim">
+          Escolha o que fazer com <span className="font-semibold text-ink">{selectedItem?.name}</span>.
         </p>
-        <div className="mt-4 rounded-xl border border-white/8 bg-white/4 p-4">
-          <p className="text-sm font-medium text-white">Desativar</p>
-          <p className="mt-1 text-sm text-gray-400">
+        <div className="mt-4 rounded-none border border-line bg-surface p-4">
+          <p className="text-sm font-medium text-ink">Desativar</p>
+          <p className="mt-1 text-sm text-ink-dim">
             Mantem o historico e retira o item do uso normal no estoque.
           </p>
           <Button className="mt-4" variant="secondary" onClick={handleDeactivate} isLoading={isSubmitting}>
             Desativar item
           </Button>
         </div>
-        <div className="mt-3 rounded-xl border border-red-500/20 bg-red-500/5 p-4">
-          <p className="text-sm font-medium text-white">Excluir</p>
-          <p className="mt-1 text-sm text-gray-400">
+        <div className="mt-3 rounded-none border border-crit bg-crit/15 p-4">
+          <p className="text-sm font-medium text-ink">Excluir</p>
+          <p className="mt-1 text-sm text-ink-dim">
             Remove o item de vez. Se houver retiradas ou historico vinculado, a exclusao sera bloqueada.
           </p>
           <Button className="mt-4" variant="danger" onClick={handlePermanentDelete} isLoading={isSubmitting}>
@@ -874,22 +874,22 @@ export function StockPage() {
       <Modal isOpen={modalMode === 'detail'} onClose={handleCloseModal} title="Detalhes do Item" size="xl">
         {selectedItem && (
           <div className="flex flex-col gap-6">
-            <div className="rounded-[26px] border border-white/8 bg-[#111215] p-5">
-              <div className="mx-auto flex max-w-3xl items-center gap-4 rounded-[22px] border border-white/8 bg-white/4 p-4">
-                <div className="flex h-20 w-20 items-center justify-center rounded-2xl border border-orange-400/15 bg-orange-500/10">
+            <div className="rounded-none border border-line bg-surface p-5">
+              <div className="mx-auto flex max-w-3xl items-center gap-4 rounded-none border border-line bg-surface p-4">
+                <div className="flex h-20 w-20 items-center justify-center rounded-none border border-line bg-surface">
                   <ItemIcon iconKey={selectedItem.svg_icon_key} size={58} />
                 </div>
                 <div>
-                  <p className="text-lg font-semibold text-white">{stockItemDisplayName(selectedItem)}</p>
-                  <p className="text-sm font-mono text-orange-400">{selectedItem.code}</p>
+                  <p className="text-lg font-semibold text-ink">{stockItemDisplayName(selectedItem)}</p>
+                  <p className="text-sm font-mono text-ink">{selectedItem.code}</p>
                 </div>
               </div>
             </div>
 
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(300px,0.85fr)_minmax(0,1.15fr)]">
-              <div className="min-w-0 rounded-2xl border border-white/8 bg-[#111215] p-5">
+              <div className="min-w-0 rounded-none border border-line bg-surface p-5">
                 <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-                  <DetailField label="Código" value={<span className="font-mono text-orange-400">{selectedItem.code}</span>} />
+                  <DetailField label="Código" value={<span className="font-mono text-ink">{selectedItem.code}</span>} />
                   <DetailField label="Nome" value={selectedItem.name} />
                   <DetailField
                     label="Categoria"
@@ -918,8 +918,8 @@ export function StockPage() {
                 </div>
               </div>
 
-              <div className="min-w-0 rounded-2xl border border-white/8 bg-[#111215] p-5">
-                <h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-gray-400">
+              <div className="min-w-0 rounded-none border border-line bg-surface p-5">
+                <h4 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-ink-dim">
                   Histórico de movimentações
                 </h4>
 
@@ -928,23 +928,23 @@ export function StockPage() {
                     <Spinner size="md" />
                   </div>
                 ) : itemWithdrawals.length === 0 ? (
-                  <p className="text-sm text-gray-500">Nenhuma movimentação registrada para este item</p>
+                  <p className="text-sm text-ink-mute">Nenhuma movimentação registrada para este item</p>
                 ) : (
-                  <div className="max-h-[300px] overflow-auto rounded-xl border border-white/8">
+                  <div className="max-h-[300px] overflow-auto rounded-none border border-line">
                     <table className="w-full min-w-[560px]">
                       <thead>
-                        <tr className="sticky top-0 z-10 bg-[#1a1b1f] shadow-[0_1px_0_rgba(255,255,255,0.08)]">
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Movimento</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Origem / destino</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Alteração</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Data</th>
+                        <tr className="sticky top-0 z-10 bg-surface">
+                          <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">Movimento</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">Origem / destino</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">Alteração</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">Data</th>
                         </tr>
                       </thead>
                       <tbody>
                         {itemWithdrawals.map((movement) => (
                           <tr
                             key={movement.id}
-                            className="cursor-pointer border-t border-white/8 transition-colors hover:bg-white/4"
+                            className="cursor-pointer border-t border-line transition-colors hover:bg-surface"
                             tabIndex={0}
                             onClick={() => {
                               if (movement.related_entity_type === 'withdrawal' && movement.related_entity_id) {
@@ -960,26 +960,26 @@ export function StockPage() {
                               if (event.key === 'Enter') event.currentTarget.click()
                             }}
                           >
-                            <td className="px-3 py-2 text-sm text-white">
+                            <td className="px-3 py-2 text-sm text-ink">
                               <div className="flex items-center gap-2">
                                 <Badge variant={movement.quantity_delta > 0 ? 'success' : movement.quantity_delta < 0 ? 'danger' : 'default'} size="sm">
                                   {stockMovementLabel(movement.event_kind)}
                                 </Badge>
-                                {movement.related_code && <span className="font-mono text-xs text-orange-300">{movement.related_code}</span>}
+                                {movement.related_code && <span className="font-mono text-xs text-ink">{movement.related_code}</span>}
                               </div>
                             </td>
-                            <td className="px-3 py-2 text-sm text-gray-300">
+                            <td className="px-3 py-2 text-sm text-ink-dim">
                               {movement.counterparty_name ?? movement.actor?.full_name ?? 'Sistema'}
                             </td>
                             <td className="px-3 py-2 text-sm">
-                              <span className={movement.quantity_delta > 0 ? 'text-emerald-300' : movement.quantity_delta < 0 ? 'text-red-300' : 'text-gray-400'}>
+                              <span className={movement.quantity_delta > 0 ? 'text-ok' : movement.quantity_delta < 0 ? 'text-crit' : 'text-ink-dim'}>
                                 {movement.quantity_delta > 0 ? '+' : ''}{movement.quantity_delta} {selectedItem.unit}
                               </span>
                               {movement.balance_before !== null && movement.balance_after !== null && (
-                                <span className="ml-2 text-xs text-gray-600">{movement.balance_before} → {movement.balance_after}</span>
+                                <span className="ml-2 text-xs text-ink-mute">{movement.balance_before} → {movement.balance_after}</span>
                               )}
                             </td>
-                            <td className="px-3 py-2 text-xs text-gray-500">{formatDateTime(movement.created_at)}</td>
+                            <td className="px-3 py-2 text-xs text-ink-mute">{formatDateTime(movement.created_at)}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1000,7 +1000,7 @@ export function StockPage() {
               </div>
             </div>
 
-            <div className="flex items-center justify-end gap-3 border-t border-white/8 pt-4">
+            <div className="flex items-center justify-end gap-3 border-t border-line pt-4">
               <Button variant="secondary" onClick={() => setModalMode('edit')}>
                 Editar
               </Button>
@@ -1019,9 +1019,9 @@ export function StockPage() {
 
 function DetailField({ label, value }: { label: string; value: React.ReactNode }) {
   return (
-    <div className="min-w-0 rounded-xl border border-white/8 bg-white/[0.03] px-3 py-3">
-      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-gray-500">{label}</p>
-      <div className="mt-1 min-w-0 break-words text-sm leading-5 text-gray-200">{value}</div>
+    <div className="min-w-0 rounded-none border border-line bg-surface px-3 py-3">
+      <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-mute">{label}</p>
+      <div className="mt-1 min-w-0 break-words text-sm leading-5 text-ink-dim">{value}</div>
     </div>
   )
 }

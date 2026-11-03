@@ -238,7 +238,7 @@ export function WithdrawalsPage() {
       header: 'Codigo',
       sortable: true,
       render: (_value: unknown, row: WithdrawalRowForTable) => (
-        <span className="font-mono font-medium text-orange-400">
+        <span className="font-mono font-medium text-ink">
           {(row as unknown as WithdrawalListItem).code}
         </span>
       ),
@@ -295,12 +295,12 @@ export function WithdrawalsPage() {
       render: (_value: unknown, row: WithdrawalRowForTable) => {
         const withdrawal = row as unknown as WithdrawalListItem
         const summary = (withdrawal as WithdrawalWithDocumentSummary).document_summary
-        if (!summary || summary.expected_count === 0) return <span className="text-gray-500">-</span>
+        if (!summary || summary.expected_count === 0) return <span className="text-ink-mute">-</span>
         const color = summary.document_status === 'complete'
-          ? 'text-emerald-400'
+          ? 'text-ok'
           : summary.document_status === 'rejected'
-            ? 'text-red-400'
-            : 'text-amber-300'
+            ? 'text-crit'
+            : 'text-warn'
         return <span className={color}>{summary.attached_count}/{summary.expected_count} PDFs</span>
       },
       className: 'text-center',
@@ -312,7 +312,7 @@ export function WithdrawalsPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-2xl font-bold text-white">Retiradas</h2>
+            <h2 className="text-2xl font-bold text-ink">Retiradas</h2>
             <InfoTip text="Acompanhe retiradas, filtre por status, solicitante ou periodo, e abra uma retirada para editar ou gerar termos." />
           </div>
         </div>
@@ -332,9 +332,9 @@ export function WithdrawalsPage() {
         </Alert>
       )}
 
-      <div className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 p-4">
+      <div className="flex flex-col gap-3 rounded-none border border-line bg-surface p-4">
         <div className="flex items-center gap-2">
-          <p className="text-sm font-semibold text-white">Filtros</p>
+          <p className="text-sm font-semibold text-ink">Filtros</p>
           <InfoTip text="Os filtros atualizam a lista automaticamente." />
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -400,8 +400,8 @@ export function WithdrawalsPage() {
         </div>
 
         {refreshing && (
-          <div className="inline-flex items-center gap-2 text-xs text-orange-200/75">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+          <div className="inline-flex items-center gap-2 text-xs text-ink">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-blaze" />
             Atualizando retiradas...
           </div>
         )}

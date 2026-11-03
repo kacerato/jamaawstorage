@@ -1002,9 +1002,9 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
       {error && <Alert variant="danger">{error}</Alert>}
       {submitError && <Alert variant="danger">{submitError}</Alert>}
 
-      <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
+      <div className="rounded-none border border-line bg-surface p-4">
         <div className="mb-2 flex items-center gap-2">
-          <p className="text-sm font-semibold text-white">1. Envie um arquivo</p>
+          <p className="text-sm font-semibold text-ink">1. Envie um arquivo</p>
           <InfoTip text="Use OCR local para PDFs. Use Kimi quando o arquivo for imagem ou quando precisar de leitura estruturada." />
         </div>
         <div className="mb-3 max-w-sm">
@@ -1022,15 +1022,15 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
           type="file"
           accept={extractionMode === 'kimi' ? '.pdf,application/pdf,image/*' : '.pdf,application/pdf'}
           onChange={handleFileChange}
-          className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
+          className="block w-full text-sm text-ink-dim file:mr-4 file:rounded-none file:border-0 file:bg-blaze file:px-4 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-blaze"
         />
       </div>
 
       {sourceFile && (
-        <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
+        <div className="rounded-none border border-line bg-surface p-4">
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
             <div className="flex-1">
-              <p className="text-sm font-semibold text-white">{sourceLabel}</p>
+              <p className="text-sm font-semibold text-ink">{sourceLabel}</p>
             </div>
 
             <div className="flex flex-col gap-3">
@@ -1043,10 +1043,10 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
                 {extractionMode === 'kimi' ? 'Extrair com Kimi' : 'Extrair texto'}
               </Button>
               {loadingItems && !ocrRunning && (
-                <div className="max-w-56 text-xs text-gray-400">Carregando base do estoque...</div>
+                <div className="max-w-56 text-xs text-ink-dim">Carregando base do estoque...</div>
               )}
               {ocrRunning && (
-                <div className="max-w-56 text-xs text-gray-400">{progressLabel || 'Processando...'}</div>
+                <div className="max-w-56 text-xs text-ink-dim">{progressLabel || 'Processando...'}</div>
               )}
             </div>
           </div>
@@ -1054,12 +1054,12 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
       )}
 
       {sourceFile && (
-        <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
+        <div className="rounded-none border border-line bg-surface p-4">
           <div className="flex flex-col gap-3">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-semibold text-white">
+                  <p className="text-sm font-semibold text-ink">
                     {contentFormat === 'structured-xml' ? '2. XML extraido' : '2. Texto extraido'}
                   </p>
                   <InfoTip text={contentFormat === 'structured-xml'
@@ -1084,7 +1084,7 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
               placeholder={contentFormat === 'structured-xml'
                 ? 'O XML retornado pela Kimi vai aparecer aqui.'
                 : 'O texto extraido vai aparecer aqui. Se faltar algo, complemente manualmente e clique em Processar texto.'}
-              className="w-full rounded-xl border border-gray-700 bg-gray-950 px-3 py-3 text-sm text-white outline-none transition-colors focus:border-orange-500 focus:ring-2 focus:ring-orange-500/40"
+              className="w-full rounded-none border border-line bg-void px-3 py-3 text-sm text-ink outline-none transition-colors focus:border-ink focus:ring-2 focus:ring-line"
             />
           </div>
         </div>
@@ -1092,15 +1092,15 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
 
       {lines.length > 0 && (
         <div className="flex flex-col gap-3">
-          <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
+          <div className="rounded-none border border-line bg-surface p-4">
             <div className="flex items-center gap-2">
-              <p className="text-sm font-semibold text-white">3. Revise itens reconhecidos</p>
+              <p className="text-sm font-semibold text-ink">3. Revise itens reconhecidos</p>
               <InfoTip text="Linhas confiantes sao autoatribuidas. Linhas fracas ficam para escolha manual." />
             </div>
           </div>
 
           {lines.map((line) => (
-            <div key={line.id} className="rounded-2xl border border-white/8 bg-[#111215] p-4">
+            <div key={line.id} className="rounded-none border border-line bg-surface p-4">
               <div className="flex flex-col gap-3 lg:grid lg:grid-cols-[1.2fr_180px_1.2fr] lg:items-end">
                 <div>
                   <SectionLabel label="Texto lido" info="Edite o nome se a leitura veio com ruido. Isso recalcula a sugestao do item." />
@@ -1166,7 +1166,7 @@ export function StockImportModal({ onClose, onImported }: StockImportModalProps)
             </div>
           ))}
 
-          <div className="flex justify-end gap-3 border-t border-white/8 pt-2">
+          <div className="flex justify-end gap-3 border-t border-line pt-2">
             <Button variant="secondary" onClick={onClose} disabled={submitting}>
               Cancelar
             </Button>

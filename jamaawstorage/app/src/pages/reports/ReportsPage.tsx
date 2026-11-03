@@ -230,22 +230,22 @@ export function ReportsPage() {
     <div className="flex flex-col gap-6">
       <div>
         <div className="flex items-center gap-2">
-          <h2 className="text-2xl font-bold text-white">Relatorios</h2>
+          <h2 className="text-2xl font-bold text-ink">Relatorios</h2>
           <InfoTip text="Relatorios de retiradas, consumo e estoque. Use filtros antes de exportar CSV ou PDF." />
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto rounded-2xl border border-white/8 bg-gray-900 p-1">
+      <div className="flex gap-1 overflow-x-auto rounded-none border border-line bg-surface p-1">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => setActiveTab(tab.key)}
             className={cn(
-              'whitespace-nowrap rounded-xl px-4 py-2 text-sm font-medium transition-colors',
+              'whitespace-nowrap rounded-none px-4 py-2 text-sm font-medium transition-colors',
               activeTab === tab.key
-                ? 'bg-orange-500 text-white'
-                : 'text-gray-400 hover:bg-gray-800 hover:text-white',
+                ? 'bg-blaze text-ink'
+                : 'text-ink-dim hover:bg-surface hover:text-ink',
             )}
           >
             {tab.label}
@@ -423,7 +423,7 @@ function MovementsTab() {
         header: 'Codigo',
         sortable: true,
         render: (_v: unknown, row: WithdrawalRowForTable) => (
-          <span className="font-mono font-medium text-orange-400">
+          <span className="font-mono font-medium text-ink">
             {(row as unknown as WithdrawalWithItems).code}
           </span>
         ),
@@ -450,7 +450,7 @@ function MovementsTab() {
           return (
             <div className="flex flex-col gap-0.5">
               {items.map((wi) => (
-                <span key={wi.id} className="text-xs text-gray-400">
+                <span key={wi.id} className="text-xs text-ink-dim">
                   {wi.stock_items?.name ?? '-'} ({wi.quantity} {wi.unit})
                   {' - '}
                   {withdrawalItemDestinationLabel(wi, row as unknown as WithdrawalWithItems)}
@@ -467,7 +467,7 @@ function MovementsTab() {
         render: (_v: unknown, row: WithdrawalRowForTable) => {
           const items = (row as unknown as WithdrawalWithItems).withdrawal_items
           const total = items.reduce((sum, wi) => sum + wi.quantity, 0)
-          return <span className="font-medium text-white">{total}</span>
+          return <span className="font-medium text-ink">{total}</span>
         },
       },
     ],
@@ -509,7 +509,7 @@ function MovementsTab() {
     <div className="flex flex-col gap-4">
       <Card variant="bordered" padding="md">
         <div className="mb-3 flex items-center gap-2">
-          <p className="text-sm font-semibold text-white">Filtros e exportacao</p>
+          <p className="text-sm font-semibold text-ink">Filtros e exportacao</p>
           <InfoTip text="Os filtros afetam a tabela e os arquivos exportados." />
         </div>
         <div className="flex flex-wrap items-end gap-3">
@@ -673,14 +673,14 @@ function StockOverviewTab() {
         header: 'Codigo',
         sortable: true,
         render: (value: unknown) => (
-          <span className="font-mono text-orange-400">{value as string}</span>
+          <span className="font-mono text-ink">{value as string}</span>
         ),
       },
       {
         key: 'name' as const,
         header: 'Item',
         sortable: true,
-        render: (value: unknown) => <span className="font-medium text-white">{value as string}</span>,
+        render: (value: unknown) => <span className="font-medium text-ink">{value as string}</span>,
       },
       {
         key: 'category' as const,
@@ -702,7 +702,7 @@ function StockOverviewTab() {
           return (
             <span className={cn(
               'inline-block w-[88px] text-right font-medium tabular-nums',
-              item.current_quantity <= item.minimum_quantity ? 'text-orange-400' : 'text-white',
+              item.current_quantity <= item.minimum_quantity ? 'text-ink' : 'text-ink',
             )}
             >
               {item.current_quantity}
@@ -715,7 +715,7 @@ function StockOverviewTab() {
         header: 'Novo',
         className: 'text-right',
         render: (value: unknown) => (
-          <span className="inline-block w-[72px] text-right text-emerald-300 tabular-nums">{value as number}</span>
+          <span className="inline-block w-[72px] text-right text-ok tabular-nums">{value as number}</span>
         ),
       },
       {
@@ -731,7 +731,7 @@ function StockOverviewTab() {
         header: 'Avaria',
         className: 'text-right',
         render: (value: unknown) => (
-          <span className="inline-block w-[72px] text-right text-red-300 tabular-nums">{value as number}</span>
+          <span className="inline-block w-[72px] text-right text-crit tabular-nums">{value as number}</span>
         ),
       },
       {
@@ -739,7 +739,7 @@ function StockOverviewTab() {
         header: 'Qtd Minima',
         className: 'text-right',
         render: (value: unknown) => (
-          <span className="inline-block w-[88px] text-right text-gray-300 tabular-nums">{value as number}</span>
+          <span className="inline-block w-[88px] text-right text-ink-dim tabular-nums">{value as number}</span>
         ),
       },
     ],
@@ -760,7 +760,7 @@ function StockOverviewTab() {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <Spinner size="lg" />
-        <p className="mt-4 text-sm text-gray-400">Carregando estoque...</p>
+        <p className="mt-4 text-sm text-ink-dim">Carregando estoque...</p>
       </div>
     )
   }
@@ -900,7 +900,7 @@ function InventoryTab() {
                 viewBox="0 0 16 16"
                 fill="none"
                 className={cn(
-                  'transition-transform text-gray-500',
+                  'transition-transform text-ink-mute',
                   expandedId === c.id && 'rotate-90',
                 )}
               >
@@ -912,7 +912,7 @@ function InventoryTab() {
                   strokeLinejoin="round"
                 />
               </svg>
-              <span className="font-medium text-white">{c.full_name}</span>
+              <span className="font-medium text-ink">{c.full_name}</span>
             </button>
           )
         },
@@ -935,9 +935,9 @@ function InventoryTab() {
         render: (_v: unknown, row: CollabRowForTable) => {
           const c = row as unknown as CollaboratorWithInventory
           const inventories = c.person_inventories ?? []
-          if (inventories.length === 0) return <span className="text-gray-500">Nenhum</span>
+          if (inventories.length === 0) return <span className="text-ink-mute">Nenhum</span>
           return (
-            <span className="text-white">
+            <span className="text-ink">
               {inventories.length} {inventories.length === 1 ? 'item' : 'itens'}
             </span>
           )
@@ -950,7 +950,7 @@ function InventoryTab() {
         render: (_v: unknown, row: CollabRowForTable) => {
           const c = row as unknown as CollaboratorWithInventory
           const total = (c.person_inventories ?? []).reduce((s, pi) => s + pi.quantity, 0)
-          return <span className="font-medium text-white">{total}</span>
+          return <span className="font-medium text-ink">{total}</span>
         },
       },
     ],
@@ -1056,7 +1056,7 @@ function InventoryTab() {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <Spinner size="lg" />
-          <p className="mt-4 text-sm text-gray-400">Carregando inventario...</p>
+          <p className="mt-4 text-sm text-ink-dim">Carregando inventario...</p>
       </div>
     )
   }
@@ -1134,7 +1134,7 @@ function InventoryTab() {
           return (
             <Card variant="bordered" padding="md">
               <div className="mb-3 flex items-center justify-between gap-3">
-                <h4 className="text-sm font-semibold text-white">
+                <h4 className="text-sm font-semibold text-ink">
                   Itens de {collab.full_name}
                 </h4>
                 <Button
@@ -1145,29 +1145,29 @@ function InventoryTab() {
                   PDF Individual
                 </Button>
               </div>
-              <div className="overflow-hidden rounded-lg border border-gray-700">
+              <div className="overflow-hidden rounded-none border border-line">
                 <table className="w-full">
                   <thead>
-                    <tr className="bg-gray-800">
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Item</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Categoria</th>
-                      <th className="px-3 py-2 text-right text-xs font-medium text-gray-400">Quantidade</th>
-                      <th className="px-3 py-2 text-left text-xs font-medium text-gray-400">Unidade</th>
+                    <tr className="bg-surface">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">Item</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">Categoria</th>
+                      <th className="px-3 py-2 text-right text-xs font-medium text-ink-dim">Quantidade</th>
+                      <th className="px-3 py-2 text-left text-xs font-medium text-ink-dim">Unidade</th>
                     </tr>
                   </thead>
                   <tbody>
                     {collab.person_inventories.map((inv) => (
-                      <tr key={inv.id} className="border-t border-gray-800">
-                        <td className="px-3 py-2 text-sm text-gray-300">
+                      <tr key={inv.id} className="border-t border-line">
+                        <td className="px-3 py-2 text-sm text-ink-dim">
                           {inv.stock_items?.name ?? '-'}
                         </td>
-                        <td className="px-3 py-2 text-sm text-gray-400">
+                        <td className="px-3 py-2 text-sm text-ink-dim">
                           {inv.stock_items?.category ?? '-'}
                         </td>
-                        <td className="px-3 py-2 text-right text-sm font-medium text-white">
+                        <td className="px-3 py-2 text-right text-sm font-medium text-ink">
                           {inv.quantity}
                         </td>
-                        <td className="px-3 py-2 text-sm text-gray-400">
+                        <td className="px-3 py-2 text-sm text-ink-dim">
                           {inv.stock_items?.unit ?? '-'}
                         </td>
                       </tr>
@@ -1319,7 +1319,7 @@ function AbcCurveTab() {
         header: '#',
         className: 'w-12 text-center',
         render: (value: unknown) => (
-          <span className="font-mono text-gray-500">{value as number}</span>
+          <span className="font-mono text-ink-mute">{value as number}</span>
         ),
       },
       {
@@ -1327,7 +1327,7 @@ function AbcCurveTab() {
         header: 'Item',
         sortable: true,
         render: (_v: unknown, row: AbcRowForTable) => (
-          <span className="font-medium text-white">{(row as unknown as AbcItem).name}</span>
+          <span className="font-medium text-ink">{(row as unknown as AbcItem).name}</span>
         ),
       },
       {
@@ -1336,7 +1336,7 @@ function AbcCurveTab() {
         sortable: true,
         className: 'text-right font-mono tabular-nums',
         render: (value: unknown) => (
-          <span className="font-medium text-white">{value as number}</span>
+          <span className="font-medium text-ink">{value as number}</span>
         ),
       },
       {
@@ -1345,7 +1345,7 @@ function AbcCurveTab() {
         sortable: true,
         className: 'text-right font-mono tabular-nums',
         render: (value: unknown) => (
-          <span className="font-medium text-gray-300">{value as number}</span>
+          <span className="font-medium text-ink-dim">{value as number}</span>
         ),
       },
       {
@@ -1469,7 +1469,7 @@ function AbcCurveTab() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-12">
           <Spinner size="lg" />
-          <p className="mt-4 text-sm text-gray-400">Calculando curva ABC...</p>
+          <p className="mt-4 text-sm text-ink-dim">Calculando curva ABC...</p>
         </div>
       ) : abcData.length === 0 ? (
         <EmptyState
@@ -1502,10 +1502,10 @@ function AbcCurveTab() {
           </div>
           <Card variant="bordered" padding="md">
             <div className="mb-4 flex flex-col gap-1">
-              <h3 className="text-sm font-semibold text-gray-300">
+              <h3 className="text-sm font-semibold text-ink-dim">
                 Curva ABC - Quantidade Retirada por Item
               </h3>
-              <p className="text-xs text-gray-500">Ordenado do item com maior saida para o menor, consolidando todos os solicitantes.</p>
+              <p className="text-xs text-ink-mute">Ordenado do item com maior saida para o menor, consolidando todos os solicitantes.</p>
             </div>
             <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
@@ -1536,7 +1536,7 @@ function AbcCurveTab() {
                       return String(label)
                     })}
                   />
-                  <Bar dataKey="Quantidade" fill="#f97316" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="Quantidade" fill="#FF5D00" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1795,7 +1795,7 @@ function LeaderConsumptionTab() {
       {loading ? (
         <div className="flex flex-col items-center justify-center py-12">
           <Spinner size="lg" />
-          <p className="mt-4 text-sm text-gray-400">Calculando consumo...</p>
+          <p className="mt-4 text-sm text-ink-dim">Calculando consumo...</p>
         </div>
       ) : consumptionData.length === 0 ? (
         <EmptyState
@@ -1820,10 +1820,10 @@ function LeaderConsumptionTab() {
 
           <Card variant="bordered" padding="md">
             <div className="mb-4 flex flex-col gap-1">
-              <h3 className="text-sm font-semibold text-gray-300">
+              <h3 className="text-sm font-semibold text-ink-dim">
                 {selectedLeader === 'all' ? 'Saidas gerais por item' : 'Itens mais retirados pelo solicitante'}
               </h3>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-ink-mute">
                 {selectedLeader === 'all'
                   ? 'Consolidado geral do periodo, sem separar por solicitante.'
                   : 'Consolidado apenas do solicitante selecionado.'}
@@ -1858,31 +1858,31 @@ function LeaderConsumptionTab() {
                       return String(label)
                     })}
                   />
-                  <Bar dataKey="Quantidade" fill="#f97316" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="Quantidade" fill="#FF5D00" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </Card>
 
           <Card variant="bordered" padding="md">
-            <h4 className="mb-3 text-sm font-semibold text-gray-300">Detalhamento</h4>
-            <div className="overflow-hidden rounded-lg border border-gray-700">
+            <h4 className="mb-3 text-sm font-semibold text-ink-dim">Detalhamento</h4>
+            <div className="overflow-hidden rounded-none border border-line">
               <table className="w-full">
                 <thead>
-                  <tr className="bg-gray-800">
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">#</th>
-                    <th className="px-4 py-3 text-left text-sm font-medium text-gray-300">Item</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-300">Retiradas</th>
-                    <th className="px-4 py-3 text-right text-sm font-medium text-gray-300">Quantidade</th>
+                  <tr className="bg-surface">
+                    <th className="px-4 py-3 text-left text-sm font-medium text-ink-dim">#</th>
+                    <th className="px-4 py-3 text-left text-sm font-medium text-ink-dim">Item</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-ink-dim">Retiradas</th>
+                    <th className="px-4 py-3 text-right text-sm font-medium text-ink-dim">Quantidade</th>
                   </tr>
                 </thead>
                 <tbody>
                   {consumptionData.map((item, idx) => (
-                    <tr key={item.name} className="border-t border-gray-800">
-                      <td className="px-4 py-3 text-sm text-gray-500">{idx + 1}</td>
-                      <td className="px-4 py-3 text-sm font-medium text-white">{item.name}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-400">{item.withdrawalCount}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-300">{item.quantity}</td>
+                    <tr key={item.name} className="border-t border-line">
+                      <td className="px-4 py-3 text-sm text-ink-mute">{idx + 1}</td>
+                      <td className="px-4 py-3 text-sm font-medium text-ink">{item.name}</td>
+                      <td className="px-4 py-3 text-right text-sm text-ink-dim">{item.withdrawalCount}</td>
+                      <td className="px-4 py-3 text-right text-sm text-ink-dim">{item.quantity}</td>
                     </tr>
                   ))}
                 </tbody>

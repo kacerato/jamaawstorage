@@ -102,7 +102,8 @@ interface UntypedQueryBuilder {
   limit: (count: number) => PromiseLike<{ data: unknown[] | null; error: { message: string } | null }>
 }
 
-const chartColors = ['#22c55e', '#f97316', '#ef4444']
+/* ok / warn / blaze: a mesma escala semantica dos tokens. */
+const chartColors = ['#4ADE80', '#FBBF24', '#FF5D00']
 
 const commandActions = [
   {
@@ -135,11 +136,16 @@ const commandActions = [
   },
 ] as const
 
+/*
+ * So a acao primaria recebe o acento preenchido; as outras tres sao
+ * iguais entre si. Quatro cores concorrentes eram o que fazia a faixa
+ * de atalhos competir com os alertas.
+ */
 const commandActionToneClasses: Record<(typeof commandActions)[number]['tone'], string> = {
-  primary: 'border-orange-300/28 bg-orange-500/12 text-orange-100 hover:border-orange-300/55 hover:bg-orange-500/16',
-  stock: 'border-emerald-300/22 bg-emerald-500/8 text-emerald-100 hover:border-emerald-300/45 hover:bg-emerald-500/12',
-  people: 'border-sky-300/22 bg-sky-500/8 text-sky-100 hover:border-sky-300/45 hover:bg-sky-500/12',
-  reports: 'border-violet-300/22 bg-violet-500/8 text-violet-100 hover:border-violet-300/45 hover:bg-violet-500/12',
+  primary: 'bg-blaze text-blaze-ink hover:bg-blaze/90',
+  stock: 'bg-surface text-ink hover:bg-void',
+  people: 'bg-surface text-ink hover:bg-void',
+  reports: 'bg-surface text-ink hover:bg-void',
 }
 
 function MiniMetric({
@@ -151,19 +157,20 @@ function MiniMetric({
   value: string | number
   tone?: 'neutral' | 'warning' | 'success' | 'danger'
 }) {
+  /* O estado tinge o numero, nao a caixa. */
   const toneClasses = {
-    neutral: 'border-white/10 bg-white/5 text-white',
-    warning: 'border-orange-300/20 bg-orange-500/10 text-orange-100',
-    success: 'border-emerald-300/20 bg-emerald-500/10 text-emerald-100',
-    danger: 'border-red-300/20 bg-red-500/10 text-red-100',
+    neutral: 'text-ink',
+    warning: 'text-warn',
+    success: 'text-ok',
+    danger: 'text-ink',
   }
 
   return (
-    <div className={cn('min-w-0 overflow-hidden rounded-2xl border px-3 py-3 sm:px-4', toneClasses[tone])}>
-      <p className="min-h-[30px] max-w-full break-words text-[10px] font-semibold uppercase leading-[15px] tracking-[0.04em] text-white/50 sm:text-[11px] sm:tracking-[0.08em]">
+    <div className="min-w-0 overflow-hidden bg-void px-3 py-3 sm:px-4">
+      <p className="label-mono min-h-[30px] max-w-full break-words leading-[15px]">
         {label}
       </p>
-      <p className="mt-2 text-2xl font-bold leading-none text-inherit">{value}</p>
+      <p className={cn('num mt-2 text-2xl leading-none', toneClasses[tone])}>{value}</p>
     </div>
   )
 }
@@ -179,9 +186,9 @@ function SectionHeading({
 }) {
   return (
     <div>
-      <p className="text-xs font-semibold uppercase tracking-[0.2em] text-orange-200/70">{eyebrow}</p>
-      <h3 className="mt-1 text-lg font-semibold text-white">{title}</h3>
-      {description && <p className="mt-1 text-sm text-gray-400">{description}</p>}
+      <p className="label-mono">{eyebrow}</p>
+      <h3 className="mt-1 text-lg font-semibold text-ink">{title}</h3>
+      {description && <p className="mt-1 text-sm text-ink-dim">{description}</p>}
     </div>
   )
 }
@@ -457,20 +464,21 @@ export function DashboardPage() {
       ? `${lowStockItems.length} item(ns) abaixo do minimo`
       : 'Estoque dentro do minimo'
 
+  /* A severidade entra pela faixa lateral e pelo icone, nunca pelo fundo. */
   const alertToneClasses = {
     danger: {
-      row: 'border-red-300/18 bg-red-500/8 hover:border-red-300/38 hover:bg-red-500/12',
-      icon: 'bg-red-500/14 text-red-100',
+      row: 'border-l-2 border-l-crit bg-void hover:bg-surface',
+      icon: 'text-crit',
       badge: 'danger' as const,
     },
     warning: {
-      row: 'border-amber-300/18 bg-amber-500/8 hover:border-amber-300/38 hover:bg-amber-500/12',
-      icon: 'bg-amber-500/14 text-amber-100',
+      row: 'border-l-2 border-l-warn bg-void hover:bg-surface',
+      icon: 'text-warn',
       badge: 'warning' as const,
     },
     success: {
-      row: 'border-emerald-300/18 bg-emerald-500/8 hover:border-emerald-300/38 hover:bg-emerald-500/12',
-      icon: 'bg-emerald-500/14 text-emerald-100',
+      row: 'border-l-2 border-l-ok bg-void hover:bg-surface',
+      icon: 'text-ok',
       badge: 'success' as const,
     },
   }
@@ -542,7 +550,7 @@ export function DashboardPage() {
     return (
       <div className="flex flex-col items-center justify-center py-24">
         <Spinner size="lg" />
-        <p className="mt-4 text-sm text-gray-400">Carregando dados...</p>
+        <p className="mt-4 text-sm text-ink-dim">Carregando dados...</p>
       </div>
     )
   }
@@ -561,14 +569,14 @@ export function DashboardPage() {
     <div className="mx-auto flex w-full max-w-[1500px] flex-col gap-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Painel de Controle</h2>
-          <p className="mt-1 max-w-2xl text-sm text-gray-400">
+          <h2 className="text-2xl font-bold text-ink">Painel de Controle</h2>
+          <p className="mt-1 max-w-2xl text-sm text-ink-dim">
             Leitura rapida do almoxarifado: disponibilidade do estoque, acoes principais e pontos que precisam de atencao.
           </p>
         </div>
         {refreshing && (
-          <div className="inline-flex w-fit items-center gap-2 rounded-full border border-orange-300/20 bg-orange-500/10 px-3 py-1.5 text-xs text-orange-100">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+          <div className="label-mono inline-flex w-fit items-center gap-2 bg-surface px-3 py-1.5">
+            <span className="h-2 w-2 animate-pulse bg-blaze" />
             Atualizando painel
           </div>
         )}
@@ -576,26 +584,23 @@ export function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1.58fr)_minmax(280px,0.62fr)]">
         <div className="flex min-w-0 flex-col gap-5">
-          <Card
-            padding="none"
-            className="overflow-hidden rounded-[22px] border border-white/10 bg-[radial-gradient(circle_at_76%_30%,rgba(249,115,22,0.14),transparent_30%),linear-gradient(135deg,#111318_0%,#090d12_56%,#101827_100%)] shadow-[0_28px_80px_rgba(0,0,0,0.24)]"
-          >
+          <Card padding="none" className="overflow-hidden">
             <div className="grid min-h-[330px] grid-cols-1 lg:grid-cols-[minmax(0,1.16fr)_330px]">
               <div className="flex flex-col justify-between gap-8 p-6 lg:p-8">
                 <div>
-                  <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/6 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.14em] text-orange-100">
-                    <span className="h-2 w-2 rounded-full bg-orange-400" />
+                  <div className="label-mono inline-flex items-center gap-2">
+                    <span className="h-2 w-2 bg-blaze" />
                     Operacao agora
                   </div>
-                  <h3 className="mt-5 max-w-2xl text-3xl font-bold leading-tight text-white lg:text-4xl">
+                  <h3 className="mt-5 max-w-2xl text-3xl font-bold leading-tight text-ink lg:text-4xl">
                     {highlightLabel}
                   </h3>
-                  <p className="mt-3 max-w-xl text-sm leading-6 text-gray-300">
+                  <p className="mt-3 max-w-xl text-sm leading-6 text-ink-dim">
                     Uma leitura direta do que precisa de decisao: saldo disponivel, retiradas do dia e alertas que podem travar a operacao.
                   </p>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+                <div className="grid grid-cols-2 gap-px bg-line md:grid-cols-4">
                   <MiniMetric label="Itens" value={stats.total_items} />
                   <MiniMetric
                     label="Estoque baixo"
@@ -607,10 +612,10 @@ export function DashboardPage() {
                 </div>
               </div>
 
-              <div className="relative flex min-h-[270px] flex-col items-center justify-between gap-3 border-t border-white/8 bg-black/10 p-4 sm:p-5 lg:border-l lg:border-t-0">
-                <div className="self-start rounded-xl border border-white/10 bg-white/8 px-4 py-3 backdrop-blur lg:absolute lg:left-5 lg:top-5 lg:self-auto">
-                  <p className="text-xs uppercase tracking-[0.14em] text-white/50">Indice</p>
-                  <p className="mt-1 text-3xl font-bold text-white">{operationsScore}</p>
+              <div className="relative flex min-h-[270px] flex-col items-center justify-between gap-3 border-t border-line bg-void p-4 sm:p-5 lg:border-l lg:border-t-0">
+                <div className="self-start lg:absolute lg:left-5 lg:top-5 lg:self-auto">
+                  <p className="label-mono">Indice</p>
+                  <p className="num mt-1 text-3xl text-ink">{operationsScore}</p>
                 </div>
 
                 <div className="relative mt-8 h-[174px] w-full max-w-[218px] sm:h-[194px] sm:max-w-[244px] lg:mt-10">
@@ -626,7 +631,7 @@ export function DashboardPage() {
                           startAngle={90}
                           endAngle={450}
                           paddingAngle={4}
-                          stroke="rgba(255,255,255,0.08)"
+                          stroke="#262422"
                           strokeWidth={2}
                           animationBegin={80}
                           animationDuration={850}
@@ -639,8 +644,8 @@ export function DashboardPage() {
                             <Cell
                               key={entry.name}
                               fill={chartColors[index % chartColors.length]}
-                              opacity={activeHealthIndex === index ? 1 : 0.58}
-                              stroke={activeHealthIndex === index ? 'rgba(255,255,255,0.38)' : 'rgba(255,255,255,0.08)'}
+                              opacity={activeHealthIndex === index ? 1 : 0.62}
+                              stroke={activeHealthIndex === index ? '#FFFAFA' : '#262422'}
                               strokeWidth={activeHealthIndex === index ? 3 : 2}
                             />
                           ))}
@@ -648,17 +653,18 @@ export function DashboardPage() {
                       </PieChart>
                     </ResponsiveContainer>
                   ) : (
-                    <div className="flex h-full items-center justify-center rounded-full border border-white/10 text-sm text-gray-500">
+                    <div className="flex h-full items-center justify-center border border-line text-sm text-ink-mute">
                       Sem dados
                     </div>
                   )}
 
-                  <div className="pointer-events-none absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full border border-white/12 bg-[#111318]/94 text-center shadow-[0_14px_42px_rgba(0,0,0,0.38)] backdrop-blur transition-all duration-300 sm:h-28 sm:w-28">
-                    <span className="max-w-[76px] truncate text-[9px] uppercase tracking-[0.1em] text-white/45 sm:max-w-[88px] sm:text-[10px]">
+                  {/* Circular por estar dentro do anel; e a unica excecao ao canto vivo. */}
+                  <div className="pointer-events-none absolute left-1/2 top-1/2 flex h-24 w-24 -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center rounded-full bg-void text-center transition-all duration-300 sm:h-28 sm:w-28">
+                    <span className="label-mono max-w-[76px] truncate sm:max-w-[88px]">
                       {activeHealthSegment?.name ?? 'Disponivel'}
                     </span>
-                    <span className="mt-0.5 text-2xl font-bold text-white transition-all duration-300 sm:text-3xl">{activeHealthPercent}%</span>
-                    <span className="mt-0.5 text-[11px] text-gray-400">
+                    <span className="num mt-0.5 text-2xl text-ink transition-all duration-300 sm:text-3xl">{activeHealthPercent}%</span>
+                    <span className="mt-0.5 text-[11px] text-ink-dim">
                       {activeHealthSegment ? `${activeHealthSegment.value} item(ns)` : 'em estoque'}
                     </span>
                   </div>
@@ -673,21 +679,21 @@ export function DashboardPage() {
                       onFocus={() => setActiveHealthIndex(index)}
                       onClick={() => setActiveHealthIndex(index)}
                       className={cn(
-                        'min-w-0 rounded-xl border px-3 py-2 text-left transition-all duration-200 hover:-translate-y-0.5',
+                        'min-w-0 border px-3 py-2 text-left transition-colors',
                         activeHealthIndex === index
-                          ? 'border-white/20 bg-white/10 shadow-[0_12px_28px_rgba(0,0,0,0.22)]'
-                          : 'border-white/8 bg-white/6 hover:border-white/14 hover:bg-white/8',
+                          ? 'border-ink bg-surface'
+                          : 'border-line bg-surface hover:border-ink-mute',
                       )}
                       aria-pressed={activeHealthIndex === index}
                     >
                       <div className="flex items-center gap-2">
                         <span
-                          className="h-2.5 w-2.5 shrink-0 rounded-full"
+                          className="h-2.5 w-2.5 shrink-0"
                           style={{ backgroundColor: chartColors[index % chartColors.length] }}
                         />
-                        <span className="truncate text-white/60">{entry.name}</span>
+                        <span className="truncate text-ink-dim">{entry.name}</span>
                       </div>
-                      <p className="mt-1 font-semibold text-white">{entry.value}</p>
+                      <p className="num mt-1 text-ink">{entry.value}</p>
                     </button>
                   ))}
                 </div>
@@ -695,23 +701,23 @@ export function DashboardPage() {
             </div>
           </Card>
 
-          <div className="grid grid-cols-1 gap-2 rounded-[18px] border border-white/10 bg-[#0f1115] p-2 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-px bg-line sm:grid-cols-2 xl:grid-cols-4">
             {commandActions.map((action) => (
               <button
                 key={action.path}
                 type="button"
                 onClick={() => navigate(action.path)}
                 className={cn(
-                  'group flex min-h-[76px] items-center gap-3 rounded-[14px] border px-3 py-3 text-left transition-all hover:-translate-y-0.5',
+                  'group flex min-h-[76px] items-center gap-3 px-4 py-3 text-left transition-colors',
                   commandActionToneClasses[action.tone],
                 )}
               >
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-white/12 bg-black/16 text-white">
+                <span className="flex shrink-0 items-center justify-center">
                   {action.icon}
                 </span>
                 <span className="min-w-0">
-                  <span className="block text-base font-semibold text-white">{action.title}</span>
-                  <span className="mt-0.5 block truncate text-sm leading-5 text-white/62">{action.description}</span>
+                  <span className="block text-base font-semibold">{action.title}</span>
+                  <span className="mt-0.5 block truncate text-sm leading-5 opacity-70">{action.description}</span>
                 </span>
               </button>
             ))}
@@ -720,7 +726,7 @@ export function DashboardPage() {
           <div className="grid grid-cols-1 gap-5 2xl:grid-cols-[minmax(0,0.92fr)_minmax(0,1.08fr)]">
             <Card
               variant="bordered"
-              className="rounded-[24px] border-white/10 bg-[#101114]"
+              className="rounded-none border-line bg-surface"
             >
               <div className="flex items-start justify-between gap-4">
                 <SectionHeading
@@ -738,7 +744,7 @@ export function DashboardPage() {
                   <button
                     type="button"
                     onClick={() => navigate('/stock')}
-                    className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-orange-300/40 hover:text-orange-100"
+                    className="min-h-touch border border-line px-3 text-xs font-medium text-ink-dim transition-colors hover:border-ink-mute hover:text-ink"
                   >
                     Estoque
                   </button>
@@ -762,22 +768,22 @@ export function DashboardPage() {
                         : 0
                     const barColor =
                       item.current_quantity === 0
-                        ? 'bg-red-500'
+                        ? 'bg-crit'
                         : item.current_quantity < item.minimum_quantity
-                          ? 'bg-orange-500'
-                          : 'bg-emerald-500'
+                          ? 'bg-blaze'
+                          : 'bg-ok'
 
                     return (
                       <button
                         key={item.id}
                         type="button"
                         onClick={() => navigate(stockItemTarget(item))}
-                        className="rounded-2xl border border-white/8 bg-white/4 p-4 text-left transition-colors hover:border-orange-300/35 hover:bg-white/7"
+                        className="border-b border-line bg-void p-4 text-left transition-colors last:border-b-0 hover:bg-surface"
                       >
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0">
-                            <p className="truncate font-medium text-white">{item.name}</p>
-                            <p className="mt-1 truncate text-xs text-gray-400">
+                            <p className="truncate font-medium text-ink">{item.name}</p>
+                            <p className="mt-1 truncate text-xs text-ink-dim">
                               {item.category ?? 'Sem categoria'} / {item.unit}
                             </p>
                           </div>
@@ -789,15 +795,15 @@ export function DashboardPage() {
                           </Badge>
                         </div>
                         <div className="mt-3">
-                          <div className="h-2 w-full overflow-hidden rounded-full bg-gray-800">
+                          <div className="h-1.5 w-full overflow-hidden bg-line">
                             <div
-                              className={cn('h-full rounded-full transition-all', barColor)}
+                              className={cn('h-full transition-all', barColor)}
                               style={{
                                 width: `${Math.min(percentage, 100)}%`,
                               }}
                             />
                           </div>
-                          <p className="mt-1 text-right text-xs text-gray-500">{percentage}% do minimo</p>
+                          <p className="label-mono mt-1 text-right">{percentage}% do minimo</p>
                         </div>
                       </button>
                     )
@@ -808,7 +814,7 @@ export function DashboardPage() {
 
             <Card
               variant="bordered"
-              className="rounded-[24px] border-white/10 bg-[#101114]"
+              className="rounded-none border-line bg-surface"
             >
               <div className="flex items-start justify-between gap-4">
                 <SectionHeading
@@ -819,7 +825,7 @@ export function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => navigate('/withdrawals')}
-                  className="rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-gray-300 transition-colors hover:border-orange-300/40 hover:text-orange-100"
+                  className="min-h-touch border border-line px-3 text-xs font-medium text-ink-dim transition-colors hover:border-ink-mute hover:text-ink"
                 >
                   Ver todas
                 </button>
@@ -834,26 +840,26 @@ export function DashboardPage() {
                   />
                 </div>
               ) : (
-                <div className="mt-5 flex flex-col divide-y divide-white/8 overflow-hidden rounded-2xl border border-white/8">
+                <div className="mt-5 flex flex-col divide-y divide-line border-t border-line">
                   {recentWithdrawalsPreview.map((withdrawal) => (
                     <button
                       key={withdrawal.id}
                       type="button"
                       onClick={() => navigate('/withdrawals')}
-                      className="grid grid-cols-1 gap-3 bg-white/3 px-4 py-3 text-left transition-colors hover:bg-white/7 md:grid-cols-[120px_minmax(0,1fr)_90px]"
+                      className="grid grid-cols-1 gap-3 bg-void px-4 py-3 text-left transition-colors hover:bg-surface md:grid-cols-[120px_minmax(0,1fr)_90px]"
                     >
                       <div>
-                        <p className="text-xs uppercase tracking-[0.16em] text-gray-500">Codigo</p>
-                        <p className="mt-1 font-semibold text-white">{withdrawal.code ?? '-'}</p>
+                        <p className="label-mono">Codigo</p>
+                        <p className="num mt-1 text-ink">{withdrawal.code ?? '-'}</p>
                       </div>
                       <div className="min-w-0">
-                        <p className="truncate text-sm font-medium text-white">
+                        <p className="truncate text-sm font-medium text-ink">
                           {withdrawal.requested_by_person?.full_name ?? 'Sem solicitante'}
                         </p>
-                        <p className="mt-1 truncate text-xs text-gray-400">
+                        <p className="mt-1 truncate text-xs text-ink-dim">
                           {withdrawalDestinationsSummary(withdrawal)} / {withdrawal.withdrawal_items?.length ?? 0} item(ns)
                         </p>
-                        <p className="mt-1 text-xs text-gray-500">{formatDateTime(withdrawal.created_at)}</p>
+                        <p className="label-mono mt-1">{formatDateTime(withdrawal.created_at)}</p>
                       </div>
                       <div className="flex items-start md:justify-end">
                         <Badge
@@ -872,15 +878,15 @@ export function DashboardPage() {
           </div>
         </div>
 
-        <aside className="grid auto-rows-min gap-5 xl:sticky xl:top-24">
+        <aside className="grid min-w-0 auto-rows-min grid-cols-1 gap-5 xl:sticky xl:top-24">
           <Card
             variant="bordered"
-            className="rounded-[22px] border-white/10 bg-[#101114]"
+            className="rounded-none border-line bg-surface"
           >
             <div className="flex items-center justify-between gap-3">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-orange-200/70">Alertas</p>
-                <h3 className="mt-1 text-lg font-semibold text-white">Carros</h3>
+                <p className="label-mono">Alertas</p>
+                <h3 className="mt-1 text-lg font-semibold text-ink">Carros</h3>
               </div>
               <Badge variant={vehicleAlertItems.some((item) => item.state.variant === 'danger') ? 'danger' : vehicleAlertCount > 0 ? 'warning' : 'success'} size="sm">
                 {vehicleAlertCount}
@@ -889,14 +895,14 @@ export function DashboardPage() {
 
             <div className="mt-4 grid gap-3">
               {vehicleAlertItems.length === 0 ? (
-                <div className="rounded-xl border border-emerald-300/16 bg-emerald-500/8 p-3">
+                <div className="border-l-2 border-l-ok bg-void p-3">
                   <div className="flex items-center gap-3">
-                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-emerald-500/14 text-emerald-100">
+                    <span className="flex shrink-0 items-center justify-center text-ok">
                       <Wrench size={18} />
                     </span>
                     <span className="min-w-0">
-                      <span className="block text-sm font-semibold text-white">Sem revisão pendente</span>
-                      <span className="mt-0.5 block text-xs text-gray-400">Nenhum alerta vencido ou próximo</span>
+                      <span className="block text-sm font-semibold text-ink">Sem revisão pendente</span>
+                      <span className="mt-0.5 block text-xs text-ink-dim">Nenhum alerta vencido ou próximo</span>
                     </span>
                   </div>
                 </div>
@@ -909,17 +915,17 @@ export function DashboardPage() {
                       key={alert.id}
                       type="button"
                       onClick={() => navigate('/vehicles')}
-                      className={cn('flex items-center gap-3 rounded-xl border p-3 text-left transition-colors', toneClasses.row)}
+                      className={cn('flex items-center gap-3 p-3 text-left transition-colors', toneClasses.row)}
                     >
-                      <span className={cn('flex h-10 w-10 shrink-0 items-center justify-center rounded-lg', toneClasses.icon)}>
+                      <span className={cn('flex shrink-0 items-center justify-center', toneClasses.icon)}>
                         {vehicleMaintenanceIcon(alert.alert_type)}
                       </span>
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-semibold text-white">{alert.title}</span>
-                        <span className="mt-0.5 block truncate text-xs text-gray-400">
+                        <span className="block truncate text-sm font-semibold text-ink">{alert.title}</span>
+                        <span className="mt-0.5 block truncate text-xs text-ink-dim">
                           {maintenanceTypeLabel(alert.alert_type)} / {vehicleDisplayName(alert.vehicle)}
                         </span>
-                        <span className="mt-0.5 block truncate text-xs text-gray-500">{vehicleAlertTargetSummary(alert)}</span>
+                        <span className="label-mono mt-0.5 block truncate">{vehicleAlertTargetSummary(alert)}</span>
                       </span>
                       <Badge variant={toneClasses.badge} size="sm">
                         {state.label}
@@ -934,7 +940,7 @@ export function DashboardPage() {
               <button
                 type="button"
                 onClick={() => navigate('/vehicles')}
-                className="w-full rounded-xl border border-orange-300/22 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-100 transition-colors hover:border-orange-300/45 hover:bg-orange-500/16"
+                className="min-h-touch w-full border border-line px-3 text-sm font-medium text-ink transition-colors hover:border-ink-mute"
               >
                 Abrir carros
               </button>

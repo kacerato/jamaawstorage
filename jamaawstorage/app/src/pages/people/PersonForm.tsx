@@ -288,18 +288,18 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-      <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/80">
+      <div className="rounded-none border border-line bg-surface p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-ink">
           Identidade
         </p>
 
         <div className="flex flex-col gap-4 lg:flex-row">
           <div className="flex items-center gap-4">
-            <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-white/10 bg-white/5">
+            <div className="relative flex h-20 w-20 items-center justify-center rounded-full border border-line bg-surface">
               {photoPreview ? (
                 <img src={photoPreview} alt="Foto do colaborador" className="h-full w-full rounded-full object-cover" />
               ) : (
-                <span className="text-xl font-semibold text-orange-300">
+                <span className="text-xl font-semibold text-ink">
                   {form.full_name
                     .split(' ')
                     .map((part) => part[0])
@@ -313,7 +313,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
                 <button
                   type="button"
                   onClick={clearPhoto}
-                  className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-sm text-white"
+                  className="absolute -right-1 -top-1 flex h-6 w-6 items-center justify-center rounded-full bg-crit text-sm text-ink"
                 >
                   x
                 </button>
@@ -323,11 +323,11 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-200 transition-colors hover:bg-orange-500/16"
+                className="rounded-none border border-line bg-surface px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface"
               >
                 Enviar foto
               </button>
-              <p className="text-xs text-gray-500">JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB</p>
+              <p className="text-xs text-ink-mute">JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB</p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -338,12 +338,12 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
             </div>
           </div>
 
-          <div className="flex-1 rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-3">
-            <p className="text-sm font-medium text-gray-200">Matricula</p>
-            <p className="mt-1 text-sm text-orange-300">
+          <div className="flex-1 rounded-none border border-dashed border-line bg-surface px-4 py-3">
+            <p className="text-sm font-medium text-ink-dim">Matricula</p>
+            <p className="mt-1 text-sm text-ink">
               {isEditing ? person?.employee_id ?? 'Gerada automaticamente' : 'Gerada automaticamente ao salvar'}
             </p>
-            <p className="mt-1 text-xs text-gray-500">Sequencia padrao do sistema, ex.: {getAutoEmployeeIdLabel(form.role)}</p>
+            <p className="mt-1 text-xs text-ink-mute">Sequencia padrao do sistema, ex.: {getAutoEmployeeIdLabel(form.role)}</p>
           </div>
         </div>
       </div>
@@ -368,8 +368,8 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
         />
       </div>
 
-      <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/80">
+      <div className="rounded-none border border-line bg-surface p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-ink">
           Dados profissionais
         </p>
 
@@ -410,13 +410,13 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
+      <div className="rounded-none border border-line bg-surface p-4">
         <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/80">
+            <p className="text-xs font-semibold uppercase tracking-[0.24em] text-ink">
               Documentos
             </p>
-            <p className="mt-2 text-sm text-gray-400">
+            <p className="mt-2 text-sm text-ink-dim">
               Anexe CPF, ficha, contrato ou outros arquivos do colaborador em um bloco separado.
             </p>
           </div>
@@ -437,14 +437,14 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
               onChange={updateDocuments}
               className="hidden"
             />
-            <p className="text-xs text-gray-500">PDF, DOC, DOCX ou imagem.</p>
+            <p className="text-xs text-ink-mute">PDF, DOC, DOCX ou imagem.</p>
           </div>
         </div>
 
         {form.document_attachments.length > 0 ? (
           <div className="mt-4 grid gap-3">
             {form.document_attachments.map((document, index) => (
-              <div key={`${document.url}-${index}`} className="rounded-2xl border border-white/8 bg-white/4 p-3">
+              <div key={`${document.url}-${index}`} className="rounded-none border border-line bg-surface p-3">
                 <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
                   <div className="min-w-0 flex-1">
                     <Input
@@ -457,7 +457,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
                       href={buildPublicStorageUrl(document.url)}
                       target="_blank"
                       rel="noreferrer"
-                      className="mt-2 inline-block text-xs text-orange-300 hover:text-orange-200"
+                      className="mt-2 inline-block text-xs text-ink hover:text-ink"
                     >
                       Abrir documento
                     </a>
@@ -470,7 +470,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
             ))}
           </div>
         ) : (
-          <div className="mt-4 rounded-2xl border border-dashed border-white/10 bg-white/3 px-4 py-5 text-sm text-gray-500">
+          <div className="mt-4 rounded-none border border-dashed border-line bg-surface px-4 py-5 text-sm text-ink-mute">
             Nenhum documento anexado ate agora.
           </div>
         )}
@@ -478,7 +478,7 @@ export function PersonForm({ person, onSubmit, onCancel }: PersonFormProps) {
 
       {errors.form && <Alert variant="danger">{errors.form}</Alert>}
 
-      <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
+      <div className="flex justify-end gap-3 border-t border-line pt-4">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancelar
         </Button>

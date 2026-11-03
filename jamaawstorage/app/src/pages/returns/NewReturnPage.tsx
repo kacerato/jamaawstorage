@@ -264,8 +264,8 @@ export function NewReturnPage() {
   return (
     <div className="flex flex-col gap-5">
       <div>
-        <h1 className="text-2xl font-bold text-white">Nova devolução</h1>
-        <p className="mt-1 text-sm text-gray-400">
+        <h1 className="text-2xl font-bold text-ink">Nova devolução</h1>
+        <p className="mt-1 text-sm text-ink-dim">
           Selecione a origem e os itens. O termo em PDF é gerado quando você confirmar o recebimento.
         </p>
       </div>
@@ -379,10 +379,10 @@ export function NewReturnPage() {
               return (
                 <div
                   key={item.stockItemId}
-                  className={`rounded-lg border p-3 transition ${
+                  className={`rounded-none border p-3 transition ${
                     isSelected
-                      ? 'border-orange-500/40 bg-orange-500/5'
-                      : 'border-white/10 bg-white/[0.02] hover:border-white/20'
+                      ? 'border-line bg-surface'
+                      : 'border-line bg-surface hover:border-line'
                   }`}
                 >
                   <div className="flex flex-wrap items-center gap-3">
@@ -390,13 +390,13 @@ export function NewReturnPage() {
                       type="checkbox"
                       checked={isSelected}
                       onChange={() => toggleItem(item)}
-                      className="h-4 w-4 accent-orange-500"
+                      className="h-4 w-4 accent-blaze"
                       aria-label={`Selecionar ${item.name}`}
                     />
                     <ItemVisual iconKey={item.iconKey} alt={item.name} className="h-8 w-8" />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate font-medium text-white">{item.name}</p>
-                      <p className="font-mono text-xs text-orange-300">{item.code ?? '-'}</p>
+                      <p className="truncate font-medium text-ink">{item.name}</p>
+                      <p className="font-mono text-xs text-ink">{item.code ?? '-'}</p>
                     </div>
                     {Number.isFinite(item.availableQuantity) && (
                       <Badge variant="default" size="sm">
@@ -435,7 +435,7 @@ export function NewReturnPage() {
       </Card>
 
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-gray-400">
+        <p className="text-sm text-ink-dim">
           {selectedCount > 0 ? `${selectedCount} item(ns) selecionado(s).` : 'Nenhum item selecionado.'}
         </p>
         <div className="flex gap-2">

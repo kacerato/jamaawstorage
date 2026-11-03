@@ -277,20 +277,20 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       {uploadError && <Alert variant="danger">{uploadError}</Alert>}
 
-      <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/80">
+      <div className="rounded-none border border-line bg-surface p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-ink">
           Identidade do item
         </p>
 
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
-            <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/5 p-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.04)]">
+            <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-none border border-line bg-surface p-3">
               <ItemVisual iconKey={photoPreview ?? svgIconKey} size={72} />
               {photoPreview && (
                 <button
                   type="button"
                   onClick={clearPhoto}
-                  className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-red-500 text-sm text-white"
+                  className="absolute -right-2 -top-2 flex h-6 w-6 items-center justify-center rounded-full bg-crit text-sm text-ink"
                   title="Remover foto"
                 >
                   x
@@ -302,11 +302,11 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
-                className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-2 text-sm font-medium text-orange-200 transition-colors hover:bg-orange-500/16"
+                className="rounded-none border border-line bg-surface px-3 py-2 text-sm font-medium text-ink transition-colors hover:bg-surface"
               >
                 Enviar foto
               </button>
-              <p className="text-xs text-gray-500">JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB</p>
+              <p className="text-xs text-ink-mute">JPG ou PNG, ate {DEFAULT_IMAGE_UPLOAD_OPTIONS.maxFileSizeMb} MB</p>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -317,8 +317,8 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-[#0e0f12] p-3">
-            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-gray-500">
+          <div className="rounded-none border border-line bg-surface p-3">
+            <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-mute">
               Biblioteca de icones
             </p>
 
@@ -330,17 +330,17 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                     key={option.value}
                     type="button"
                     onClick={() => handleSelectIcon(option.value)}
-                    className={`group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition-all ${
+                    className={`group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-none border px-3 py-3 text-center transition-all ${
                       active
-                        ? 'border-orange-400/40 bg-orange-500/16 shadow-[0_0_0_1px_rgba(249,115,22,0.08)]'
-                        : 'border-white/8 bg-white/4 hover:border-white/14 hover:bg-white/8'
+                        ? 'border-line bg-surface'
+                        : 'border-line bg-surface hover:border-line hover:bg-surface'
                     }`}
                     title={option.label}
                   >
                     <ItemVisual iconKey={option.value} size={42} />
                     <span
                       className={`line-clamp-2 min-h-[30px] max-w-full text-[11px] font-medium leading-4 ${
-                        active ? 'text-orange-100' : 'text-gray-400 group-hover:text-gray-200'
+                        active ? 'text-ink' : 'text-ink-dim group-hover:text-ink-dim'
                       }`}
                     >
                       {option.label}
@@ -351,26 +351,26 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
               <button
                 type="button"
                 onClick={() => setShowIconLibrary(true)}
-                className="group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-white/12 bg-white/4 px-3 py-3 text-center transition-all hover:border-orange-400/25 hover:bg-white/8"
+                className="group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-none border border-dashed border-line bg-surface px-3 py-3 text-center transition-all hover:border-ink-mute hover:bg-surface"
               >
-                <span className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-black/20 text-xl text-orange-200">
+                <span className="flex h-11 w-11 items-center justify-center rounded-none border border-line bg-void text-xl text-ink">
                   +
                 </span>
-                <span className="text-[11px] font-medium leading-4 text-gray-300 group-hover:text-white">
+                <span className="text-[11px] font-medium leading-4 text-ink-dim group-hover:text-ink">
                   + icones
                 </span>
               </button>
             </div>
           </div>
 
-          <p className="text-xs text-gray-500">
-            Icone atual: <span className="text-orange-200/80">{itemLabelForKey(photoPreview ?? svgIconKey)}</span>
+          <p className="text-xs text-ink-mute">
+            Icone atual: <span className="text-ink">{itemLabelForKey(photoPreview ?? svgIconKey)}</span>
           </p>
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/80">
+      <div className="rounded-none border border-line bg-surface p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-ink">
           Dados principais
         </p>
 
@@ -392,10 +392,10 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
               helperText="Mantido pelo sistema"
             />
           ) : (
-            <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-3">
-              <p className="text-sm font-medium text-gray-200">Codigo</p>
-              <p className="mt-1 text-sm text-orange-300">Gerado automaticamente ao salvar</p>
-              <p className="mt-1 text-xs text-gray-500">Exemplo: CPT-001</p>
+            <div className="rounded-none border border-dashed border-line bg-surface px-4 py-3">
+              <p className="text-sm font-medium text-ink-dim">Codigo</p>
+              <p className="mt-1 text-sm text-ink">Gerado automaticamente ao salvar</p>
+              <p className="mt-1 text-xs text-ink-mute">Exemplo: CPT-001</p>
             </div>
           )}
         </div>
@@ -410,8 +410,8 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/80">
+      <div className="rounded-none border border-line bg-surface p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-ink">
           Classificacao
         </p>
 
@@ -438,17 +438,17 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
         </div>
       </div>
 
-      <div className="rounded-2xl border border-white/8 bg-[#111215] p-4">
-        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-orange-300/80">
+      <div className="rounded-none border border-line bg-surface p-4">
+        <p className="mb-3 text-xs font-semibold uppercase tracking-[0.24em] text-ink">
           Estoque
         </p>
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           {isEditing ? (
-            <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-3">
-              <p className="text-sm font-medium text-gray-200">Quantidade atual</p>
-              <p className="mt-1 text-sm text-orange-300">{formData.current_quantity} {formData.unit}</p>
-              <p className="mt-1 text-xs text-gray-500">A composicao abaixo mostra quanto esta novo, usado ou com avaria.</p>
+            <div className="rounded-none border border-dashed border-line bg-surface px-4 py-3">
+              <p className="text-sm font-medium text-ink-dim">Quantidade atual</p>
+              <p className="mt-1 text-sm text-ink">{formData.current_quantity} {formData.unit}</p>
+              <p className="mt-1 text-xs text-ink-mute">A composicao abaixo mostra quanto esta novo, usado ou com avaria.</p>
             </div>
           ) : (
             <Input
@@ -462,19 +462,19 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
             />
           )}
           {isEditing && (
-            <div className="flex flex-col gap-3 rounded-2xl border border-white/8 bg-white/4 px-4 py-3">
+            <div className="flex flex-col gap-3 rounded-none border border-line bg-surface px-4 py-3">
               <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-center">
-                <p className="text-sm font-medium text-gray-200">Ajuste de estoque</p>
-                <div className="grid w-full max-w-[220px] grid-cols-2 rounded-xl border border-white/8 bg-[#0f1013] p-1 sm:justify-self-end">
+                <p className="text-sm font-medium text-ink-dim">Ajuste de estoque</p>
+                <div className="grid w-full max-w-[220px] grid-cols-2 rounded-none border border-line bg-surface p-1 sm:justify-self-end">
                   <button
                     type="button"
                     onClick={() => {
                       setAdjustmentMode('add')
                     }}
-                    className={`flex min-h-[34px] items-center justify-center rounded-lg px-3 py-1.5 text-center text-xs font-medium transition-colors ${
+                    className={`flex min-h-[34px] items-center justify-center rounded-none px-3 py-1.5 text-center text-xs font-medium transition-colors ${
                       adjustmentMode === 'add'
-                        ? 'bg-emerald-500/18 text-emerald-300 shadow-[inset_0_0_0_1px_rgba(52,211,153,0.16)]'
-                        : 'text-gray-400 hover:text-white'
+                        ? 'bg-ok/15 text-ok'
+                        : 'text-ink-dim hover:text-ink'
                     }`}
                   >
                     Entrada
@@ -486,10 +486,10 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                       setManualCompositionMode(false)
                       resetCompositionToSavedItem()
                     }}
-                    className={`flex min-h-[34px] items-center justify-center rounded-lg px-3 py-1.5 text-center text-xs font-medium transition-colors ${
+                    className={`flex min-h-[34px] items-center justify-center rounded-none px-3 py-1.5 text-center text-xs font-medium transition-colors ${
                       adjustmentMode === 'remove'
-                        ? 'bg-red-500/18 text-red-300 shadow-[inset_0_0_0_1px_rgba(248,113,113,0.16)]'
-                        : 'text-gray-400 hover:text-white'
+                        ? 'bg-crit/15 text-crit'
+                        : 'text-ink-dim hover:text-ink'
                     }`}
                   >
                     Saida
@@ -536,11 +536,11 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
           />
         </div>
 
-        <div className="mt-4 overflow-hidden rounded-[28px] border border-white/8 bg-[linear-gradient(180deg,_rgba(18,18,22,0.98)_0%,_rgba(12,13,16,0.98)_100%)] p-5">
+        <div className="mt-4 overflow-hidden rounded-none border border-line bg-surface p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
             <div className="min-w-0">
-              <p className="text-sm font-medium text-white">Composicao do estoque</p>
-              <p className="mt-1 max-w-md text-xs leading-5 text-gray-500">
+              <p className="text-sm font-medium text-ink">Composicao do estoque</p>
+              <p className="mt-1 max-w-md text-xs leading-5 text-ink-mute">
                 {isEditing
                   ? manualCompositionMode
                     ? 'Ajuste direto dos estados. A entrada simples fica bloqueada enquanto este modo estiver ativo.'
@@ -548,13 +548,13 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                   : 'Separe opcionalmente o total em itens novos, usados e com avaria.'}
               </p>
             </div>
-            <div className="flex shrink-0 items-center gap-3 rounded-3xl border border-white/8 bg-black/20 px-4 py-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-orange-400/12 bg-orange-500/10">
-                <WarehouseIcon size={22} className="text-orange-200" />
+            <div className="flex shrink-0 items-center gap-3 rounded-none border border-line bg-void px-4 py-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-none border border-line bg-surface">
+                <WarehouseIcon size={22} className="text-ink" />
               </div>
               <div>
-                <p className="text-[11px] uppercase tracking-[0.18em] text-gray-500">Total em estoque</p>
-                <p className="mt-1 text-lg font-semibold text-white">{formData.current_quantity} {formData.unit}</p>
+                <p className="text-[11px] uppercase tracking-[0.18em] text-ink-mute">Total em estoque</p>
+                <p className="mt-1 text-lg font-semibold text-ink">{formData.current_quantity} {formData.unit}</p>
               </div>
             </div>
           </div>
@@ -571,31 +571,31 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                   resetCompositionToSavedItem()
                 }
               }}
-              className={`mt-4 flex w-full flex-col gap-3 rounded-2xl border p-4 text-left transition-all duration-200 sm:flex-row sm:items-center sm:justify-between ${
+              className={`mt-4 flex w-full flex-col gap-3 rounded-none border p-4 text-left transition-all duration-200 sm:flex-row sm:items-center sm:justify-between ${
                 manualCompositionMode
-                  ? 'border-orange-400/35 bg-orange-500/10 shadow-[0_16px_38px_rgba(249,115,22,0.10)]'
-                  : 'border-white/8 bg-white/[0.035] hover:border-white/14 hover:bg-white/[0.055]'
+                  ? 'border-line bg-surface'
+                  : 'border-line bg-surface hover:border-line hover:bg-surface'
               }`}
               role="switch"
               aria-checked={manualCompositionMode}
               aria-label="Editar composicao manualmente"
             >
               <span className="min-w-0">
-                <span className="block text-sm font-medium text-white">Editar composicao manualmente</span>
-                <span className="mt-1 block text-xs leading-5 text-gray-500">
+                <span className="block text-sm font-medium text-ink">Editar composicao manualmente</span>
+                <span className="mt-1 block text-xs leading-5 text-ink-mute">
                   Ao ligar, a quantidade do ajuste de entrada fica bloqueada.
                 </span>
               </span>
               <span
                 className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-all duration-200 ${
                   manualCompositionMode
-                    ? 'border-orange-300/60 bg-orange-500 shadow-[0_0_0_4px_rgba(249,115,22,0.12)]'
-                    : 'border-white/10 bg-black/45'
+                    ? 'border-line bg-blaze'
+                    : 'border-line bg-void'
                 }`}
                 aria-hidden="true"
               >
                 <span
-                  className={`h-5 w-5 rounded-full bg-white shadow-md transition-transform duration-200 ${
+                  className={`h-5 w-5 rounded-full bg-surface  transition-transform duration-200 ${
                     manualCompositionMode ? 'translate-x-6' : 'translate-x-1'
                   }`}
                 />
@@ -609,9 +609,9 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 key: 'quantity_new',
                 label: 'Novos',
                 value: formData.quantity_new,
-                accent: 'border-emerald-500/18 bg-emerald-500/10',
-                iconWrap: 'border-emerald-400/15 bg-emerald-500/12',
-                icon: <NewConditionIcon size={20} className="text-emerald-200" />,
+                accent: 'border-ok bg-ok/15',
+                iconWrap: 'border-ok bg-ok/15',
+                icon: <NewConditionIcon size={20} className="text-ok" />,
                 helper: 'Itens prontos como novos.',
               },
               {
@@ -627,33 +627,33 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 key: 'quantity_damaged',
                 label: 'Com avaria',
                 value: formData.quantity_damaged,
-                accent: 'border-red-500/18 bg-red-500/10',
-                iconWrap: 'border-red-400/15 bg-red-500/12',
-                icon: <DamagedConditionIcon size={20} className="text-red-200" />,
+                accent: 'border-crit bg-crit/15',
+                iconWrap: 'border-crit bg-crit/15',
+                icon: <DamagedConditionIcon size={20} className="text-crit" />,
                 helper: 'Itens separados para avaria.',
               },
             ] as const).map((section) => (
               <div
                 key={section.key}
-                className={`rounded-2xl border p-3 ${section.accent}`}
+                className={`rounded-none border p-3 ${section.accent}`}
               >
                 <div className="flex items-start justify-between gap-3">
-                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border ${section.iconWrap}`}>
+                  <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-none border ${section.iconWrap}`}>
                     {section.icon}
                   </div>
                   <div className="min-w-0 text-right">
-                    <p className="text-[10px] uppercase tracking-[0.12em] text-gray-500">{section.label}</p>
-                    <p className="mt-1 text-xl font-semibold text-white">{section.value}</p>
+                    <p className="text-[10px] uppercase tracking-[0.12em] text-ink-mute">{section.label}</p>
+                    <p className="mt-1 text-xl font-semibold text-ink">{section.value}</p>
                   </div>
                 </div>
 
-                <p className="mt-3 min-h-[34px] text-xs leading-4 text-gray-400">{section.helper}</p>
+                <p className="mt-3 min-h-[34px] text-xs leading-4 text-ink-dim">{section.helper}</p>
 
                 <div className="mt-3">
                   {isEditing && !manualCompositionMode ? (
-                    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-                      <p className="text-[10px] uppercase tracking-[0.12em] text-gray-500">Quantidade atual</p>
-                      <p className="mt-1 text-sm font-medium text-white">{section.value} {formData.unit}</p>
+                    <div className="rounded-none border border-line bg-void px-3 py-2">
+                      <p className="text-[10px] uppercase tracking-[0.12em] text-ink-mute">Quantidade atual</p>
+                      <p className="mt-1 text-sm font-medium text-ink">{section.value} {formData.unit}</p>
                     </div>
                   ) : (
                     <Input
@@ -670,12 +670,12 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
           </div>
 
           {errors.quantity_breakdown && (
-            <p className="mt-4 text-sm text-red-400">{errors.quantity_breakdown}</p>
+            <p className="mt-4 text-sm text-crit">{errors.quantity_breakdown}</p>
           )}
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-3 border-t border-white/8 pt-3">
+      <div className="flex items-center justify-end gap-3 border-t border-line pt-3">
         <Button type="button" variant="secondary" onClick={onCancel} disabled={isSubmitting}>
           Cancelar
         </Button>
@@ -699,17 +699,17 @@ export function StockItemForm({ item, onSubmit, onCancel, isSubmitting }: StockI
                 key={option.value}
                 type="button"
                 onClick={() => handleSelectIcon(option.value)}
-                className={`group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-center transition-all ${
+                className={`group flex min-h-[108px] w-full min-w-0 flex-col items-center justify-center gap-2 rounded-none border px-3 py-3 text-center transition-all ${
                   active
-                    ? 'border-orange-400/40 bg-orange-500/16 shadow-[0_0_0_1px_rgba(249,115,22,0.08)]'
-                    : 'border-white/8 bg-white/4 hover:border-white/14 hover:bg-white/8'
+                    ? 'border-line bg-surface'
+                    : 'border-line bg-surface hover:border-line hover:bg-surface'
                 }`}
                 title={option.label}
               >
                 <ItemVisual iconKey={option.value} size={42} />
                 <span
                   className={`line-clamp-2 min-h-[30px] max-w-full text-[11px] font-medium leading-4 ${
-                    active ? 'text-orange-100' : 'text-gray-400 group-hover:text-gray-200'
+                    active ? 'text-ink' : 'text-ink-dim group-hover:text-ink-dim'
                   }`}
                 >
                   {option.label}

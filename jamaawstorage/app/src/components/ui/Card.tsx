@@ -8,12 +8,17 @@ interface CardProps {
   onClick?: () => void
 }
 
+/*
+ * Um unico nivel de elevacao: surface. Um Card nunca contem outro Card;
+ * dentro dele a separacao e feita por divisor (border-line), nunca por
+ * um segundo fundo. 'elevated' existe so por compatibilidade de API.
+ */
 const variantClasses: Record<NonNullable<CardProps['variant']>, string> = {
-  default: 'bg-gray-900 rounded-xl',
-  elevated: 'bg-gray-900 rounded-xl shadow-lg shadow-black/20',
-  bordered: 'bg-gray-900 rounded-xl border border-gray-700',
+  default: 'bg-surface rounded-none',
+  elevated: 'bg-surface rounded-none',
+  bordered: 'bg-surface rounded-none border border-line',
   interactive:
-    'bg-gray-900 rounded-xl border border-gray-700 hover:border-orange-500/50 cursor-pointer transition-colors',
+    'bg-surface rounded-none border border-line hover:border-ink-mute cursor-pointer transition-colors text-left w-full',
 }
 
 const paddingClasses: Record<NonNullable<CardProps['padding']>, string> = {

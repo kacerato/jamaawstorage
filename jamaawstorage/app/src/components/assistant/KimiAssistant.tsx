@@ -184,7 +184,7 @@ async function fileToAttachment(file: File): Promise<ChatAttachment> {
 
 function Mascot({ className }: { className?: string }) {
   return (
-    <div className={cn('relative overflow-hidden bg-[#242326]', className)}>
+    <div className={cn('relative overflow-hidden bg-surface', className)}>
       <img
         src={jamaawAssistant}
         alt=""
@@ -494,15 +494,15 @@ export function KimiAssistant() {
           if (event.key === 'Enter' || event.key === ' ') setOpen(true)
         }}
         className={cn(
-          'group fixed z-40 h-[68px] w-[68px] touch-none select-none rounded-[22px] border border-orange-300/35 bg-[#181719] p-1.5 shadow-[0_14px_46px_rgba(255,103,31,0.38)] transition-[opacity,transform,box-shadow] hover:scale-[1.04] hover:shadow-[0_18px_58px_rgba(255,103,31,0.5)] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-orange-400',
+          'group fixed z-40 h-[68px] w-[68px] touch-none select-none rounded-none border border-line bg-surface p-1.5 transition-[opacity,transform] hover:scale-[1.04] focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-ink',
           open && 'pointer-events-none scale-75 opacity-0',
         )}
         style={{ left: launcherPosition.x, top: launcherPosition.y }}
         aria-label="Abrir ou arrastar o JAMAAW Assistente"
         title="Clique para abrir · arraste para mover"
       >
-        <Mascot className="h-full w-full rounded-[17px]" />
-        <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#181719] bg-orange-500 text-white shadow-lg">
+        <Mascot className="h-full w-full rounded-none" />
+        <span className="absolute -right-1 -top-1 flex h-5 w-5 items-center justify-center rounded-full border-2 border-[#181719] bg-blaze text-ink">
           <Grip size={10} />
         </span>
         <span className="absolute -bottom-1 -left-1 h-3.5 w-3.5 rounded-full border-[3px] border-[#181719] bg-emerald-400" />
@@ -510,45 +510,45 @@ export function KimiAssistant() {
 
       <aside
         className={cn(
-          'fixed inset-0 z-[70] flex flex-col overflow-hidden bg-[#0b0b0c] shadow-[0_30px_110px_rgba(0,0,0,0.72)] transition-[opacity,transform] duration-300 sm:inset-auto sm:left-[var(--assistant-left)] sm:top-[var(--assistant-top)] sm:h-[var(--assistant-height)] sm:w-[480px] sm:rounded-[28px] sm:border sm:border-white/10',
+          'fixed inset-0 z-[70] flex flex-col overflow-hidden bg-void transition-[opacity,transform] duration-300 sm:inset-auto sm:left-[var(--assistant-left)] sm:top-[var(--assistant-top)] sm:h-[var(--assistant-height)] sm:w-[480px] sm:rounded-none sm:border sm:border-line',
           open ? 'translate-y-0 opacity-100' : 'pointer-events-none translate-y-full opacity-0 sm:translate-y-6 sm:scale-95',
         )}
         style={panelStyle}
         aria-hidden={!open}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-[radial-gradient(circle_at_15%_0%,rgba(255,104,31,0.24),transparent_56%)]" />
-        <header className="relative shrink-0 border-b border-white/[0.07] px-4 pb-3 pt-4">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-44 bg-surface" />
+        <header className="relative shrink-0 border-b border-line px-4 pb-3 pt-4">
           <div className="flex items-center justify-between gap-3">
             <div className="flex min-w-0 items-center gap-3">
-              <Mascot className="h-12 w-12 shrink-0 rounded-2xl border border-orange-300/25 shadow-[0_8px_24px_rgba(255,104,31,0.2)]" />
+              <Mascot className="h-12 w-12 shrink-0 rounded-none border border-line" />
               <div className="min-w-0">
                 <div className="flex items-center gap-2">
-                  <h2 className="truncate text-base font-black tracking-[-0.02em] text-white">JAMAAW Assistente</h2>
-                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.9)]" />
+                  <h2 className="truncate text-base font-black tracking-[-0.02em] text-ink">JAMAAW Assistente</h2>
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                 </div>
-                <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-orange-300/75">Central operacional inteligente</p>
+                <p className="mt-0.5 truncate text-[10px] font-semibold uppercase tracking-[0.18em] text-ink">Central operacional inteligente</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
-              <button type="button" onClick={newConversation} className="rounded-xl p-2 text-gray-500 hover:bg-white/[0.06] hover:text-white" aria-label="Nova operação"><Plus size={18} /></button>
-              <button type="button" onClick={() => setOpen(false)} className="rounded-xl p-2 text-gray-500 hover:bg-white/[0.06] hover:text-white" aria-label="Fechar"><X size={19} /></button>
+              <button type="button" onClick={newConversation} className="rounded-none p-2 text-ink-mute hover:bg-surface hover:text-ink" aria-label="Nova operação"><Plus size={18} /></button>
+              <button type="button" onClick={() => setOpen(false)} className="rounded-none p-2 text-ink-mute hover:bg-surface hover:text-ink" aria-label="Fechar"><X size={19} /></button>
             </div>
           </div>
 
-          <nav className="mt-3 grid grid-cols-2 gap-1 rounded-xl bg-white/[0.035] p-1" aria-label="Áreas do assistente">
+          <nav className="mt-3 grid grid-cols-2 gap-1 rounded-none bg-surface p-1" aria-label="Áreas do assistente">
             <button
               type="button"
               onClick={() => setView('operate')}
-              className={cn('flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors', view === 'operate' ? 'bg-orange-500 text-white shadow-lg' : 'text-gray-500 hover:text-white')}
+              className={cn('flex items-center justify-center gap-2 rounded-none px-3 py-2 text-xs font-semibold transition-colors', view === 'operate' ? 'bg-blaze text-ink' : 'text-ink-mute hover:text-ink')}
             >
               <Command size={14} /> Operar
             </button>
             <button
               type="button"
               onClick={() => setView('memory')}
-              className={cn('flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition-colors', view === 'memory' ? 'bg-orange-500 text-white shadow-lg' : 'text-gray-500 hover:text-white')}
+              className={cn('flex items-center justify-center gap-2 rounded-none px-3 py-2 text-xs font-semibold transition-colors', view === 'memory' ? 'bg-blaze text-ink' : 'text-ink-mute hover:text-ink')}
             >
-              <MemoryStick size={14} /> Memória {memories.length > 0 && <span className="rounded-full bg-black/25 px-1.5 text-[10px]">{memories.length}</span>}
+              <MemoryStick size={14} /> Memória {memories.length > 0 && <span className="rounded-none bg-void px-1.5 text-[10px]">{memories.length}</span>}
             </button>
           </nav>
         </header>
@@ -556,13 +556,13 @@ export function KimiAssistant() {
         {view === 'operate' ? (
           <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4">
             {messages.length === 1 && messages[0].id === 'greeting' && (
-              <section className="mb-5 overflow-hidden rounded-[22px] border border-orange-400/15 bg-[linear-gradient(145deg,rgba(255,112,39,0.13),rgba(255,255,255,0.025))] p-4">
+              <section className="mb-5 overflow-hidden rounded-none border border-line bg-surface p-4">
                 <div className="flex items-start gap-4">
-                  <Mascot className="h-[74px] w-[74px] shrink-0 rounded-[22px] border border-orange-300/20" />
+                  <Mascot className="h-[74px] w-[74px] shrink-0 rounded-none border border-line" />
                   <div>
-                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-orange-300">Controle unificado</p>
-                    <h3 className="mt-1 text-lg font-bold leading-tight text-white">Pergunte, investigue ou prepare uma ação.</h3>
-                    <p className="mt-2 text-xs leading-5 text-gray-400">Consulto períodos completos no banco, recupero contexto da memória e mostro qualquer alteração antes de executar.</p>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-ink">Controle unificado</p>
+                    <h3 className="mt-1 text-lg font-bold leading-tight text-ink">Pergunte, investigue ou prepare uma ação.</h3>
+                    <p className="mt-2 text-xs leading-5 text-ink-dim">Consulto períodos completos no banco, recupero contexto da memória e mostro qualquer alteração antes de executar.</p>
                   </div>
                 </div>
                 <div className="mt-4 grid gap-2 sm:grid-cols-2">
@@ -571,10 +571,10 @@ export function KimiAssistant() {
                       key={label}
                       type="button"
                       onClick={() => void send(prompt)}
-                      className="group flex items-center justify-between gap-2 rounded-xl border border-white/[0.07] bg-black/25 px-3 py-2.5 text-left text-[11px] font-medium text-gray-300 hover:border-orange-400/25 hover:bg-orange-500/10 hover:text-white"
+                      className="group flex items-center justify-between gap-2 rounded-none border border-line bg-void px-3 py-2.5 text-left text-[11px] font-medium text-ink-dim hover:border-ink-mute hover:bg-surface hover:text-ink"
                     >
-                      <span className="flex items-center gap-2"><Icon size={13} className="text-orange-300" /> {label}</span>
-                      <ChevronRight size={12} className="text-gray-700 group-hover:text-orange-300" />
+                      <span className="flex items-center gap-2"><Icon size={13} className="text-ink" /> {label}</span>
+                      <ChevronRight size={12} className="text-ink-mute group-hover:text-ink" />
                     </button>
                   ))}
                 </div>
@@ -585,46 +585,46 @@ export function KimiAssistant() {
               {messages.filter((message) => message.id !== 'greeting' || messages.length > 1).map((message) => (
                 message.role === 'user' ? (
                   <div key={message.id} className="ml-8 flex items-start justify-end gap-2">
-                    <div className="rounded-2xl rounded-tr-md border border-orange-300/20 bg-orange-500/12 px-3.5 py-2.5 text-sm leading-5 text-orange-50">
+                    <div className="rounded-none border border-line bg-surface px-3.5 py-2.5 text-sm leading-5 text-ink">
                       <p className="whitespace-pre-wrap">{message.content}</p>
                     </div>
-                    <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-orange-500 text-white"><Command size={13} /></div>
+                    <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-none bg-blaze text-ink"><Command size={13} /></div>
                   </div>
                 ) : (
-                  <article key={message.id} className="overflow-hidden rounded-[20px] border border-white/[0.075] bg-white/[0.035]">
-                    <div className="flex items-center gap-2 border-b border-white/[0.055] px-3 py-2">
-                      <Mascot className="h-7 w-7 rounded-lg" />
-                      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-orange-300">JAMAAW análise</span>
-                      <span className="ml-auto flex items-center gap-1 text-[10px] text-gray-600"><Database size={11} /> dados do app</span>
+                  <article key={message.id} className="overflow-hidden rounded-none border border-line bg-surface">
+                    <div className="flex items-center gap-2 border-b border-line px-3 py-2">
+                      <Mascot className="h-7 w-7 rounded-none" />
+                      <span className="text-[10px] font-bold uppercase tracking-[0.18em] text-ink">JAMAAW análise</span>
+                      <span className="ml-auto flex items-center gap-1 text-[10px] text-ink-mute"><Database size={11} /> dados do app</span>
                     </div>
-                    <div className="px-3.5 py-3 text-sm leading-6 text-gray-200">
+                    <div className="px-3.5 py-3 text-sm leading-6 text-ink-dim">
                       <AssistantRichMessage content={message.content} />
                       {message.withdrawalResult && (
-                        <div className="mt-3 overflow-hidden rounded-2xl border border-emerald-300/20 bg-emerald-500/[0.07]">
-                          <div className="flex items-center gap-3 border-b border-emerald-300/10 px-3.5 py-3">
-                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-emerald-400/15 text-emerald-300"><PackageCheck size={18} /></div>
+                        <div className="mt-3 overflow-hidden rounded-none border border-ok bg-ok/[0.07]">
+                          <div className="flex items-center gap-3 border-b border-ok px-3.5 py-3">
+                            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-none bg-ok/15 text-ok"><PackageCheck size={18} /></div>
                             <div className="min-w-0">
-                              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-emerald-300">Retirada concluída</p>
-                              <p className="truncate text-sm font-bold text-white">{message.withdrawalResult.code}</p>
+                              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-ok">Retirada concluída</p>
+                              <p className="truncate text-sm font-bold text-ink">{message.withdrawalResult.code}</p>
                             </div>
-                            <span className="ml-auto rounded-full border border-emerald-300/15 bg-emerald-400/10 px-2 py-1 text-[9px] font-bold uppercase text-emerald-200">registrada</span>
+                            <span className="ml-auto rounded-none border border-ok bg-ok/15 px-2 py-1 text-[9px] font-bold uppercase text-ok">registrada</span>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 px-3.5 py-3 text-[11px] text-gray-400">
-                            <span className="flex items-center gap-1.5"><MapPin size={12} className="text-orange-300" /> <span className="truncate">{message.withdrawalResult.destinationLabel}</span></span>
+                          <div className="grid grid-cols-2 gap-2 px-3.5 py-3 text-[11px] text-ink-dim">
+                            <span className="flex items-center gap-1.5"><MapPin size={12} className="text-ink" /> <span className="truncate">{message.withdrawalResult.destinationLabel}</span></span>
                             <span className="text-right">{message.withdrawalResult.itemCount} {message.withdrawalResult.itemCount === 1 ? 'item' : 'itens'}</span>
                           </div>
-                          <div className="grid grid-cols-2 gap-2 border-t border-white/[0.055] p-2.5">
+                          <div className="grid grid-cols-2 gap-2 border-t border-line p-2.5">
                             <button
                               type="button"
                               onClick={() => { navigate(message.withdrawalResult!.linkPath); setOpen(false) }}
-                              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2.5 text-xs font-bold text-white hover:bg-orange-400"
+                              className="inline-flex items-center justify-center gap-1.5 rounded-none bg-blaze px-3 py-2.5 text-xs font-bold text-ink hover:bg-blaze"
                             >
                               Abrir retirada <ExternalLink size={12} />
                             </button>
                             <button
                               type="button"
                               onClick={() => window.open(message.withdrawalResult!.printPath, '_blank', 'noopener,noreferrer')}
-                              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.055] px-3 py-2.5 text-xs font-semibold text-gray-200 hover:border-orange-300/20 hover:bg-orange-500/10"
+                              className="inline-flex items-center justify-center gap-1.5 rounded-none border border-line bg-surface px-3 py-2.5 text-xs font-semibold text-ink-dim hover:border-ink-mute hover:bg-surface"
                             >
                               Imprimir termo <Printer size={13} />
                             </button>
@@ -637,7 +637,7 @@ export function KimiAssistant() {
                             <button
                               type="button"
                               onClick={() => { navigate(message.linkPath!); setOpen(false) }}
-                              className="inline-flex items-center gap-1.5 rounded-xl border border-orange-300/20 bg-orange-500/10 px-3 py-2 text-xs font-semibold text-orange-200 hover:bg-orange-500/20"
+                              className="inline-flex items-center gap-1.5 rounded-none border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink hover:bg-surface"
                             >
                               Abrir no JamaaW <ExternalLink size={12} />
                             </button>
@@ -646,7 +646,7 @@ export function KimiAssistant() {
                             <button
                               type="button"
                               onClick={() => void downloadAssistantPdf(message.pdfReport ?? createAssistantMessagePdfReport(message.content)).catch((pdfError) => setError(pdfError instanceof Error ? pdfError.message : 'Não foi possível gerar o PDF.'))}
-                              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/[0.055] px-3 py-2 text-xs font-semibold text-gray-200 hover:border-orange-300/20 hover:bg-orange-500/10 hover:text-orange-100"
+                              className="inline-flex items-center gap-1.5 rounded-none border border-line bg-surface px-3 py-2 text-xs font-semibold text-ink-dim hover:border-ink-mute hover:bg-surface hover:text-ink"
                             >
                               {message.pdfReport ? 'Baixar PDF novamente' : 'Exportar em PDF'} <Download size={13} />
                             </button>
@@ -659,45 +659,45 @@ export function KimiAssistant() {
               ))}
 
               {busy && (
-                <div className="flex items-center gap-3 rounded-[18px] border border-orange-400/15 bg-orange-500/[0.06] px-3 py-3 text-xs text-gray-400">
-                  <div className="relative flex h-8 w-8 items-center justify-center rounded-xl bg-orange-500/15 text-orange-300"><Loader2 size={15} className="animate-spin" /></div>
-                  <div><p className="font-semibold text-gray-200">Investigando no JamaaW</p><p className="mt-0.5 text-[10px] text-gray-600">Consultando fontes e validando o resultado…</p></div>
+                <div className="flex items-center gap-3 rounded-none border border-line bg-blaze/[0.06] px-3 py-3 text-xs text-ink-dim">
+                  <div className="relative flex h-8 w-8 items-center justify-center rounded-none bg-surface text-ink"><Loader2 size={15} className="animate-spin" /></div>
+                  <div><p className="font-semibold text-ink-dim">Investigando no JamaaW</p><p className="mt-0.5 text-[10px] text-ink-mute">Consultando fontes e validando o resultado…</p></div>
                 </div>
               )}
 
               {confirmation && (
-                <section className="rounded-[20px] border border-orange-400/30 bg-[linear-gradient(145deg,rgba(249,115,22,0.16),rgba(249,115,22,0.04))] p-4 shadow-[0_16px_40px_rgba(249,115,22,0.08)]">
+                <section className="rounded-none border border-line bg-surface p-4">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-orange-200"><ShieldCheck size={15} /> Sua autorização</div>
-                    <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[9px] font-medium text-gray-500">não executado</span>
+                    <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.18em] text-ink"><ShieldCheck size={15} /> Sua autorização</div>
+                    <span className="rounded-none border border-line bg-void px-2 py-1 text-[9px] font-medium text-ink-mute">não executado</span>
                   </div>
-                  <div className="mt-3 text-sm font-medium leading-6 text-white"><AssistantRichMessage content={confirmation.summary} /></div>
-                  <p className="mt-2 text-[11px] leading-4 text-gray-500">Confira os dados. Uma confirmação autoriza somente esta operação.</p>
+                  <div className="mt-3 text-sm font-medium leading-6 text-ink"><AssistantRichMessage content={confirmation.summary} /></div>
+                  <p className="mt-2 text-[11px] leading-4 text-ink-mute">Confira os dados. Uma confirmação autoriza somente esta operação.</p>
                   <div className="mt-4 grid grid-cols-2 gap-2">
-                    <button type="button" disabled={busy} onClick={() => void answerConfirmation(false)} className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-3 py-2.5 text-xs font-semibold text-gray-300 hover:bg-white/10"><Ban size={14} /> Cancelar</button>
-                    <button type="button" disabled={busy} onClick={() => void answerConfirmation(true)} className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-orange-500 px-3 py-2.5 text-xs font-bold text-white shadow-[0_10px_25px_rgba(249,115,22,0.25)] hover:bg-orange-400"><Check size={14} /> {confirmation.toolName === 'create_withdrawal' ? 'Autorizar e imprimir' : 'Autorizar'}</button>
+                    <button type="button" disabled={busy} onClick={() => void answerConfirmation(false)} className="inline-flex items-center justify-center gap-1.5 rounded-none border border-line bg-surface px-3 py-2.5 text-xs font-semibold text-ink-dim hover:bg-surface"><Ban size={14} /> Cancelar</button>
+                    <button type="button" disabled={busy} onClick={() => void answerConfirmation(true)} className="inline-flex items-center justify-center gap-1.5 rounded-none bg-blaze px-3 py-2.5 text-xs font-bold text-ink hover:bg-blaze"><Check size={14} /> {confirmation.toolName === 'create_withdrawal' ? 'Autorizar e imprimir' : 'Autorizar'}</button>
                   </div>
                 </section>
               )}
 
-              {notice && <div className="rounded-xl border border-amber-400/20 bg-amber-500/8 px-3 py-2 text-xs leading-5 text-amber-100">{notice}</div>}
-              {error && <div className="rounded-xl border border-red-400/20 bg-red-500/8 px-3 py-2 text-xs leading-5 text-red-200">{error}</div>}
+              {notice && <div className="rounded-none border border-warn bg-warn/15 px-3 py-2 text-xs leading-5 text-warn">{notice}</div>}
+              {error && <div className="rounded-none border border-crit bg-crit/15 px-3 py-2 text-xs leading-5 text-crit">{error}</div>}
             </div>
           </div>
         ) : (
           <div className="relative min-h-0 flex-1 overflow-y-auto px-4 py-4">
-            <div className="mb-4 flex items-start gap-3 rounded-[20px] border border-violet-300/10 bg-violet-400/[0.055] p-4">
-              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-violet-400/10 text-violet-300"><BrainCircuit size={20} /></div>
-              <div><h3 className="text-sm font-bold text-white">Memória operacional</h3><p className="mt-1 text-xs leading-5 text-gray-500">Fatos estáveis são recuperados por gatilhos. Dados atuais do app sempre têm prioridade.</p></div>
+            <div className="mb-4 flex items-start gap-3 rounded-none border border-violet-300/10 bg-violet-400/[0.055] p-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-none bg-violet-400/10 text-violet-300"><BrainCircuit size={20} /></div>
+              <div><h3 className="text-sm font-bold text-ink">Memória operacional</h3><p className="mt-1 text-xs leading-5 text-ink-mute">Fatos estáveis são recuperados por gatilhos. Dados atuais do app sempre têm prioridade.</p></div>
             </div>
 
             {memoryBusy ? (
-              <div className="flex items-center justify-center gap-2 py-12 text-xs text-gray-500"><Loader2 size={15} className="animate-spin text-orange-300" /> Recuperando memórias…</div>
+              <div className="flex items-center justify-center gap-2 py-12 text-xs text-ink-mute"><Loader2 size={15} className="animate-spin text-ink" /> Recuperando memórias…</div>
             ) : memories.length === 0 ? (
-              <div className="rounded-[20px] border border-dashed border-white/10 px-6 py-10 text-center">
-                <MemoryStick size={28} className="mx-auto text-gray-700" />
-                <p className="mt-3 text-sm font-semibold text-gray-300">Nenhuma memória criada ainda</p>
-                <p className="mt-1 text-xs leading-5 text-gray-600">Diga algo como “sempre considere bobina como bobina de fibra” ou descreva um procedimento recorrente.</p>
+              <div className="rounded-none border border-dashed border-line px-6 py-10 text-center">
+                <MemoryStick size={28} className="mx-auto text-ink-mute" />
+                <p className="mt-3 text-sm font-semibold text-ink-dim">Nenhuma memória criada ainda</p>
+                <p className="mt-1 text-xs leading-5 text-ink-mute">Diga algo como “sempre considere bobina como bobina de fibra” ou descreva um procedimento recorrente.</p>
               </div>
             ) : (
               <div className="space-y-2.5">
@@ -706,27 +706,27 @@ export function KimiAssistant() {
                     key={memory.id}
                     type="button"
                     onClick={() => applyMemory(memory)}
-                    className="group w-full rounded-[18px] border border-white/[0.07] bg-white/[0.03] p-3.5 text-left hover:border-orange-400/20 hover:bg-orange-500/[0.055]"
+                    className="group w-full rounded-none border border-line bg-surface p-3.5 text-left hover:border-ink-mute hover:bg-blaze/[0.055]"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="rounded-md bg-violet-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-300">{MEMORY_LABELS[memory.memory_type]}</span>
-                          {memory.is_pinned && <span className="text-[9px] font-semibold text-orange-300">FIXADA</span>}
+                          <span className="rounded-none bg-violet-400/10 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-violet-300">{MEMORY_LABELS[memory.memory_type]}</span>
+                          {memory.is_pinned && <span className="text-[9px] font-semibold text-ink">FIXADA</span>}
                         </div>
-                        <h4 className="mt-2 text-sm font-semibold text-white">{memory.title}</h4>
+                        <h4 className="mt-2 text-sm font-semibold text-ink">{memory.title}</h4>
                       </div>
                       <div className="flex shrink-0 gap-0.5" title={`Importância ${memory.importance} de 5`}>
-                        {Array.from({ length: 5 }, (_, index) => <span key={index} className={cn('h-1.5 w-1.5 rounded-full', index < memory.importance ? 'bg-orange-400' : 'bg-gray-800')} />)}
+                        {Array.from({ length: 5 }, (_, index) => <span key={index} className={cn('h-1.5 w-1.5 rounded-full', index < memory.importance ? 'bg-blaze' : 'bg-surface')} />)}
                       </div>
                     </div>
-                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-gray-400">{memory.content}</p>
+                    <p className="mt-2 line-clamp-3 text-xs leading-5 text-ink-dim">{memory.content}</p>
                     {memory.trigger_terms.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-1.5">
-                        {memory.trigger_terms.slice(0, 5).map((trigger) => <span key={trigger} className="rounded-full border border-white/[0.06] bg-black/20 px-2 py-1 text-[9px] text-gray-600">#{trigger}</span>)}
+                        {memory.trigger_terms.slice(0, 5).map((trigger) => <span key={trigger} className="rounded-none border border-line bg-void px-2 py-1 text-[9px] text-ink-mute">#{trigger}</span>)}
                       </div>
                     )}
-                    <span className="mt-3 flex items-center gap-1 text-[10px] font-semibold text-orange-300/0 transition-colors group-hover:text-orange-300">Usar como contexto <ChevronRight size={11} /></span>
+                    <span className="mt-3 flex items-center gap-1 text-[10px] font-semibold text-ink transition-colors group-hover:text-ink">Usar como contexto <ChevronRight size={11} /></span>
                   </button>
                 ))}
               </div>
@@ -734,20 +734,20 @@ export function KimiAssistant() {
           </div>
         )}
 
-        <footer className="relative shrink-0 border-t border-white/[0.07] bg-[#09090a] p-3">
+        <footer className="relative shrink-0 border-t border-line bg-void p-3">
           {attachments.length > 0 && (
             <div className="mb-2 flex gap-1.5 overflow-x-auto pb-1">
               {attachments.map((attachment, index) => (
-                <span key={`${attachment.name}-${index}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/8 bg-white/5 px-2 py-1 text-[11px] text-gray-300">
+                <span key={`${attachment.name}-${index}`} className="inline-flex shrink-0 items-center gap-1.5 rounded-none border border-line bg-surface px-2 py-1 text-[11px] text-ink-dim">
                   <Paperclip size={11} /> {attachment.name}
-                  <button type="button" onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="text-gray-600 hover:text-white"><X size={11} /></button>
+                  <button type="button" onClick={() => setAttachments((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="text-ink-mute hover:text-ink"><X size={11} /></button>
                 </span>
               ))}
             </div>
           )}
-          <div className="flex items-end gap-2 rounded-2xl border border-white/10 bg-white/[0.045] p-2 shadow-inner focus-within:border-orange-400/35 focus-within:bg-orange-500/[0.035]">
+          <div className="flex items-end gap-2 rounded-none border border-line bg-surface p-2 shadow-inner focus-within:border-line focus-within:bg-blaze/[0.035]">
             <input ref={fileInputRef} type="file" multiple accept="image/*,.pdf,.doc,.docx,.txt,.csv" className="hidden" onChange={(event) => void handleFiles(event)} />
-            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={busy || Boolean(confirmation)} className="rounded-xl p-2 text-gray-500 hover:bg-white/5 hover:text-white disabled:opacity-40" aria-label="Anexar arquivos"><Paperclip size={18} /></button>
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={busy || Boolean(confirmation)} className="rounded-none p-2 text-ink-mute hover:bg-surface hover:text-ink disabled:opacity-40" aria-label="Anexar arquivos"><Paperclip size={18} /></button>
             <textarea
               value={input}
               onChange={(event) => setInput(event.target.value)}
@@ -756,9 +756,9 @@ export function KimiAssistant() {
               disabled={busy || Boolean(confirmation)}
               rows={1}
               placeholder={confirmation ? 'Autorize ou cancele a operação acima' : 'Digite um comando para o JamaaW…'}
-              className="max-h-28 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-2 text-sm text-white outline-none placeholder:text-gray-650 disabled:opacity-50"
+              className="max-h-28 min-h-[36px] flex-1 resize-none bg-transparent px-1 py-2 text-sm text-ink outline-none placeholder:text-ink-mute disabled:opacity-50"
             />
-            <button type="button" onClick={() => void send()} disabled={busy || Boolean(confirmation) || (!input.trim() && attachments.length === 0)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-orange-500 text-white transition-colors hover:bg-orange-400 disabled:cursor-not-allowed disabled:bg-gray-800 disabled:text-gray-600" aria-label="Executar comando"><Send size={16} /></button>
+            <button type="button" onClick={() => void send()} disabled={busy || Boolean(confirmation) || (!input.trim() && attachments.length === 0)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-none bg-blaze text-ink transition-colors hover:bg-blaze disabled:cursor-not-allowed disabled:bg-surface disabled:text-ink-mute" aria-label="Executar comando"><Send size={16} /></button>
           </div>
         </footer>
       </aside>

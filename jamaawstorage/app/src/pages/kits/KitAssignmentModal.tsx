@@ -141,15 +141,15 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
         {result ? (
           <div className="flex flex-col gap-2">
             <Alert variant="success">Inventário atualizado.</Alert>
-            <div className="max-h-80 overflow-y-auto rounded-lg border border-gray-700">
+            <div className="max-h-80 overflow-y-auto rounded-none border border-line">
               {result.map((row) => (
                 <div
                   key={row.person_id}
-                  className="flex items-center justify-between gap-3 border-b border-gray-800 px-3 py-2 last:border-b-0"
+                  className="flex items-center justify-between gap-3 border-b border-line px-3 py-2 last:border-b-0"
                 >
-                  <span className="text-sm text-white">{row.person_name}</span>
+                  <span className="text-sm text-ink">{row.person_name}</span>
                   {row.skipped_reason ? (
-                    <span className="text-xs text-gray-400">{row.skipped_reason}</span>
+                    <span className="text-xs text-ink-dim">{row.skipped_reason}</span>
                   ) : (
                     <Badge variant="success" size="sm">
                       +{row.assigned_quantity} un
@@ -178,19 +178,19 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
               Isto registra os itens no inventário individual sem movimentar o estoque.
             </Alert>
 
-            <div className="max-h-96 overflow-y-auto rounded-lg border border-gray-700">
+            <div className="max-h-96 overflow-y-auto rounded-none border border-line">
               {peopleToReceive.length === 0 ? (
-                <p className="px-3 py-6 text-center text-sm text-gray-400">
+                <p className="px-3 py-6 text-center text-sm text-ink-dim">
                   Todos os colaboradores desta função já possuem o kit completo.
                 </p>
               ) : (
                 peopleToReceive.map((person) => (
-                  <div key={person.personId} className="border-b border-gray-800 px-3 py-2 last:border-b-0">
+                  <div key={person.personId} className="border-b border-line px-3 py-2 last:border-b-0">
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-medium text-white">
+                      <span className="text-sm font-medium text-ink">
                         {person.personName}
                         {person.employeeId && (
-                          <span className="ml-2 font-mono text-xs text-gray-500">{person.employeeId}</span>
+                          <span className="ml-2 font-mono text-xs text-ink-mute">{person.employeeId}</span>
                         )}
                       </span>
                       <Badge variant="primary" size="sm">
@@ -203,8 +203,8 @@ export function KitAssignmentModal({ kit, isOpen, onClose }: KitAssignmentModalP
                         .filter((row) => row.missing_quantity > 0)
                         .map((row) => (
                           <div key={row.stock_item_id} className="flex justify-between text-xs">
-                            <span className="text-gray-400">{row.stock_item_name}</span>
-                            <span className="text-gray-300">
+                            <span className="text-ink-dim">{row.stock_item_name}</span>
+                            <span className="text-ink-dim">
                               tem {row.owned_quantity} de {row.kit_quantity} · registrar{' '}
                               {formatQuantity(row.missing_quantity, row.unit)}
                             </span>

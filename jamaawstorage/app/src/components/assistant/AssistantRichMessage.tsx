@@ -10,20 +10,20 @@ interface AssistantRichMessageProps {
 function inline(text: string): ReactNode[] {
   return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).filter(Boolean).map((part, index) => {
     if (part.startsWith('**') && part.endsWith('**')) {
-      return <strong key={index} className="font-bold text-white">{part.slice(2, -2)}</strong>
+      return <strong key={index} className="font-bold text-ink">{part.slice(2, -2)}</strong>
     }
     if (part.startsWith('`') && part.endsWith('`')) {
-      return <code key={index} className="rounded bg-black/35 px-1.5 py-0.5 font-mono text-[0.88em] text-orange-200">{part.slice(1, -1)}</code>
+      return <code key={index} className="rounded-none bg-void px-1.5 py-0.5 font-mono text-[0.88em] text-ink">{part.slice(1, -1)}</code>
     }
     return <Fragment key={index}>{part}</Fragment>
   })
 }
 
 function headingTone(value: string) {
-  if (/🔴|abaixo|crítico|critico/i.test(value)) return 'border-red-400/20 bg-red-500/[0.07] text-red-200'
-  if (/🟡|limite|atenção|atencao|próximo|proximo/i.test(value)) return 'border-amber-400/20 bg-amber-500/[0.07] text-amber-200'
-  if (/🟢|normal|confortável|confortavel/i.test(value)) return 'border-emerald-400/20 bg-emerald-500/[0.07] text-emerald-200'
-  return 'border-orange-400/15 bg-orange-500/[0.06] text-orange-100'
+  if (/🔴|abaixo|crítico|critico/i.test(value)) return 'border-crit bg-crit/[0.07] text-crit'
+  if (/🟡|limite|atenção|atencao|próximo|proximo/i.test(value)) return 'border-warn bg-warn/[0.07] text-warn'
+  if (/🟢|normal|confortável|confortavel/i.test(value)) return 'border-ok bg-ok/[0.07] text-ok'
+  return 'border-line bg-blaze/[0.06] text-ink'
 }
 
 function HeadingIcon({ value }: { value: string }) {
@@ -41,7 +41,7 @@ export function AssistantRichMessage({ content }: AssistantRichMessageProps) {
         if (block.type === 'heading') {
           const value = String(block.content)
           return (
-            <div key={index} className={cn('flex items-center gap-2 rounded-xl border px-3 py-2.5 text-sm font-bold', headingTone(value))}>
+            <div key={index} className={cn('flex items-center gap-2 rounded-none border px-3 py-2.5 text-sm font-bold', headingTone(value))}>
               <HeadingIcon value={value} />
               <span>{inline(value.replace(/^[🔴🟡🟢]\s*/u, ''))}</span>
             </div>
@@ -50,17 +50,17 @@ export function AssistantRichMessage({ content }: AssistantRichMessageProps) {
 
         if (block.type === 'table') {
           return (
-            <div key={index} className="overflow-hidden rounded-xl border border-white/[0.075] bg-black/20">
+            <div key={index} className="overflow-hidden rounded-none border border-line bg-void">
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[390px] border-collapse text-left text-xs">
-                  <thead className="bg-white/[0.055] text-[10px] font-bold uppercase tracking-[0.1em] text-gray-500">
-                    <tr>{block.headers.map((header, cellIndex) => <th key={cellIndex} className="border-b border-white/[0.06] px-3 py-2.5">{inline(header)}</th>)}</tr>
+                  <thead className="bg-surface text-[10px] font-bold uppercase tracking-[0.1em] text-ink-mute">
+                    <tr>{block.headers.map((header, cellIndex) => <th key={cellIndex} className="border-b border-line px-3 py-2.5">{inline(header)}</th>)}</tr>
                   </thead>
-                  <tbody className="divide-y divide-white/[0.055]">
+                  <tbody className="divide-y divide-line">
                     {block.rows.map((row, rowIndex) => (
-                      <tr key={rowIndex} className="transition-colors hover:bg-white/[0.035]">
+                      <tr key={rowIndex} className="transition-colors hover:bg-surface">
                         {block.headers.map((_, cellIndex) => (
-                          <td key={cellIndex} className={cn('px-3 py-2.5 text-gray-300', cellIndex === 0 && 'font-medium text-gray-100')}>
+                          <td key={cellIndex} className={cn('px-3 py-2.5 text-ink-dim', cellIndex === 0 && 'font-medium text-ink-mute')}>
                             {inline(row[cellIndex] || '—')}
                           </td>
                         ))}
@@ -77,8 +77,8 @@ export function AssistantRichMessage({ content }: AssistantRichMessageProps) {
           return (
             <ul key={index} className="space-y-2">
               {(block.content as string[]).map((item, itemIndex) => (
-                <li key={itemIndex} className="flex items-start gap-2 text-sm leading-6 text-gray-300">
-                  <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400" />
+                <li key={itemIndex} className="flex items-start gap-2 text-sm leading-6 text-ink-dim">
+                  <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-blaze" />
                   <span>{inline(item)}</span>
                 </li>
               ))}
@@ -86,7 +86,7 @@ export function AssistantRichMessage({ content }: AssistantRichMessageProps) {
           )
         }
 
-        return <p key={index} className="text-sm leading-6 text-gray-300">{inline(String(block.content))}</p>
+        return <p key={index} className="text-sm leading-6 text-ink-dim">{inline(String(block.content))}</p>
       })}
     </div>
   )

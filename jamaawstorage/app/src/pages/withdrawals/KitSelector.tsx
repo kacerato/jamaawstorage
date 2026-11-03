@@ -50,7 +50,7 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
 
   if (kits.length === 0) {
     return (
-      <p className="py-4 text-center text-sm text-gray-400">
+      <p className="py-4 text-center text-sm text-ink-dim">
         Nenhum kit disponível
       </p>
     )
@@ -69,22 +69,22 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
         return (
           <div
             key={kit.id}
-            className="rounded-lg border border-gray-700 bg-gray-900"
+            className="rounded-none border border-line bg-surface"
           >
             <button
               type="button"
               onClick={() => toggleExpand(kit.id)}
-              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-gray-800"
+              className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-surface"
             >
-              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-orange-500/20">
-                <KitIcon size={16} className="text-orange-400" />
+              <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-none bg-surface">
+                <KitIcon size={16} className="text-ink" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="truncate text-sm font-medium text-white">
+                <p className="truncate text-sm font-medium text-ink">
                   {kit.name}
                 </p>
                 {kit.description && (
-                  <p className="truncate text-xs text-gray-400">
+                  <p className="truncate text-xs text-ink-dim">
                     {kit.description}
                   </p>
                 )}
@@ -101,7 +101,7 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
                 viewBox="0 0 16 16"
                 fill="none"
                 xmlns="http://www.w3.org/2000/svg"
-                className={`text-gray-400 transition-transform ${
+                className={`text-ink-dim transition-transform ${
                   isExpanded ? 'rotate-180' : ''
                 }`}
               >
@@ -116,7 +116,7 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
             </button>
 
             {isExpanded && (
-              <div className="border-t border-gray-700 px-4 py-3">
+              <div className="border-t border-line px-4 py-3">
                 <div className="mb-3 flex flex-col gap-1">
                   {kit.kit_items?.map((ki) => {
                     const availableQuantity = ki.stock_items?.current_quantity ?? 0
@@ -124,17 +124,17 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
                     return (
                     <div
                       key={ki.id}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-white/8 bg-white/3 px-3 py-2 text-sm"
+                      className="flex items-center justify-between gap-3 rounded-none border border-line bg-surface px-3 py-2 text-sm"
                     >
                       <div className="flex min-w-0 items-center gap-2">
                         <ItemVisual iconKey={ki.stock_items?.svg_icon_key} size={18} />
-                        <span className="truncate text-gray-300">
+                        <span className="truncate text-ink-dim">
                           {ki.stock_items?.name ?? 'Item'}
                         </span>
                       </div>
                       <div className="text-right text-xs">
-                        <p className="text-gray-300">Kit: {ki.quantity} {ki.stock_items?.unit ?? 'un'}</p>
-                        <p className={missingQuantity > 0 ? 'text-amber-300' : 'text-emerald-300'}>
+                        <p className="text-ink-dim">Kit: {ki.quantity} {ki.stock_items?.unit ?? 'un'}</p>
+                        <p className={missingQuantity > 0 ? 'text-warn' : 'text-ok'}>
                           {missingQuantity > 0
                             ? `Disponível ${availableQuantity}; faltam ${missingQuantity}`
                             : `Disponível ${availableQuantity}`}
@@ -147,7 +147,7 @@ export function KitSelector({ onSelect }: KitSelectorProps) {
                 <button
                   type="button"
                   onClick={() => onSelect(kit)}
-                  className="w-full rounded-lg bg-orange-500 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-orange-600"
+                  className="w-full rounded-none bg-blaze px-4 py-2 text-sm font-medium text-ink transition-colors hover:bg-blaze"
                 >
                   {isComplete ? 'Usar este Kit' : 'Usar o que está disponível'}
                 </button>

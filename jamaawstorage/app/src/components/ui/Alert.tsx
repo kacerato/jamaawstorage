@@ -13,11 +13,12 @@ interface AlertProps {
   className?: string
 }
 
+/* A cor entra pela faixa lateral e pelo icone; o fundo continua surface. */
 const variantClasses: Record<AlertVariant, string> = {
-  warning: 'bg-amber-500/10 border-amber-500/30 text-amber-300',
-  danger: 'bg-red-500/10 border-red-500/30 text-red-300',
-  success: 'bg-emerald-500/10 border-emerald-500/30 text-emerald-300',
-  info: 'bg-blue-500/10 border-blue-500/30 text-blue-300',
+  warning: 'bg-surface border-l-2 border-l-warn text-warn',
+  danger: 'bg-surface border-l-2 border-l-crit text-crit',
+  success: 'bg-surface border-l-2 border-l-ok text-ok',
+  info: 'bg-surface border-l-2 border-l-ink-mute text-ink-dim',
 }
 
 const defaultIcons: Record<AlertVariant, ReactNode> = {
@@ -76,16 +77,16 @@ export function Alert({
   return (
     <div
       className={cn(
-        'flex gap-3 rounded-lg border p-4',
+        'flex gap-3 rounded-none p-4',
         variantClasses[variant],
         className,
       )}
       role="alert"
     >
       <div className="flex-shrink-0">{icon ?? defaultIcons[variant]}</div>
-      <div className="flex-1">
+      <div className="min-w-0 flex-1">
         {title && <p className="mb-1 font-semibold">{title}</p>}
-        <div className="text-sm">{children}</div>
+        <div className="text-sm text-ink-dim">{children}</div>
       </div>
       {dismissible && (
         <button

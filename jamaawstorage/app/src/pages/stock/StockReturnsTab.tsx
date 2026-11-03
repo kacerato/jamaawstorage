@@ -86,8 +86,8 @@ export function StockReturnsTab({ embedded = false }: StockReturnsTabProps) {
       header: 'Código',
       render: (_value: unknown, row: ReturnTableRow) => (
         <div className="flex flex-col">
-          <span className="font-mono text-sm text-white">{row.code ?? 'Rascunho'}</span>
-          <span className="text-xs text-gray-500">{formatDateTime(row.created_at)}</span>
+          <span className="font-mono text-sm text-ink">{row.code ?? 'Rascunho'}</span>
+          <span className="text-xs text-ink-mute">{formatDateTime(row.created_at)}</span>
         </div>
       ),
     },
@@ -95,7 +95,7 @@ export function StockReturnsTab({ embedded = false }: StockReturnsTabProps) {
       key: 'source',
       header: 'Origem',
       render: (_value: unknown, row: ReturnTableRow) => (
-        <span className="text-sm text-white">
+        <span className="text-sm text-ink">
           {row.source_label_snapshot ?? row.source_person?.full_name ?? row.source_work_site?.name ?? '-'}
         </span>
       ),
@@ -104,7 +104,7 @@ export function StockReturnsTab({ embedded = false }: StockReturnsTabProps) {
       key: 'items',
       header: 'Itens',
       render: (_value: unknown, row: ReturnTableRow) => (
-        <span className="text-sm text-gray-300">{row.item_count}</span>
+        <span className="text-sm text-ink-dim">{row.item_count}</span>
       ),
     },
     {
@@ -130,8 +130,8 @@ export function StockReturnsTab({ embedded = false }: StockReturnsTabProps) {
     <div className="flex flex-col gap-4">
       {!embedded && (
         <div>
-          <h2 className="text-2xl font-bold text-white">Itens devolvidos ao almoxarifado</h2>
-          <p className="mt-1 text-sm text-gray-400">
+          <h2 className="text-2xl font-bold text-ink">Itens devolvidos ao almoxarifado</h2>
+          <p className="mt-1 text-sm text-ink-dim">
             Receba o material, classifique na triagem e confirme a entrada no estoque.
           </p>
         </div>
@@ -141,13 +141,13 @@ export function StockReturnsTab({ embedded = false }: StockReturnsTabProps) {
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="grid flex-1 gap-2 sm:grid-cols-2">
-          <Card className="border border-amber-500/10 bg-amber-500/5" variant="bordered">
-            <p className="text-xs uppercase tracking-[0.24em] text-amber-200/70">Aguardando triagem</p>
-            <p className="mt-1 text-xl font-semibold text-white">{awaitingTriageCount}</p>
+          <Card className="border border-warn bg-warn/15" variant="bordered">
+            <p className="text-xs uppercase tracking-[0.24em] text-warn">Aguardando triagem</p>
+            <p className="mt-1 text-xl font-semibold text-ink">{awaitingTriageCount}</p>
           </Card>
           <Card className="border border-sky-500/10 bg-sky-500/5" variant="bordered">
             <p className="text-xs uppercase tracking-[0.24em] text-sky-200/70">Prontas para confirmar</p>
-            <p className="mt-1 text-xl font-semibold text-white">{triagedCount}</p>
+            <p className="mt-1 text-xl font-semibold text-ink">{triagedCount}</p>
           </Card>
         </div>
         <Button onClick={() => navigate('/returns/new')}>Nova devolução</Button>

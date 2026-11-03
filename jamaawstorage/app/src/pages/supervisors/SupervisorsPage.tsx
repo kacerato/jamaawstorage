@@ -102,8 +102,8 @@ export function SupervisorsPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Supervisores</h2>
-          <p className="mt-1 text-sm text-gray-400">
+          <h2 className="text-2xl font-bold text-ink">Supervisores</h2>
+          <p className="mt-1 text-sm text-ink-dim">
             Gerenciamento das contas supervisoras do sistema
           </p>
         </div>
@@ -115,7 +115,7 @@ export function SupervisorsPage() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           leftIcon={
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-gray-400">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-ink-dim">
               <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="2" />
               <path d="M11 11L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
@@ -124,14 +124,14 @@ export function SupervisorsPage() {
       </div>
 
       {refreshing && (
-        <div className="inline-flex items-center gap-2 text-xs text-orange-200/75">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-orange-400" />
+        <div className="inline-flex items-center gap-2 text-xs text-ink">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-blaze" />
           Atualizando supervisores...
         </div>
       )}
 
       {error && (
-        <div className="rounded-2xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+        <div className="rounded-none border border-crit bg-crit/15 px-4 py-3 text-sm text-crit">
           {error}
         </div>
       )}
@@ -142,8 +142,8 @@ export function SupervisorsPage() {
         </div>
       ) : filteredSupervisors.length === 0 ? (
         <Card variant="bordered" className="py-12 text-center">
-          <UsersIcon size={48} className="mx-auto mb-4 text-gray-600" />
-          <p className="text-gray-400">
+          <UsersIcon size={48} className="mx-auto mb-4 text-ink-mute" />
+          <p className="text-ink-dim">
             {search ? 'Nenhum supervisor encontrado para a busca.' : 'Nenhum supervisor cadastrado.'}
           </p>
         </Card>
@@ -154,7 +154,7 @@ export function SupervisorsPage() {
               <div className="flex flex-col gap-3">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-gray-800 text-sm font-medium text-gray-300">
+                    <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full bg-surface text-sm font-medium text-ink-dim">
                       {supervisor.photo_url ? (
                         <img src={supervisor.photo_url} alt={supervisor.full_name} className="h-full w-full object-cover" />
                       ) : (
@@ -167,21 +167,21 @@ export function SupervisorsPage() {
                       )}
                     </div>
                     <div>
-                      <p className="font-medium text-white">{supervisor.full_name}</p>
-                      <p className="text-xs text-gray-400">Matricula: {supervisor.employee_id ?? 'MAT-...'}</p>
+                      <p className="font-medium text-ink">{supervisor.full_name}</p>
+                      <p className="text-xs text-ink-dim">Matricula: {supervisor.employee_id ?? 'MAT-...'}</p>
                     </div>
                   </div>
                   {supervisor.is_active ? <Badge variant="success" dot>Ativo</Badge> : <Badge variant="danger" dot>Inativo</Badge>}
                 </div>
 
                 {supervisor.sector && (
-                  <p className="text-sm text-gray-400">
-                    <span className="text-gray-500">Setor:</span> {supervisor.sector}
+                  <p className="text-sm text-ink-dim">
+                    <span className="text-ink-mute">Setor:</span> {supervisor.sector}
                   </p>
                 )}
 
                 {!supervisor.is_active && (
-                  <div className="flex justify-end border-t border-gray-800 pt-3">
+                  <div className="flex justify-end border-t border-line pt-3">
                     <Button
                       variant="primary"
                       size="sm"
@@ -206,9 +206,9 @@ export function SupervisorsPage() {
           size="sm"
         >
           <div className="flex flex-col gap-4">
-            <p className="text-sm text-gray-300">
+            <p className="text-sm text-ink-dim">
               Tem certeza que deseja reativar{' '}
-              <span className="font-medium text-white">{confirmToggle.full_name}</span>?
+              <span className="font-medium text-ink">{confirmToggle.full_name}</span>?
             </p>
             <div className="flex justify-end gap-3">
               <Button type="button" variant="secondary" onClick={() => setConfirmToggle(null)}>

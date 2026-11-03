@@ -125,32 +125,32 @@ export function WorksiteForm({ worksite, onSubmit, onCancel }: WorksiteFormProps
       />
 
       <div className="flex flex-col gap-1.5">
-        <label className="text-sm font-medium text-gray-300">Ativo</label>
+        <label className="text-sm font-medium text-ink-dim">Ativo</label>
         <button
           type="button"
           role="switch"
           aria-checked={form.is_active}
           onClick={() => setForm((prev) => ({ ...prev, is_active: !prev.is_active }))}
-          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/50 ${
-            form.is_active ? 'bg-orange-500' : 'bg-gray-700'
+          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-line ${
+            form.is_active ? 'bg-blaze' : 'bg-surface'
           }`}
         >
           <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
+            className={`inline-block h-4 w-4 transform rounded-full bg-surface transition-transform ${
               form.is_active ? 'translate-x-6' : 'translate-x-1'
             }`}
           />
         </button>
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-ink-mute">
           {form.is_active ? 'Esta obra está ativa e disponível para retiradas' : 'Esta obra está inativa e não aparecerá nas opções de retirada'}
         </p>
       </div>
 
       {submitError && (
-        <p className="text-sm text-red-400">{submitError}</p>
+        <p className="text-sm text-crit">{submitError}</p>
       )}
 
-      <div className="flex justify-end gap-3 border-t border-gray-700 pt-4">
+      <div className="flex justify-end gap-3 border-t border-line pt-4">
         <Button type="button" variant="secondary" onClick={onCancel}>
           Cancelar
         </Button>

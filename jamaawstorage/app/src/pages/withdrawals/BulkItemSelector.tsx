@@ -305,9 +305,9 @@ export function BulkItemSelector({
               <Spinner size="md" />
             </div>
           ) : (
-            <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-700">
+            <div className="max-h-64 overflow-y-auto rounded-none border border-line">
               {items.length === 0 && (
-                <p className="py-4 text-center text-sm text-gray-400">Nenhum item encontrado.</p>
+                <p className="py-4 text-center text-sm text-ink-dim">Nenhum item encontrado.</p>
               )}
               {items.map((item) => {
                 const isSelected = Boolean(selectedItems[item.id])
@@ -319,14 +319,14 @@ export function BulkItemSelector({
                     type="button"
                     onClick={() => toggleItem(item)}
                     className={cn(
-                      'flex w-full items-center gap-3 border-b border-gray-800 px-3 py-2.5 text-left transition-colors last:border-b-0',
-                      isSelected ? 'bg-orange-500/12' : 'hover:bg-gray-800',
+                      'flex w-full items-center gap-3 border-b border-line px-3 py-2.5 text-left transition-colors last:border-b-0',
+                      isSelected ? 'bg-surface' : 'hover:bg-surface',
                     )}
                   >
                     <span
                       className={cn(
-                        'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors',
-                        isSelected ? 'border-orange-400 bg-orange-500' : 'border-gray-600 bg-gray-900',
+                        'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-none border transition-colors',
+                        isSelected ? 'border-line bg-blaze' : 'border-line bg-surface',
                       )}
                     >
                       {isSelected && (
@@ -335,18 +335,18 @@ export function BulkItemSelector({
                         </svg>
                       )}
                     </span>
-                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-800">
+                    <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-none bg-surface">
                       <ItemVisual iconKey={item.svg_icon_key} size={20} />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-white">{item.name}</p>
+                      <p className="truncate text-sm font-medium text-ink">{item.name}</p>
                       <div className="mt-1.5 flex flex-wrap gap-1.5">
                         <Badge variant="success" size="sm">Novo {quantity(item.quantity_new)}</Badge>
                         <Badge variant="info" size="sm">Usado {quantity(item.quantity_used)}</Badge>
                         <Badge variant="danger" size="sm">Avaria {quantity(item.quantity_damaged)}</Badge>
                       </div>
                     </div>
-                    <span className="flex-shrink-0 text-xs text-gray-300">
+                    <span className="flex-shrink-0 text-xs text-ink-dim">
                       {available} {item.unit}
                     </span>
                   </button>
@@ -377,9 +377,9 @@ export function BulkItemSelector({
             leftIcon={<UserIcon size={16} />}
           />
 
-          <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-700">
+          <div className="max-h-64 overflow-y-auto rounded-none border border-line">
             {filteredTargets.length === 0 && (
-              <p className="py-4 text-center text-sm text-gray-400">Nenhum destino encontrado.</p>
+              <p className="py-4 text-center text-sm text-ink-dim">Nenhum destino encontrado.</p>
             )}
             {filteredTargets.map((entry) => {
               const isSelected = selectedTargetKeys.includes(entry.key)
@@ -391,14 +391,14 @@ export function BulkItemSelector({
                   type="button"
                   onClick={() => toggleTarget(entry.key)}
                   className={cn(
-                    'flex w-full items-center gap-3 border-b border-gray-800 px-3 py-2.5 text-left transition-colors last:border-b-0',
-                    isSelected ? 'bg-orange-500/12' : 'hover:bg-gray-800',
+                    'flex w-full items-center gap-3 border-b border-line px-3 py-2.5 text-left transition-colors last:border-b-0',
+                    isSelected ? 'bg-surface' : 'hover:bg-surface',
                   )}
                 >
                   <span
                     className={cn(
-                      'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border transition-colors',
-                      isSelected ? 'border-orange-400 bg-orange-500' : 'border-gray-600 bg-gray-900',
+                      'flex h-4 w-4 flex-shrink-0 items-center justify-center rounded-none border transition-colors',
+                      isSelected ? 'border-line bg-blaze' : 'border-line bg-surface',
                     )}
                   >
                     {isSelected && (
@@ -407,12 +407,12 @@ export function BulkItemSelector({
                       </svg>
                     )}
                   </span>
-                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-lg bg-gray-800 text-gray-400">
+                  <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-none bg-surface text-ink-dim">
                     {isWorkSite ? <ClipboardIcon size={16} /> : <UserIcon size={16} />}
                   </div>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-white">{entry.label}</p>
-                    <p className="truncate text-xs text-gray-500">{entry.sublabel}</p>
+                    <p className="truncate text-sm font-medium text-ink">{entry.label}</p>
+                    <p className="truncate text-xs text-ink-mute">{entry.sublabel}</p>
                   </div>
                 </button>
               )
@@ -436,19 +436,19 @@ export function BulkItemSelector({
                 <div
                   key={state.item.id}
                   className={cn(
-                    'rounded-2xl border p-4',
-                    exceeds ? 'border-red-500/40 bg-red-500/6' : 'border-white/8 bg-white/3',
+                    'rounded-none border p-4',
+                    exceeds ? 'border-crit bg-crit/15' : 'border-line bg-surface',
                   )}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
-                      <p className="truncate font-medium text-white">{state.item.name}</p>
-                      <p className="mt-0.5 text-xs text-gray-500">
+                      <p className="truncate font-medium text-ink">{state.item.name}</p>
+                      <p className="mt-0.5 text-xs text-ink-mute">
                         Disponivel: {available} {state.item.unit}
                       </p>
                     </div>
                     <div className="flex items-center gap-2">
-                      <label className="text-xs text-gray-400">Qtd por pessoa</label>
+                      <label className="text-xs text-ink-dim">Qtd por pessoa</label>
                       <input
                         type="number"
                         min={0}
@@ -459,7 +459,7 @@ export function BulkItemSelector({
                             updateQuantityPerTarget(state.item.id, value)
                           }
                         }}
-                        className="w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                        className="w-20 rounded-none border border-line bg-surface px-2 py-1 text-center text-sm text-ink focus:outline-none focus:ring-2 focus:ring-line"
                       />
                       <Badge variant={exceeds ? 'danger' : 'default'} size="sm">
                         Total {total} {state.item.unit}
@@ -468,7 +468,7 @@ export function BulkItemSelector({
                   </div>
 
                   <details className="mt-3" open={hasOverrides}>
-                    <summary className="cursor-pointer text-xs text-orange-300 hover:text-orange-200">
+                    <summary className="cursor-pointer text-xs text-ink hover:text-ink">
                       Ajustar individualmente ({selectedTargetKeys.length} pessoa(s))
                     </summary>
                     <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -479,9 +479,9 @@ export function BulkItemSelector({
                         return (
                           <div
                             key={targetKey}
-                            className="flex items-center justify-between gap-2 rounded-xl border border-white/6 bg-gray-900/60 px-3 py-2"
+                            className="flex items-center justify-between gap-2 rounded-none border border-line bg-surface px-3 py-2"
                           >
-                            <span className="min-w-0 truncate text-xs text-gray-300">{target.label}</span>
+                            <span className="min-w-0 truncate text-xs text-ink-dim">{target.label}</span>
                             <input
                               type="number"
                               min={0}
@@ -492,7 +492,7 @@ export function BulkItemSelector({
                                   updateOverride(state.item.id, targetKey, value)
                                 }
                               }}
-                              className="w-16 flex-shrink-0 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                              className="w-16 flex-shrink-0 rounded-none border border-line bg-surface px-2 py-1 text-center text-sm text-ink focus:outline-none focus:ring-2 focus:ring-line"
                             />
                           </div>
                         )
@@ -508,8 +508,8 @@ export function BulkItemSelector({
 
       {error && <Alert variant="danger">{error}</Alert>}
 
-      <div className="flex items-center justify-between gap-3 border-t border-white/10 pt-4">
-        <span className="text-sm text-gray-400">
+      <div className="flex items-center justify-between gap-3 border-t border-line pt-4">
+        <span className="text-sm text-ink-dim">
           {lineCount > 0
             ? `${lineCount} linha(s) serao adicionadas a retirada`
             : 'Selecione itens e pessoas para continuar'}

@@ -346,13 +346,13 @@ export function WithdrawalDetailPage() {
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <h2 className="text-2xl font-bold text-white">{withdrawal.code}</h2>
+              <h2 className="text-2xl font-bold text-ink">{withdrawal.code}</h2>
               <Badge variant={statusBadgeVariant[withdrawal.status]} dot>
                 {statusLabels[withdrawal.status]}
               </Badge>
               <InfoTip text="Use os PDFs para gerar termos. Editar retirada ajusta itens e destinos mantendo registro de auditoria." />
             </div>
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="mt-1 text-sm text-ink-dim">
               {formatDateTime(withdrawal.created_at)}
             </p>
           </div>
@@ -427,17 +427,17 @@ export function WithdrawalDetailPage() {
       )}
 
       <Card variant="bordered" padding="lg">
-        <h3 className="mb-4 text-lg font-semibold text-white">Detalhes</h3>
+        <h3 className="mb-4 text-lg font-semibold text-ink">Detalhes</h3>
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
-            <p className="text-xs font-medium text-gray-400">Autorizado por</p>
-            <p className="text-sm text-white">
+            <p className="text-xs font-medium text-ink-dim">Autorizado por</p>
+            <p className="text-sm text-ink">
               {withdrawal.approved_by_profile?.full_name ?? 'Nao informado'}
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Solicitado por</p>
-            <p className="text-sm text-white">
+            <p className="text-xs font-medium text-ink-dim">Solicitado por</p>
+            <p className="text-sm text-ink">
               {withdrawal.requested_by_person?.full_name ?? 'Nao informado'}
               {withdrawal.requested_by_person?.employee_id
                 ? ` (${withdrawal.requested_by_person.employee_id})`
@@ -445,16 +445,16 @@ export function WithdrawalDetailPage() {
             </p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Destinos dos itens</p>
-            <p className="text-sm text-white">{destinationLabel}</p>
+            <p className="text-xs font-medium text-ink-dim">Destinos dos itens</p>
+            <p className="text-sm text-ink">{destinationLabel}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Observacoes</p>
-            <p className="text-sm text-white">{withdrawal.notes ?? 'Nenhuma'}</p>
+            <p className="text-xs font-medium text-ink-dim">Observacoes</p>
+            <p className="text-sm text-ink">{withdrawal.notes ?? 'Nenhuma'}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Alteracoes em log</p>
-            <p className="text-sm text-white">
+            <p className="text-xs font-medium text-ink-dim">Alteracoes em log</p>
+            <p className="text-sm text-ink">
               {updateLogCount > 0 ? `${updateLogCount} atualizacao(oes) registrada(s)` : 'Nenhuma alteracao apos a criacao'}
             </p>
           </div>
@@ -462,22 +462,22 @@ export function WithdrawalDetailPage() {
       </Card>
 
       <Card variant="bordered" padding="lg">
-        <h3 className="mb-4 text-lg font-semibold text-white">
+        <h3 className="mb-4 text-lg font-semibold text-ink">
           Itens ({withdrawal.withdrawal_items?.length ?? 0})
         </h3>
         {(!withdrawal.withdrawal_items || withdrawal.withdrawal_items.length === 0) ? (
-          <p className="text-sm text-gray-400">Nenhum item registrado</p>
+          <p className="text-sm text-ink-dim">Nenhum item registrado</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Item</th>
-                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Categoria</th>
-                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Destino</th>
-                  <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Qtd</th>
-                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Unidade</th>
-                  <th className="px-3 py-2 text-right text-sm font-medium text-gray-300">Devolucao</th>
+                <tr className="border-b border-line">
+                  <th className="px-3 py-2 text-left text-sm font-medium text-ink-dim">Item</th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-ink-dim">Categoria</th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-ink-dim">Destino</th>
+                  <th className="px-3 py-2 text-center text-sm font-medium text-ink-dim">Qtd</th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-ink-dim">Unidade</th>
+                  <th className="px-3 py-2 text-right text-sm font-medium text-ink-dim">Devolucao</th>
                 </tr>
               </thead>
               <tbody>
@@ -486,30 +486,30 @@ export function WithdrawalDetailPage() {
                   const pendingTriage = totals.registered - totals.returnedToStock
                   const availableToReturn = Math.max(wi.quantity - totals.registered, 0)
                   return (
-                  <tr key={wi.id} className="border-b border-gray-800">
-                    <td className="px-3 py-2 text-sm text-white">
+                  <tr key={wi.id} className="border-b border-line">
+                    <td className="px-3 py-2 text-sm text-ink">
                       {wi.stock_items?.name ?? '-'}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-400">
+                    <td className="px-3 py-2 text-sm text-ink-dim">
                       {wi.stock_items?.category ?? '-'}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-300">
+                    <td className="px-3 py-2 text-sm text-ink-dim">
                       {withdrawalItemDestinationLabel(wi, withdrawal)}
                     </td>
-                    <td className="px-3 py-2 text-center text-sm text-gray-300">
+                    <td className="px-3 py-2 text-center text-sm text-ink-dim">
                       {wi.quantity}
                     </td>
-                    <td className="px-3 py-2 text-sm text-gray-300">
+                    <td className="px-3 py-2 text-sm text-ink-dim">
                       {wi.unit}
                     </td>
                     <td className="px-3 py-2 text-right">
                       {totals.returnedToStock > 0 && (
-                        <p className="mb-1 text-xs text-emerald-300">
+                        <p className="mb-1 text-xs text-ok">
                           No estoque: {totals.returnedToStock}
                         </p>
                       )}
                       {pendingTriage > 0 && (
-                        <p className="mb-1 text-xs text-amber-300">
+                        <p className="mb-1 text-xs text-warn">
                           Em triagem: {pendingTriage}
                         </p>
                       )}
@@ -530,14 +530,14 @@ export function WithdrawalDetailPage() {
           </div>
         )}
         {withdrawal.withdrawal_items && withdrawal.withdrawal_items.length > 0 && (
-          <div className="mt-3 border-t border-gray-700 pt-3 text-sm text-gray-400">
+          <div className="mt-3 border-t border-line pt-3 text-sm text-ink-dim">
             Total: {withdrawal.withdrawal_items.reduce((sum, wi) => sum + wi.quantity, 0)} unidades
           </div>
         )}
       </Card>
 
       <Card variant="bordered" padding="lg">
-        <h3 className="mb-4 text-lg font-semibold text-white">
+        <h3 className="mb-4 text-lg font-semibold text-ink">
           <CameraIcon size={18} className="mr-2 inline-block" />
           Registro Fotografico
         </h3>
@@ -549,7 +549,7 @@ export function WithdrawalDetailPage() {
                 href={photoUrl}
                 target="_blank"
                 rel="noreferrer"
-                className="group overflow-hidden rounded-lg border border-gray-700 bg-gray-900"
+                className="group overflow-hidden rounded-none border border-line bg-surface"
               >
                 <img
                   src={photoUrl}
@@ -560,18 +560,18 @@ export function WithdrawalDetailPage() {
             ))}
           </div>
         ) : (
-          <p className="text-sm text-gray-400">Sem registro fotografico</p>
+          <p className="text-sm text-ink-dim">Sem registro fotografico</p>
         )}
       </Card>
 
       <Card variant="bordered" padding="lg">
         <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-white">
+            <h3 className="text-lg font-semibold text-ink">
               <SignatureIcon size={18} className="mr-2 inline-block" />
               PDFs assinados por pessoa
             </h3>
-            <p className="mt-1 text-sm text-gray-400">
+            <p className="mt-1 text-sm text-ink-dim">
               {attachedDocumentCount}/{documentRequirements.length} documento(s) anexado(s)
             </p>
           </div>
@@ -587,7 +587,7 @@ export function WithdrawalDetailPage() {
         {documentError && <Alert variant="danger" className="mb-4">{documentError}</Alert>}
 
         {documentRequirements.length === 0 ? (
-          <p className="rounded-xl border border-dashed border-white/10 bg-white/3 px-4 py-5 text-sm text-gray-500">
+          <p className="rounded-none border border-dashed border-line bg-surface px-4 py-5 text-sm text-ink-mute">
             Nenhuma pendencia individual foi encontrada. Se esta retirada e anterior a atualizacao, os anexos legados continuam abaixo.
           </p>
         ) : (
@@ -596,18 +596,18 @@ export function WithdrawalDetailPage() {
               const activeDocument = activeRequirementDocument(requirement)
               const isUploading = uploadingRequirementId === requirement.id
               return (
-                <div key={requirement.id} className="rounded-2xl border border-white/8 bg-white/3 p-4">
+                <div key={requirement.id} className="rounded-none border border-line bg-surface p-4">
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium text-white">{requirement.person_name_snapshot}</p>
+                        <p className="font-medium text-ink">{requirement.person_name_snapshot}</p>
                         <Badge variant={requirement.status === 'attached' ? 'success' : requirement.status === 'rejected' ? 'danger' : 'default'} size="sm">
                           {requirementStatusLabels[requirement.status]}
                         </Badge>
                       </div>
-                      <p className="mt-1 text-xs text-gray-500">{requirement.destination_label_snapshot}</p>
+                      <p className="mt-1 text-xs text-ink-mute">{requirement.destination_label_snapshot}</p>
                       {activeDocument && (
-                        <p className="mt-1 text-xs text-gray-400">
+                        <p className="mt-1 text-xs text-ink-dim">
                           {activeDocument.file_name} • versao {activeDocument.version} • {formatDateTime(activeDocument.uploaded_at)}
                         </p>
                       )}
@@ -625,7 +625,7 @@ export function WithdrawalDetailPage() {
                           Abrir PDF
                         </Button>
                       )}
-                      <label className="cursor-pointer rounded-lg bg-orange-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-orange-600">
+                      <label className="cursor-pointer rounded-none bg-blaze px-3 py-2 text-xs font-medium text-ink transition-colors hover:bg-blaze">
                         {isUploading ? 'Enviando...' : activeDocument ? 'Substituir PDF' : 'Anexar PDF assinado'}
                         <input
                           type="file"
@@ -649,7 +649,7 @@ export function WithdrawalDetailPage() {
 
       {(withdrawal.supervisor_signature || withdrawal.requester_signature || withdrawal.witness_signature || sharedSignatureAttachment.url) && (
       <Card variant="bordered" padding="lg">
-        <h3 className="mb-4 text-lg font-semibold text-white">
+        <h3 className="mb-4 text-lg font-semibold text-ink">
           <SignatureIcon size={18} className="mr-2 inline-block" />
           Assinaturas e anexos legados
           {bothSignaturesPresent && (
@@ -660,9 +660,9 @@ export function WithdrawalDetailPage() {
         </h3>
         <div className="grid grid-cols-1 gap-6 md:grid-cols-3">
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-medium text-gray-400">Supervisor</p>
+            <p className="text-xs font-medium text-ink-dim">Supervisor</p>
             {withdrawal.supervisor_signature ? (
-              <div className="flex min-h-[220px] items-center justify-center rounded border border-gray-700 bg-white p-3">
+              <div className="flex min-h-[220px] items-center justify-center rounded border border-line bg-white p-3">
                 <img
                   src={withdrawal.supervisor_signature}
                   alt="Assinatura do supervisor"
@@ -670,13 +670,13 @@ export function WithdrawalDetailPage() {
                 />
               </div>
             ) : (
-              <span className="text-xs text-gray-500">Nao assinado</span>
+              <span className="text-xs text-ink-mute">Nao assinado</span>
             )}
           </div>
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-medium text-gray-400">Solicitante</p>
+            <p className="text-xs font-medium text-ink-dim">Solicitante</p>
             {withdrawal.requester_signature ? (
-              <div className="flex min-h-[220px] items-center justify-center rounded border border-gray-700 bg-white p-3">
+              <div className="flex min-h-[220px] items-center justify-center rounded border border-line bg-white p-3">
                 <img
                   src={withdrawal.requester_signature}
                   alt="Assinatura do solicitante"
@@ -684,13 +684,13 @@ export function WithdrawalDetailPage() {
                 />
               </div>
             ) : (
-              <span className="text-xs text-gray-500">Nao assinado</span>
+              <span className="text-xs text-ink-mute">Nao assinado</span>
             )}
           </div>
           <div className="flex flex-col gap-2">
-            <p className="text-xs font-medium text-gray-400">Testemunha</p>
+            <p className="text-xs font-medium text-ink-dim">Testemunha</p>
             {withdrawal.witness_signature ? (
-              <div className="flex min-h-[220px] items-center justify-center rounded border border-gray-700 bg-white p-3">
+              <div className="flex min-h-[220px] items-center justify-center rounded border border-line bg-white p-3">
                 <img
                   src={withdrawal.witness_signature}
                   alt="Assinatura da testemunha"
@@ -698,7 +698,7 @@ export function WithdrawalDetailPage() {
                 />
               </div>
             ) : (
-              <span className="text-xs text-gray-500">Opcional</span>
+              <span className="text-xs text-ink-mute">Opcional</span>
             )}
           </div>
         </div>
@@ -722,7 +722,7 @@ export function WithdrawalDetailPage() {
         size="sm"
       >
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-ink-dim">
             Tem certeza que deseja cancelar esta retirada? O estoque sera restaurado automaticamente.
           </p>
           {cancelError && (
@@ -754,7 +754,7 @@ export function WithdrawalDetailPage() {
         size="sm"
       >
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-ink-dim">
             Esta retirada voltara para concluida. O sistema vai baixar novamente os itens do estoque e recriar o inventario do colaborador quando houver destino pessoal.
           </p>
           {reopenError && (
@@ -790,12 +790,12 @@ export function WithdrawalDetailPage() {
           const available = Math.max(returningItem.quantity - registeredQuantity, 0)
           return (
             <div className="space-y-4">
-              <div className="rounded-xl border border-white/10 bg-white/4 p-3 text-sm">
-                <p className="font-medium text-white">{returningItem.stock_items?.name ?? 'Item da retirada'}</p>
-                <p className="mt-1 text-gray-400">
+              <div className="rounded-none border border-line bg-surface p-3 text-sm">
+                <p className="font-medium text-ink">{returningItem.stock_items?.name ?? 'Item da retirada'}</p>
+                <p className="mt-1 text-ink-dim">
                   Retirada {withdrawal.code} · {withdrawalItemDestinationLabel(returningItem, withdrawal)}
                 </p>
-                <p className="mt-1 text-emerald-300">Disponivel para devolver: {available} {returningItem.unit}</p>
+                <p className="mt-1 text-ok">Disponivel para devolver: {available} {returningItem.unit}</p>
               </div>
 
               <Input
@@ -818,10 +818,10 @@ export function WithdrawalDetailPage() {
                     type="button"
                     onClick={() => setReturnCondition(option.value)}
                     disabled={returning}
-                    className={`rounded-xl border p-3 text-left text-sm transition-colors ${returnCondition === option.value ? 'border-orange-400 bg-orange-500/10 text-white' : 'border-white/10 bg-white/3 text-gray-300'}`}
+                    className={`rounded-none border p-3 text-left text-sm transition-colors ${returnCondition === option.value ? 'border-line bg-surface text-ink' : 'border-line bg-surface text-ink-dim'}`}
                   >
                     <p className="font-medium">{option.label}</p>
-                    <p className="mt-1 text-xs text-gray-400">{option.description}</p>
+                    <p className="mt-1 text-xs text-ink-dim">{option.description}</p>
                   </button>
                 ))}
               </div>
@@ -908,25 +908,25 @@ function AttachmentCard({
 }) {
   if (!url) {
     return (
-      <div className="rounded-xl border border-gray-700 bg-gray-900/40 p-4">
-        <p className="text-sm font-medium text-white">{label}</p>
-        <p className="mt-2 text-sm text-gray-500">Nao enviado</p>
+      <div className="rounded-none border border-line bg-surface p-4">
+        <p className="text-sm font-medium text-ink">{label}</p>
+        <p className="mt-2 text-sm text-ink-mute">Nao enviado</p>
       </div>
     )
   }
 
   return (
-    <div className="rounded-xl border border-gray-700 bg-gray-900/40 p-4">
-      <p className="text-sm font-medium text-white">{label}</p>
-      <p className="mt-2 text-xs text-gray-400">{fileName ?? 'Arquivo anexado'}</p>
+    <div className="rounded-none border border-line bg-surface p-4">
+      <p className="text-sm font-medium text-ink">{label}</p>
+      <p className="mt-2 text-xs text-ink-dim">{fileName ?? 'Arquivo anexado'}</p>
       {isImageUrl(url) ? (
         <img
           src={buildPublicStorageUrl(url)}
           alt={label}
-          className="mt-3 max-h-56 rounded-lg border border-gray-700"
+          className="mt-3 max-h-56 rounded-none border border-line"
         />
       ) : (
-        <div className="mt-3 rounded-lg border border-dashed border-gray-700 px-4 py-8 text-sm text-gray-500">
+        <div className="mt-3 rounded-none border border-dashed border-line px-4 py-8 text-sm text-ink-mute">
           Documento anexado
         </div>
       )}
@@ -934,7 +934,7 @@ function AttachmentCard({
         href={buildPublicStorageUrl(url)}
         target="_blank"
         rel="noreferrer"
-        className="mt-3 inline-block text-sm font-medium text-orange-300 hover:text-orange-200"
+        className="mt-3 inline-block text-sm font-medium text-ink hover:text-ink"
       >
         Abrir anexo
       </a>

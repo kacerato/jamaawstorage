@@ -7,6 +7,17 @@ interface Column<T> {
   render?: (value: T[keyof T], row: T) => React.ReactNode
   className?: string
   sortable?: boolean
+  /*
+   * Papel da coluna quando a linha vira registro empilhado, abaixo de md:
+   * 'lead'  - titulo do registro (primeira coluna, se nenhuma for marcada)
+   * 'trail' - valor a direita do titulo, tipicamente a quantidade
+   * 'meta'  - vai para a linha de apoio; o rotulo so aparece quando
+   *           a coluna pede, via mobileLabel
+   * 'hide'  - nao aparece no modo empilhado
+   */
+  mobile?: 'lead' | 'trail' | 'meta' | 'hide'
+  /* Mostra o nome da coluna antes do valor no modo empilhado. */
+  mobileLabel?: boolean
 }
 
 interface DataTableProps<T> {
@@ -65,6 +76,19 @@ export function DataTable<T extends Record<string, unknown>>({
     })
   }, [data, sortKey, sortDirection])
 
+  /* Sem marcacao explicita, a primeira coluna lidera e as demais viram apoio. */
+  const mobileRoles = useMemo(() => {
+    const hasLead = columns.some((col) => col.mobile === 'lead')
+    return columns.map((col, idx) => {
+      if (col.mobile) return col.mobile
+      if (!hasLead && idx === 0) return 'lead' as const
+      return 'meta' as const
+    })
+  }, [columns])
+
+  const leadIndex = mobileRoles.indexOf('lead')
+  const trailIndex = mobileRoles.indexOf('trail')
+
   const getCellValue = (row: T, key: keyof T | string): unknown => {
     return row[key as keyof T]
   }
@@ -79,64 +103,44 @@ export function DataTable<T extends Record<string, unknown>>({
 
   if (isLoading) {
     return (
-      <div className="overflow-hidden rounded-xl border border-gray-700">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-800">
-              {columns.map((col, idx) => (
-                <th
-                  key={`${String(col.key)}-${idx}`}
-                  className="px-3 py-2.5 text-left text-xs font-medium text-gray-300"
-                >
-                  {col.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {Array.from({ length: 5 }).map((_, idx) => (
-              <tr key={idx} className="border-t border-gray-800">
-                {columns.map((col, colIdx) => (
-                  <td
-                    key={`${String(col.key)}-${colIdx}`}
-                    className="px-3 py-2.5"
-                  >
-                    <div className="h-4 animate-pulse rounded bg-gray-800" />
-                  </td>
-                ))}
-              </tr>
+      <div className="bg-surface">
+        {Array.from({ length: 5 }).map((_, idx) => (
+          <div
+            key={idx}
+            className="flex gap-3 border-b border-line px-3 py-3.5 last:border-b-0"
+          >
+            {columns.map((col, colIdx) => (
+              <div
+                key={`${String(col.key)}-${colIdx}`}
+                className="h-4 flex-1 animate-pulse bg-line"
+              />
             ))}
-          </tbody>
-        </table>
+          </div>
+        ))}
       </div>
     )
   }
 
   if (data.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center rounded-xl border border-gray-700 bg-gray-900 py-12">
+      <div className="flex flex-col items-center justify-center bg-surface py-12">
         <svg
           width="48"
           height="48"
           viewBox="0 0 48 48"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
-          className="mb-3 text-gray-600"
+          className="mb-3 text-ink-mute"
         >
           <rect
             x="4"
             y="8"
             width="40"
             height="32"
-            rx="4"
             stroke="currentColor"
             strokeWidth="2.5"
           />
-          <path
-            d="M4 18H44"
-            stroke="currentColor"
-            strokeWidth="2.5"
-          />
+          <path d="M4 18H44" stroke="currentColor" strokeWidth="2.5" />
           <path
             d="M14 28H34"
             stroke="currentColor"
@@ -144,23 +148,24 @@ export function DataTable<T extends Record<string, unknown>>({
             strokeLinecap="round"
           />
         </svg>
-        <p className="text-sm text-gray-400">{emptyMessage}</p>
+        <p className="text-sm text-ink-dim">{emptyMessage}</p>
       </div>
     )
   }
 
   return (
-    <div className="overflow-hidden rounded-xl border border-gray-700">
-      <div className="overflow-x-auto">
+    <div className="bg-surface">
+      {/* Tabela: md para cima */}
+      <div className="hidden overflow-x-auto md:block">
         <table className="w-full">
           <thead>
-            <tr className="sticky top-0 bg-gray-800">
+            <tr className="border-b border-line">
               {columns.map((col, idx) => (
                 <th
                   key={`${String(col.key)}-${idx}`}
                   className={cn(
-                    'px-3 py-2.5 text-left text-xs font-medium text-gray-300',
-                    col.sortable && 'cursor-pointer select-none hover:text-orange-400',
+                    'label-mono px-3 py-3 text-left font-normal',
+                    col.sortable && 'cursor-pointer select-none hover:text-ink',
                     col.className,
                   )}
                   onClick={col.sortable ? () => handleSort(String(col.key)) : undefined}
@@ -175,14 +180,11 @@ export function DataTable<T extends Record<string, unknown>>({
                         fill="none"
                         xmlns="http://www.w3.org/2000/svg"
                         className={cn(
-                          'transition-transform text-orange-500',
+                          'text-ink transition-transform',
                           sortDirection === 'desc' && 'rotate-180',
                         )}
                       >
-                        <path
-                          d="M7 3L11 9H3L7 3Z"
-                          fill="currentColor"
-                        />
+                        <path d="M7 3L11 9H3L7 3Z" fill="currentColor" />
                       </svg>
                     )}
                   </div>
@@ -199,18 +201,16 @@ export function DataTable<T extends Record<string, unknown>>({
                 <tr
                   key={rowKey}
                   className={cn(
-                    'border-t border-gray-800 transition-colors',
+                    'border-b border-line transition-colors last:border-b-0',
                     onRowClick && 'cursor-pointer',
-                    isSelected
-                      ? 'border-l-2 border-l-orange-500 bg-orange-500/10'
-                      : 'hover:bg-gray-800/50',
+                    isSelected ? 'bg-void' : 'hover:bg-void/60',
                   )}
                   onClick={onRowClick ? () => onRowClick(row) : undefined}
                 >
                   {columns.map((col, idx) => (
                     <td
                       key={`${String(col.key)}-${idx}`}
-                      className={cn('px-3 py-2.5 text-sm text-gray-300', col.className)}
+                      className={cn('px-3 py-3 text-sm text-ink-dim', col.className)}
                     >
                       {renderCellValue(row, col)}
                     </td>
@@ -220,6 +220,60 @@ export function DataTable<T extends Record<string, unknown>>({
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Registro empilhado: abaixo de md, sem rolagem lateral */}
+      <div className="md:hidden">
+        {sortedData.map((row) => {
+          const rowKey = keyExtractor(row)
+          const isSelected = selectedId === rowKey
+          const metaColumns = columns.filter(
+            (_, idx) => mobileRoles[idx] === 'meta',
+          )
+
+          return (
+            <div
+              key={rowKey}
+              className={cn(
+                'border-b border-line px-3 py-3 last:border-b-0',
+                onRowClick && 'cursor-pointer',
+                isSelected && 'bg-void',
+              )}
+              onClick={onRowClick ? () => onRowClick(row) : undefined}
+            >
+              <div className="flex items-baseline justify-between gap-3">
+                {leadIndex >= 0 && (
+                  <div className="min-w-0 flex-1 text-sm font-semibold text-ink">
+                    {renderCellValue(row, columns[leadIndex])}
+                  </div>
+                )}
+                {trailIndex >= 0 && (
+                  <div className="num flex-shrink-0 text-sm text-ink">
+                    {renderCellValue(row, columns[trailIndex])}
+                  </div>
+                )}
+              </div>
+
+              {metaColumns.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                  {metaColumns.map((col, idx) => (
+                    <div
+                      key={`${String(col.key)}-${idx}`}
+                      className="flex min-w-0 items-center gap-1.5"
+                    >
+                      {col.mobileLabel && (
+                        <span className="label-mono">{col.header}</span>
+                      )}
+                      <span className="min-w-0 truncate text-xs text-ink-dim">
+                        {renderCellValue(row, col)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )
+        })}
       </div>
     </div>
   )

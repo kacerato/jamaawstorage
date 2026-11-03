@@ -108,8 +108,8 @@ export function ReturnsPage() {
       header: 'Código',
       render: (_value: unknown, row: ReturnTableRow) => (
         <div className="flex flex-col">
-          <span className="font-mono text-sm text-white">{row.code ?? 'Rascunho'}</span>
-          <span className="text-xs text-gray-500">{formatDateTime(row.created_at)}</span>
+          <span className="font-mono text-sm text-ink">{row.code ?? 'Rascunho'}</span>
+          <span className="text-xs text-ink-mute">{formatDateTime(row.created_at)}</span>
         </div>
       ),
     },
@@ -118,10 +118,10 @@ export function ReturnsPage() {
       header: 'Origem',
       render: (_value: unknown, row: ReturnTableRow) => (
         <div className="flex flex-col">
-          <span className="text-sm text-white">
+          <span className="text-sm text-ink">
             {row.source_label_snapshot ?? row.source_person?.full_name ?? row.source_work_site?.name ?? '-'}
           </span>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-ink-mute">
             {row.source_type === 'collaborator' ? 'Colaborador' : 'Obra'}
           </span>
         </div>
@@ -131,14 +131,14 @@ export function ReturnsPage() {
       key: 'reason',
       header: 'Motivo',
       render: (_value: unknown, row: ReturnTableRow) => (
-        <span className="text-sm text-gray-300">{REASON_LABELS[row.reason] ?? row.reason}</span>
+        <span className="text-sm text-ink-dim">{REASON_LABELS[row.reason] ?? row.reason}</span>
       ),
     },
     {
       key: 'items',
       header: 'Itens',
       render: (_value: unknown, row: ReturnTableRow) => (
-        <span className="text-sm text-gray-300">
+        <span className="text-sm text-ink-dim">
           {row.item_count} item(ns) · {row.total_quantity} un
         </span>
       ),
@@ -166,8 +166,8 @@ export function ReturnsPage() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-white">Devoluções</h1>
-          <p className="mt-1 text-sm text-gray-400">
+          <h1 className="text-2xl font-bold text-ink">Devoluções</h1>
+          <p className="mt-1 text-sm text-ink-dim">
             Recebimento, triagem e retorno de material ao estoque.
           </p>
         </div>
@@ -177,15 +177,15 @@ export function ReturnsPage() {
       {error && <Alert variant="danger">{error}</Alert>}
 
       <div className="grid gap-2 md:grid-cols-2">
-        <Card className="border border-amber-500/10 bg-amber-500/5" variant="bordered">
-          <p className="text-xs uppercase tracking-[0.24em] text-amber-200/70">Aguardando triagem</p>
-          <p className="mt-1 text-xl font-semibold text-white">{awaitingTriageCount}</p>
-          <p className="mt-0.5 text-xs text-gray-400">Material recebido, ainda não classificado.</p>
+        <Card className="border border-warn bg-warn/15" variant="bordered">
+          <p className="text-xs uppercase tracking-[0.24em] text-warn">Aguardando triagem</p>
+          <p className="mt-1 text-xl font-semibold text-ink">{awaitingTriageCount}</p>
+          <p className="mt-0.5 text-xs text-ink-dim">Material recebido, ainda não classificado.</p>
         </Card>
         <Card className="border border-sky-500/10 bg-sky-500/5" variant="bordered">
           <p className="text-xs uppercase tracking-[0.24em] text-sky-200/70">Prontas para confirmar</p>
-          <p className="mt-1 text-xl font-semibold text-white">{triagedCount}</p>
-          <p className="mt-0.5 text-xs text-gray-400">Triadas, aguardando entrada no estoque.</p>
+          <p className="mt-1 text-xl font-semibold text-ink">{triagedCount}</p>
+          <p className="mt-0.5 text-xs text-ink-dim">Triadas, aguardando entrada no estoque.</p>
         </Card>
       </div>
 

@@ -20,7 +20,7 @@ export function Spinner({ size = 'md', className }: SpinnerProps) {
       height={svgSize}
       viewBox="0 0 24 24"
       fill="none"
-      className={cn('animate-spin text-orange-500', className)}
+      className={cn('animate-spin text-blaze', className)}
       xmlns="http://www.w3.org/2000/svg"
     >
       <circle

@@ -565,7 +565,7 @@ export function PersonDetailPage() {
   if (!person) {
     return (
       <div className="flex flex-col gap-4">
-        <p className="text-gray-400">Pessoa nao encontrada.</p>
+        <p className="text-ink-dim">Pessoa nao encontrada.</p>
         <Button variant="secondary" onClick={() => navigate('/people')}>
           Voltar para Colaboradores
         </Button>
@@ -614,14 +614,14 @@ export function PersonDetailPage() {
       header: 'Item',
       sortable: true,
       render: (_value: unknown, row: PersonWithDetails['inventory'][0]) => (
-        <span className="font-medium text-white">{row.stock_items.name}</span>
+        <span className="font-medium text-ink">{row.stock_items.name}</span>
       ),
     },
     {
       key: 'stock_items.code',
       header: 'Codigo',
       render: (_value: unknown, row: PersonWithDetails['inventory'][0]) => (
-        <span className="font-mono text-gray-400">{row.stock_items.code}</span>
+        <span className="font-mono text-ink-dim">{row.stock_items.code}</span>
       ),
     },
     {
@@ -669,7 +669,7 @@ export function PersonDetailPage() {
             event.stopPropagation()
             openInventoryActionModal(row)
           }}
-          className="rounded-xl border border-orange-400/20 bg-orange-500/10 px-3 py-1.5 text-xs font-medium text-orange-200 transition-colors hover:bg-orange-500/16"
+          className="rounded-none border border-line bg-surface px-3 py-1.5 text-xs font-medium text-ink transition-colors hover:bg-surface"
         >
           Ajustar
         </button>
@@ -683,7 +683,7 @@ export function PersonDetailPage() {
       header: 'Codigo',
       sortable: true,
       render: (value: unknown) => (
-        <span className="font-mono text-sm text-orange-400">{value as string}</span>
+        <span className="font-mono text-sm text-ink">{value as string}</span>
       ),
     },
     {
@@ -725,7 +725,7 @@ export function PersonDetailPage() {
             </span>
           )}
           {(row.supervisor_signature || row.requester_signature || row.witness_signature) && (
-            <span title="Possui assinatura" className="text-emerald-400">
+            <span title="Possui assinatura" className="text-ok">
               <SignatureIcon size={16} />
             </span>
           )}
@@ -740,13 +740,13 @@ export function PersonDetailPage() {
         <button
           type="button"
           onClick={() => navigate('/people')}
-          className="rounded-lg p-2 text-gray-400 transition-colors hover:bg-gray-800 hover:text-white"
+          className="rounded-none p-2 text-ink-dim transition-colors hover:bg-surface hover:text-ink"
         >
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <path d="M12 4L6 10L12 16" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </button>
-        <h2 className="text-2xl font-bold text-white">Detalhes do Colaborador</h2>
+        <h2 className="text-2xl font-bold text-ink">Detalhes do Colaborador</h2>
       </div>
 
       {error && (
@@ -762,18 +762,18 @@ export function PersonDetailPage() {
               <img
                 src={person.photo_url}
                 alt={person.full_name}
-                className="h-14 w-14 rounded-full object-cover ring-2 ring-gray-700"
+                className="h-14 w-14 rounded-full object-cover ring-2 ring-line"
               />
             ) : (
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-gray-800 text-lg font-bold text-gray-300 ring-2 ring-gray-700">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-surface text-lg font-bold text-ink-dim ring-2 ring-line">
                 {getInitials(person.full_name)}
               </div>
             )}
             <div>
-              <h3 className="text-lg font-bold text-white">{person.full_name}</h3>
+              <h3 className="text-lg font-bold text-ink">{person.full_name}</h3>
               <div className="mt-1 flex flex-wrap items-center gap-2">
                 {person.employee_id && (
-                  <span className="text-sm text-gray-400">Matricula: {person.employee_id}</span>
+                  <span className="text-sm text-ink-dim">Matricula: {person.employee_id}</span>
                 )}
                 <Badge variant={person.role === 'leader' ? 'primary' : 'info'} dot>
                   {person.role === 'leader' ? (
@@ -792,12 +792,12 @@ export function PersonDetailPage() {
                   {person.is_active ? 'Ativo' : 'Inativo'}
                 </Badge>
                 {person.role !== 'leader' && person.job_title && (
-                  <span className="rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-sm text-gray-300">
+                  <span className="rounded-none border border-line bg-surface px-2.5 py-1 text-sm text-ink-dim">
                     Funcao: {getJobTitleLabel(person.job_title)}
                   </span>
                 )}
                 {person.sector && (
-                  <span className="rounded-full border border-white/8 bg-white/4 px-2.5 py-1 text-sm text-gray-300">
+                  <span className="rounded-none border border-line bg-surface px-2.5 py-1 text-sm text-ink-dim">
                     Setor: {person.sector}
                   </span>
                 )}
@@ -824,7 +824,7 @@ export function PersonDetailPage() {
         </div>
       </Card>
 
-      <div className="flex gap-1 border-b border-gray-700">
+      <div className="flex gap-1 border-b border-line">
         {tabs.map((tab) => (
           <button
             key={tab.key}
@@ -833,8 +833,8 @@ export function PersonDetailPage() {
             className={cn(
               'flex items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors',
               activeTab === tab.key
-                ? 'border-orange-500 text-orange-500'
-                : 'border-transparent text-gray-400 hover:text-gray-300',
+                ? 'border-line text-ink'
+                : 'border-transparent text-ink-dim hover:text-ink-dim',
             )}
           >
             {tab.icon}
@@ -846,7 +846,7 @@ export function PersonDetailPage() {
       {activeTab === 'profile' && (
         <Card variant="bordered" padding="md">
           <div className="mb-3 flex items-center justify-between gap-3">
-            <h3 className="text-base font-semibold text-white">Dados Cadastrais</h3>
+            <h3 className="text-base font-semibold text-ink">Dados Cadastrais</h3>
             <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>
               Editar
             </Button>
@@ -872,8 +872,8 @@ export function PersonDetailPage() {
           <Card variant="bordered" padding="md">
             <div className="flex items-center justify-between gap-3">
               <div>
-                <h3 className="text-base font-semibold text-white">Documentos pessoais</h3>
-                <p className="mt-1 text-sm text-gray-400">Arquivos cadastrais vinculados a esta pessoa.</p>
+                <h3 className="text-base font-semibold text-ink">Documentos pessoais</h3>
+                <p className="mt-1 text-sm text-ink-dim">Arquivos cadastrais vinculados a esta pessoa.</p>
               </div>
               <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>Gerenciar</Button>
             </div>
@@ -885,15 +885,15 @@ export function PersonDetailPage() {
                     href={buildPublicStorageUrl(document.url)}
                     target="_blank"
                     rel="noreferrer"
-                    className="flex min-w-0 items-center justify-between rounded-xl border border-white/8 bg-white/4 px-3 py-2 text-sm text-gray-200 transition-colors hover:border-orange-400/30 hover:bg-white/6"
+                    className="flex min-w-0 items-center justify-between rounded-none border border-line bg-surface px-3 py-2 text-sm text-ink-dim transition-colors hover:border-ink-mute hover:bg-surface"
                   >
                     <span className="truncate">{document.name}</span>
-                    <span className="ml-3 shrink-0 text-orange-300">Abrir</span>
+                    <span className="ml-3 shrink-0 text-ink">Abrir</span>
                   </a>
                 ))}
               </div>
             ) : (
-              <div className="mt-4 rounded-xl border border-dashed border-white/10 bg-white/3 px-3 py-4 text-sm text-gray-500">
+              <div className="mt-4 rounded-none border border-dashed border-line bg-surface px-3 py-4 text-sm text-ink-mute">
                 Nenhum documento pessoal anexado.
               </div>
             )}
@@ -902,14 +902,14 @@ export function PersonDetailPage() {
           <Card variant="bordered" padding="md">
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h3 className="text-base font-semibold text-white">Termos de retirada assinados</h3>
-                <p className="mt-1 text-sm text-gray-400">Pendencias e PDFs individuais desta pessoa.</p>
+                <h3 className="text-base font-semibold text-ink">Termos de retirada assinados</h3>
+                <p className="mt-1 text-sm text-ink-dim">Pendencias e PDFs individuais desta pessoa.</p>
               </div>
               <div className="flex gap-2 text-xs">
-                <span className="rounded-full bg-amber-500/10 px-3 py-1 text-amber-200">
+                <span className="rounded-none bg-warn/15 px-3 py-1 text-warn">
                   {documentRequirements.filter((item) => item.status === 'pending').length} pendente(s)
                 </span>
-                <span className="rounded-full bg-emerald-500/10 px-3 py-1 text-emerald-200">
+                <span className="rounded-none bg-ok/15 px-3 py-1 text-ok">
                   {documentRequirements.filter((item) => item.status === 'attached').length} anexado(s)
                 </span>
               </div>
@@ -918,7 +918,7 @@ export function PersonDetailPage() {
             {documentsLoading ? (
               <div className="flex justify-center py-8"><Spinner size="md" /></div>
             ) : documentRequirements.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-white/10 bg-white/3 px-3 py-5 text-sm text-gray-500">
+              <div className="rounded-none border border-dashed border-line bg-surface px-3 py-5 text-sm text-ink-mute">
                 Nenhum termo individual encontrado para esta pessoa.
               </div>
             ) : (
@@ -927,14 +927,14 @@ export function PersonDetailPage() {
                   const activeDocument = activeRequirementDocument(requirement)
                   const isUploading = uploadingRequirementId === requirement.id
                   return (
-                    <div key={requirement.id} className="rounded-2xl border border-white/8 bg-white/3 p-4">
+                    <div key={requirement.id} className="rounded-none border border-line bg-surface p-4">
                       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               onClick={() => navigate(`/withdrawals/${requirement.withdrawal_id}`)}
-                              className="font-mono text-sm font-medium text-orange-300 hover:text-orange-200"
+                              className="font-mono text-sm font-medium text-ink hover:text-ink"
                             >
                               {requirement.withdrawal?.code ?? 'Retirada'}
                             </button>
@@ -942,8 +942,8 @@ export function PersonDetailPage() {
                               {requirementStatusLabels[requirement.status]}
                             </Badge>
                           </div>
-                          <p className="mt-1 text-sm text-gray-300">{requirement.destination_label_snapshot}</p>
-                          <p className="mt-1 text-xs text-gray-500">
+                          <p className="mt-1 text-sm text-ink-dim">{requirement.destination_label_snapshot}</p>
+                          <p className="mt-1 text-xs text-ink-mute">
                             {formatDateTime(requirement.withdrawal?.created_at ?? requirement.created_at)}
                             {activeDocument ? ` • ${activeDocument.file_name} • versao ${activeDocument.version}` : ''}
                           </p>
@@ -961,7 +961,7 @@ export function PersonDetailPage() {
                               Abrir PDF
                             </Button>
                           )}
-                          <label className="cursor-pointer rounded-lg bg-orange-500 px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-orange-600">
+                          <label className="cursor-pointer rounded-none bg-blaze px-3 py-2 text-xs font-medium text-ink transition-colors hover:bg-blaze">
                             {isUploading ? 'Enviando...' : activeDocument ? 'Substituir PDF' : 'Anexar agora'}
                             <input
                               type="file"
@@ -988,7 +988,7 @@ export function PersonDetailPage() {
       {activeTab === 'inventory' && !isLeader && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Inventario Individual</h3>
+            <h3 className="text-lg font-semibold text-ink">Inventario Individual</h3>
             <Button
               size="sm"
               leftIcon={<PackageIcon size={14} />}
@@ -1011,7 +1011,7 @@ export function PersonDetailPage() {
       {activeTab === 'withdrawals' && isLeader && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Retiradas Realizadas</h3>
+            <h3 className="text-lg font-semibold text-ink">Retiradas Realizadas</h3>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -1063,7 +1063,7 @@ export function PersonDetailPage() {
       {activeTab === 'consumption' && isLeader && (
         <div className="flex flex-col gap-4">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">Resumo de Consumo</h3>
+            <h3 className="text-lg font-semibold text-ink">Resumo de Consumo</h3>
           </div>
 
           <div className="flex flex-wrap items-end gap-3">
@@ -1104,8 +1104,8 @@ export function PersonDetailPage() {
           {consumptionData.length === 0 ? (
             <Card variant="bordered" padding="lg">
               <div className="flex flex-col items-center justify-center py-8 text-center">
-                <ChartIcon size={48} className="mb-3 text-gray-600" />
-                <p className="text-sm text-gray-400">
+                <ChartIcon size={48} className="mb-3 text-ink-mute" />
+                <p className="text-sm text-ink-dim">
                   Nenhum dado de consumo para o periodo selecionado.
                 </p>
               </div>
@@ -1163,9 +1163,9 @@ export function PersonDetailPage() {
         size="sm"
       >
         <div className="flex flex-col gap-4">
-          <p className="text-sm text-gray-300">
+          <p className="text-sm text-ink-dim">
             Tem certeza que deseja {person.is_active ? 'desativar' : 'reativar'}{' '}
-            <span className="font-medium text-white">{person.full_name}</span>?
+            <span className="font-medium text-ink">{person.full_name}</span>?
           </p>
           <div className="flex justify-end gap-3">
             <Button type="button" variant="secondary" onClick={() => setShowToggleModal(false)}>
@@ -1210,16 +1210,16 @@ export function PersonDetailPage() {
       >
         {selectedInventoryItem && (
           <div className="flex flex-col gap-5">
-            <div className="rounded-2xl border border-white/8 bg-[#111217] p-4">
+            <div className="rounded-none border border-line bg-surface p-4">
               <div className="flex items-start gap-3">
                 <ItemVisual iconKey={selectedInventoryItem.stock_items.svg_icon_key} size={38} />
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-base font-semibold text-white">{selectedInventoryItem.stock_items.name}</p>
-                  <p className="mt-1 text-xs text-gray-500">{selectedInventoryItem.stock_items.code} / {selectedInventoryItem.stock_items.unit}</p>
+                  <p className="truncate text-base font-semibold text-ink">{selectedInventoryItem.stock_items.name}</p>
+                  <p className="mt-1 text-xs text-ink-mute">{selectedInventoryItem.stock_items.code} / {selectedInventoryItem.stock_items.unit}</p>
                 </div>
-                <div className="rounded-xl border border-white/8 bg-white/5 px-3 py-2 text-right">
-                  <p className="text-[10px] uppercase tracking-[0.12em] text-gray-500">Atual</p>
-                  <p className="mt-1 text-lg font-semibold text-white">
+                <div className="rounded-none border border-line bg-surface px-3 py-2 text-right">
+                  <p className="text-[10px] uppercase tracking-[0.12em] text-ink-mute">Atual</p>
+                  <p className="mt-1 text-lg font-semibold text-ink">
                     {formatQuantity(selectedInventoryItem.quantity, selectedInventoryItem.stock_items.unit)}
                   </p>
                 </div>
@@ -1234,11 +1234,11 @@ export function PersonDetailPage() {
                 value={inventoryActionQuantity}
                 onChange={(event) => setInventoryActionQuantity(event.target.value)}
               />
-              <div className="rounded-2xl border border-orange-300/18 bg-orange-500/8 px-4 py-3">
-                <p className="text-xs font-medium uppercase tracking-[0.12em] text-orange-200/70">Alteração</p>
+              <div className="rounded-none border border-line bg-surface px-4 py-3">
+                <p className="text-xs font-medium uppercase tracking-[0.12em] text-ink">Alteração</p>
                 <p className={cn(
                   'mt-2 text-2xl font-semibold',
-                  selectedInventoryDelta !== 0 ? 'text-orange-100' : 'text-gray-500',
+                  selectedInventoryDelta !== 0 ? 'text-ink' : 'text-ink-mute',
                 )}>
                   {Number.isFinite(selectedInventoryNextQuantity)
                     ? `${selectedInventoryDelta > 0 ? '+' : ''}${formatQuantity(selectedInventoryDelta, selectedInventoryItem.stock_items.unit)}`
@@ -1251,14 +1251,14 @@ export function PersonDetailPage() {
               <button
                 type="button"
                 onClick={() => setInventoryActionQuantity('0')}
-                className="rounded-xl border border-red-300/18 bg-red-500/8 px-3 py-2 text-sm font-medium text-red-100 transition-colors hover:border-red-300/36 hover:bg-red-500/12"
+                className="rounded-none border border-crit bg-crit/15 px-3 py-2 text-sm font-medium text-crit transition-colors hover:border-crit hover:bg-crit/15"
               >
                 Zerar item
               </button>
               <button
                 type="button"
                 onClick={() => setInventoryActionQuantity(String(selectedInventoryItem.quantity))}
-                className="rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm font-medium text-gray-200 transition-colors hover:border-white/18 hover:bg-white/8"
+                className="rounded-none border border-line bg-surface px-3 py-2 text-sm font-medium text-ink-dim transition-colors hover:border-line hover:bg-surface"
               >
                 Manter atual
               </button>
@@ -1277,9 +1277,9 @@ export function PersonDetailPage() {
               ]}
             />
 
-            <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
-              <p className="text-sm font-medium text-white">Como aplicar a diferença?</p>
-              <p className="mt-1 text-xs leading-5 text-gray-400">
+            <div className="rounded-none border border-line bg-surface p-4">
+              <p className="text-sm font-medium text-ink">Como aplicar a diferença?</p>
+              <p className="mt-1 text-xs leading-5 text-ink-dim">
                 Use ajuste para corrigir, aumentar ou reduzir o saldo do colaborador. Use devolver quando a quantidade removida deve voltar para o estoque principal.
               </p>
             </div>
@@ -1314,8 +1314,8 @@ export function PersonDetailPage() {
 function DetailField({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex flex-col gap-1">
-      <span className="text-xs font-medium uppercase text-gray-500">{label}</span>
-      <span className="text-sm text-gray-200">{value}</span>
+      <span className="text-xs font-medium uppercase text-ink-mute">{label}</span>
+      <span className="text-sm text-ink-dim">{value}</span>
     </div>
   )
 }
@@ -1387,7 +1387,7 @@ function InventoryQuantityInfo({
   const infoCard = isOpen
     ? createPortal(
       <div
-        className="fixed z-[9999] flex w-[min(520px,calc(100vw-48px))] flex-col overflow-hidden rounded-2xl border border-orange-400/25 bg-[#101114] opacity-100 shadow-[0_24px_70px_rgba(0,0,0,0.55)] transition-all duration-300"
+        className="fixed z-[9999] flex w-[min(520px,calc(100vw-48px))] flex-col overflow-hidden rounded-none border border-line bg-surface opacity-100 transition-all duration-300"
         style={{
           top: cardPosition.placement === 'below' ? cardPosition.top : undefined,
           bottom: cardPosition.placement === 'above' ? cardPosition.bottom : undefined,
@@ -1400,13 +1400,13 @@ function InventoryQuantityInfo({
         onMouseLeave={onMouseLeave}
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.18),_transparent_58%)] p-4">
+        <div className="border-b border-line bg-surface p-4">
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-orange-200/75">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.24em] text-ink">
                 Origem no inventario
               </p>
-              <p className="mt-1 text-sm font-semibold text-white">{inventory.stock_items.name}</p>
+              <p className="mt-1 text-sm font-semibold text-ink">{inventory.stock_items.name}</p>
             </div>
             {isPinned ? (
               <Badge variant="warning" size="sm">Fixado</Badge>
@@ -1426,7 +1426,7 @@ function InventoryQuantityInfo({
           </div>
 
           {manualOrAdjustedQuantity < 0 ? (
-            <p className="mt-3 rounded-xl border border-amber-400/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-200">
+            <p className="mt-3 rounded-none border border-warn bg-warn/15 px-3 py-2 text-xs text-warn">
               O historico de retiradas passa do saldo atual. Parte desse item pode ter sido devolvida, removida ou ajustada depois.
             </p>
           ) : null}
@@ -1434,27 +1434,27 @@ function InventoryQuantityInfo({
 
         <div className="min-h-0 flex-1 overflow-y-auto p-3">
           {traces.length === 0 ? (
-            <div className="rounded-xl border border-white/8 bg-white/3 p-3 text-xs text-gray-400">
+            <div className="rounded-none border border-line bg-surface p-3 text-xs text-ink-dim">
               Nao ha retirada registrada para este item neste colaborador. Este saldo provavelmente veio de adicao manual, kit ou ajuste direto de inventario.
             </div>
           ) : (
             <div className="space-y-2">
               {traces.map((trace) => (
-                <div key={trace.id} className="rounded-xl border border-white/8 bg-white/4 p-3">
+                <div key={trace.id} className="rounded-none border border-line bg-surface p-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-mono text-xs font-semibold text-orange-300">{trace.code}</p>
-                      <p className="mt-1 text-xs text-gray-400">{formatDateTime(trace.createdAt)}</p>
+                      <p className="font-mono text-xs font-semibold text-ink">{trace.code}</p>
+                      <p className="mt-1 text-xs text-ink-dim">{formatDateTime(trace.createdAt)}</p>
                     </div>
-                    <span className="rounded-lg bg-black/25 px-2 py-1 text-xs font-semibold text-white">
+                    <span className="rounded-none bg-void px-2 py-1 text-xs font-semibold text-ink">
                       {formatQuantity(trace.quantity, trace.unit)}
                     </span>
                   </div>
-                  <p className="mt-2 text-xs text-gray-300">
-                    Solicitado por: <span className="text-white">{trace.requestedBy}</span>
+                  <p className="mt-2 text-xs text-ink-dim">
+                    Solicitado por: <span className="text-ink">{trace.requestedBy}</span>
                   </p>
                   {trace.notes ? (
-                    <p className="mt-1 line-clamp-2 text-xs text-gray-500">{trace.notes}</p>
+                    <p className="mt-1 line-clamp-2 text-xs text-ink-mute">{trace.notes}</p>
                   ) : null}
                 </div>
               ))}
@@ -1481,16 +1481,16 @@ function InventoryQuantityInfo({
           onToggle()
         }}
         className={cn(
-          'inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-all duration-200',
+          'inline-flex items-center gap-2 rounded-none border px-3 py-2 text-left transition-all duration-200',
           isOpen
-            ? 'border-orange-400/45 bg-orange-500/15 text-orange-100 shadow-[0_0_28px_rgba(249,115,22,0.18)]'
-            : 'border-orange-400/15 bg-orange-500/8 text-orange-300 hover:border-orange-400/35 hover:bg-orange-500/12',
+            ? 'border-line bg-surface text-ink'
+            : 'border-line bg-surface text-ink hover:border-ink-mute hover:bg-surface',
         )}
       >
         <span className="font-semibold">
           {formatQuantity(inventory.quantity, inventory.stock_items.unit)}
         </span>
-        <span className="rounded-full border border-white/10 bg-black/20 px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-gray-400">
+        <span className="rounded-none border border-line bg-void px-2 py-0.5 text-[10px] uppercase tracking-[0.16em] text-ink-dim">
           {traces.length > 0 ? `${traces.length} retirada(s)` : 'manual'}
         </span>
       </button>
@@ -1510,9 +1510,9 @@ function InventoryInfoMetric({
   muted?: boolean
 }) {
   return (
-    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.16em] text-gray-500">{label}</p>
-      <p className={cn('mt-1 truncate text-xs font-semibold', muted ? 'text-gray-500' : 'text-white')}>{value}</p>
+    <div className="rounded-none border border-line bg-void px-3 py-2">
+      <p className="text-[10px] uppercase tracking-[0.16em] text-ink-mute">{label}</p>
+      <p className={cn('mt-1 truncate text-xs font-semibold', muted ? 'text-ink-mute' : 'text-ink')}>{value}</p>
     </div>
   )
 }

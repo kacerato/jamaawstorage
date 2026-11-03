@@ -325,8 +325,8 @@ export function PersonInventoryModal({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center gap-2 text-sm text-gray-400">
-        <span>Inventario de <span className="font-medium text-white">{personName}</span></span>
+      <div className="flex items-center gap-2 text-sm text-ink-dim">
+        <span>Inventario de <span className="font-medium text-ink">{personName}</span></span>
         <InfoTip text="Monte uma fila com itens avulsos ou kits. Ao confirmar, o estoque baixa e o inventario da pessoa aumenta na mesma operacao." />
       </div>
       {error && (
@@ -337,17 +337,17 @@ export function PersonInventoryModal({
 
       {loading ? (
         <div className="flex items-center justify-center py-8">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-orange-500 border-t-transparent" />
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-line border-t-transparent" />
         </div>
       ) : availableItems.length === 0 && kits.length === 0 ? (
-        <p className="py-4 text-center text-sm text-gray-400">
+        <p className="py-4 text-center text-sm text-ink-dim">
           Nenhum item ou kit ativo com saldo disponivel no estoque.
         </p>
       ) : (
         <>
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1.15fr)_340px]">
             <div className="flex flex-col gap-4">
-              <div className="rounded-2xl border border-white/8 bg-[#111217] p-4">
+              <div className="rounded-none border border-line bg-surface p-4">
                 <div className="mb-4 flex flex-wrap items-end gap-3">
                   <div className="min-w-[180px] flex-1">
                     <Select
@@ -369,7 +369,7 @@ export function PersonInventoryModal({
                   <div className="min-w-[220px] flex-[1.4]">
                     {draftType === 'item' ? (
                       <div className="flex flex-col gap-1.5">
-                        <label className="text-sm font-medium text-gray-300">Item do Estoque</label>
+                        <label className="text-sm font-medium text-ink-dim">Item do Estoque</label>
                         <StockItemPicker
                           items={availableItems}
                           selectedId={selectedItemId}
@@ -394,10 +394,10 @@ export function PersonInventoryModal({
                           placeholder="Selecione um kit"
                         />
                         {kits.length === 0 && (
-                          <p className="text-xs text-gray-500">Nenhum kit cadastrado.</p>
+                          <p className="text-xs text-ink-mute">Nenhum kit cadastrado.</p>
                         )}
                         {unavailableKits.length > 0 && (
-                          <div className="rounded-xl border border-amber-400/15 bg-amber-500/8 px-3 py-2 text-xs text-amber-100">
+                          <div className="rounded-none border border-warn bg-warn/15 px-3 py-2 text-xs text-warn">
                             <p className="font-medium">Kits temporariamente indisponiveis:</p>
                             <ul className="mt-1 space-y-1">
                               {unavailableKits.map(({ kit, availability }) => (
@@ -442,25 +442,25 @@ export function PersonInventoryModal({
                 </div>
 
                 {selectedItem && draftType === 'item' && (
-                  <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
+                  <div className="rounded-none border border-line bg-surface p-4">
                     <div className="flex items-center gap-3">
-                      <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-orange-400/15 bg-orange-500/10">
+                      <div className="flex h-12 w-12 items-center justify-center rounded-none border border-line bg-surface">
                         <ItemVisual iconKey={selectedItem.svg_icon_key} size={28} />
                       </div>
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-white">{selectedItem.name}</p>
-                        <p className="mt-1 text-xs text-gray-500">{selectedItem.category ?? 'Sem categoria'} • {selectedItem.unit}</p>
+                        <p className="truncate text-sm font-semibold text-ink">{selectedItem.name}</p>
+                        <p className="mt-1 text-xs text-ink-mute">{selectedItem.category ?? 'Sem categoria'} • {selectedItem.unit}</p>
                       </div>
                     </div>
-                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-gray-400">
-                      <span className="rounded-full border border-white/8 bg-black/10 px-3 py-1">
+                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-ink-dim">
+                      <span className="rounded-none border border-line bg-void px-3 py-1">
                         Estoque atual: {selectedItem.current_quantity}
                       </span>
-                      <span className="rounded-full border border-white/8 bg-black/10 px-3 py-1">
+                      <span className="rounded-none border border-line bg-void px-3 py-1">
                         Minimo: {selectedItem.minimum_quantity}
                       </span>
                       {selectedItem.current_quantity <= selectedItem.minimum_quantity && (
-                        <span className="rounded-full border border-amber-400/20 bg-amber-500/10 px-3 py-1 font-medium text-amber-300">
+                        <span className="rounded-none border border-warn bg-warn/15 px-3 py-1 font-medium text-warn">
                           Estoque baixo
                         </span>
                       )}
@@ -469,25 +469,25 @@ export function PersonInventoryModal({
                 )}
 
                 {selectedKit && draftType === 'kit' && selectedKitAvailability && (
-                  <div className="rounded-2xl border border-white/8 bg-white/4 p-4">
+                  <div className="rounded-none border border-line bg-surface p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div>
-                        <p className="text-sm font-semibold text-white">{selectedKit.name}</p>
-                        <p className="mt-1 text-xs text-gray-500">
+                        <p className="text-sm font-semibold text-ink">{selectedKit.name}</p>
+                        <p className="mt-1 text-xs text-ink-mute">
                           Maximo disponivel: {selectedKitAvailability.maxAssemblies} kit(s)
                         </p>
                       </div>
-                      <span className="rounded-full border border-emerald-400/20 bg-emerald-500/10 px-3 py-1 text-xs font-medium text-emerald-300">
+                      <span className="rounded-none border border-ok bg-ok/15 px-3 py-1 text-xs font-medium text-ok">
                         {selectedKit.kit_items.length} item(ns)
                       </span>
                     </div>
                     <div className="mt-3 grid gap-2 md:grid-cols-2">
                       {selectedKit.kit_items.map((kitItem) => (
-                        <div key={`${selectedKit.id}-${kitItem.stock_item_id}`} className="flex items-center gap-3 rounded-xl border border-white/8 bg-black/10 px-3 py-2">
+                        <div key={`${selectedKit.id}-${kitItem.stock_item_id}`} className="flex items-center gap-3 rounded-none border border-line bg-void px-3 py-2">
                           <ItemVisual iconKey={kitItem.stock_items?.svg_icon_key} size={24} />
                           <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm text-white">{kitItem.stock_items?.name ?? 'Item'}</p>
-                            <p className="text-xs text-gray-500">
+                            <p className="truncate text-sm text-ink">{kitItem.stock_items?.name ?? 'Item'}</p>
+                            <p className="text-xs text-ink-mute">
                               {kitItem.quantity} {kitItem.stock_items?.unit ?? 'un'} por kit • saldo {kitItem.stock_items?.current_quantity ?? 0}
                             </p>
                           </div>
@@ -501,44 +501,44 @@ export function PersonInventoryModal({
 
             <div className="flex flex-col gap-4">
               <div className="grid grid-cols-2 gap-3">
-                <div className="rounded-2xl border border-white/8 bg-[#111217] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Fila</p>
-                  <p className="mt-2 text-2xl font-semibold text-white">{pendingEntries.length}</p>
+                <div className="rounded-none border border-line bg-surface px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-ink-mute">Fila</p>
+                  <p className="mt-2 text-2xl font-semibold text-ink">{pendingEntries.length}</p>
                 </div>
-                <div className="rounded-2xl border border-white/8 bg-[#111217] px-4 py-3">
-                  <p className="text-xs uppercase tracking-[0.18em] text-gray-500">Unidades</p>
-                  <p className="mt-2 text-2xl font-semibold text-orange-300">{totalRequestedUnits}</p>
+                <div className="rounded-none border border-line bg-surface px-4 py-3">
+                  <p className="text-xs uppercase tracking-[0.18em] text-ink-mute">Unidades</p>
+                  <p className="mt-2 text-2xl font-semibold text-ink">{totalRequestedUnits}</p>
                 </div>
               </div>
 
-              <div className="rounded-2xl border border-white/8 bg-[#111217]">
-                <div className="border-b border-white/8 px-4 py-3">
+              <div className="rounded-none border border-line bg-surface">
+                <div className="border-b border-line px-4 py-3">
                   <div className="flex items-center gap-2">
-                    <h4 className="text-sm font-semibold text-white">Fila de atribuicao</h4>
+                    <h4 className="text-sm font-semibold text-ink">Fila de atribuicao</h4>
                     <InfoTip text="A fila junta itens e kits antes de confirmar. Voce pode remover entradas sem afetar o estoque." />
                   </div>
                 </div>
                 {pendingEntries.length === 0 ? (
-                  <p className="px-4 py-8 text-sm text-gray-500">
+                  <p className="px-4 py-8 text-sm text-ink-mute">
                     Nenhum item adicionado ainda.
                   </p>
                 ) : (
                   <div className="max-h-[42vh] space-y-3 overflow-y-auto p-4">
                     {pendingEntries.map((entry) => (
-                      <div key={entry.id} className="rounded-2xl border border-white/8 bg-white/4 p-3">
+                      <div key={entry.id} className="rounded-none border border-line bg-surface p-3">
                         <div className="flex items-start justify-between gap-3">
                           <div className="min-w-0 flex-1">
                             <div className="flex items-center gap-2">
-                              <span className="truncate font-medium text-white">{entry.name}</span>
-                              <span className="rounded-full bg-gray-700 px-2 py-0.5 text-xs text-gray-300">
+                              <span className="truncate font-medium text-ink">{entry.name}</span>
+                              <span className="rounded-none bg-surface px-2 py-0.5 text-xs text-ink-dim">
                                 {entry.type === 'kit' ? `${entry.requestedQuantity} kit(s)` : `${entry.requestedQuantity} item(ns)`}
                               </span>
                             </div>
                             <div className="mt-3 flex flex-col gap-2">
                               {entry.items.map((item) => (
                                 <div key={`${entry.id}-${item.stock_item_id}`} className="flex items-center justify-between text-sm">
-                                  <span className="truncate pr-3 text-gray-300">{item.name}</span>
-                                  <span className="text-orange-300">{formatQuantity(item.quantity, item.unit)}</span>
+                                  <span className="truncate pr-3 text-ink-dim">{item.name}</span>
+                                  <span className="text-ink">{formatQuantity(item.quantity, item.unit)}</span>
                                 </div>
                               ))}
                             </div>
@@ -559,13 +559,13 @@ export function PersonInventoryModal({
               </div>
 
               {summarizedItems.length > 0 && (
-                <div className="rounded-2xl border border-emerald-400/10 bg-emerald-500/5 p-4 text-sm text-gray-300">
+                <div className="rounded-none border border-ok bg-ok/15 p-4 text-sm text-ink-dim">
                   <SectionLabel label="Resumo final" info="Quantidade total que sera atribuida ao inventario dessa pessoa." />
                   <div className="mt-3 flex max-h-40 flex-col gap-2 overflow-y-auto">
                     {summarizedItems.map((item) => (
                       <div key={item.stock_item_id} className="flex items-center justify-between gap-3">
                         <span className="truncate">{item.name}</span>
-                        <span className="font-medium text-orange-400">{formatQuantity(item.quantity, item.unit)}</span>
+                        <span className="font-medium text-ink">{formatQuantity(item.quantity, item.unit)}</span>
                       </div>
                     ))}
                   </div>
@@ -574,7 +574,7 @@ export function PersonInventoryModal({
             </div>
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-gray-700 pt-4">
+          <div className="flex justify-end gap-3 border-t border-line pt-4">
             <Button type="button" variant="secondary" onClick={onClose}>
               Cancelar
             </Button>
