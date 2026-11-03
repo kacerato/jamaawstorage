@@ -280,16 +280,10 @@ export function KitsPage({
           {embedded ? (
             <>
               <h3 className="text-xl font-semibold text-ink">Kits de Retirada</h3>
-              <p className="mt-1 text-sm text-ink-dim">
-                Monte e ajuste kits no mesmo contexto do estoque
-              </p>
             </>
           ) : (
             <>
               <h2 className="text-2xl font-bold text-ink">Kits de Retirada</h2>
-              <p className="mt-1 text-sm text-ink-dim">
-                Gerencie kits de EPIs pré-montados para retiradas rápidas
-              </p>
             </>
           )}
         </div>

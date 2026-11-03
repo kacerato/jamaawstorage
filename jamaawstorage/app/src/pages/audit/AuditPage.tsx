@@ -260,7 +260,6 @@ export function AuditPage() {
     <div className="flex flex-col gap-6">
       <div>
         <h2 className="text-2xl font-bold text-ink">Log de Auditoria</h2>
-        <p className="mt-1 text-sm text-ink-dim">Somente eventos e campos importantes.</p>
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">

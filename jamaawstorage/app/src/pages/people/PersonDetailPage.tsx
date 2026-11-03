@@ -873,7 +873,6 @@ export function PersonDetailPage() {
             <div className="flex items-center justify-between gap-3">
               <div>
                 <h3 className="text-base font-semibold text-ink">Documentos pessoais</h3>
-                <p className="mt-1 text-sm text-ink-dim">Arquivos cadastrais vinculados a esta pessoa.</p>
               </div>
               <Button variant="secondary" size="sm" onClick={() => setShowEditModal(true)}>Gerenciar</Button>
             </div>
@@ -903,7 +902,6 @@ export function PersonDetailPage() {
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h3 className="text-base font-semibold text-ink">Termos de retirada assinados</h3>
-                <p className="mt-1 text-sm text-ink-dim">Pendencias e PDFs individuais desta pessoa.</p>
               </div>
               <div className="flex gap-2 text-xs">
                 <span className="rounded-none bg-warn/15 px-3 py-1 text-warn">

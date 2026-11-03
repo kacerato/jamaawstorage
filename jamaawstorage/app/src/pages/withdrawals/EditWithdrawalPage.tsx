@@ -722,9 +722,6 @@ export function EditWithdrawalPage() {
               {withdrawal.code}
             </Badge>
           </div>
-          <p className="mt-1 text-sm text-ink-dim">
-            Ajuste itens, destinos e observacoes.
-          </p>
         </div>
         <Button variant="ghost" onClick={() => navigate(`/withdrawals/${withdrawal.id}`)}>
           Cancelar

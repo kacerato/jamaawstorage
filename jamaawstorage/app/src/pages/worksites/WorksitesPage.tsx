@@ -285,7 +285,6 @@ export function WorksitesPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-ink">Obras</h2>
-          <p className="mt-1 text-sm text-ink-dim">Cadastro de obras e destinos para retiradas</p>
         </div>
         <Button
           onClick={() => {

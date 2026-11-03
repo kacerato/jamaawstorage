@@ -960,7 +960,6 @@ export function VehiclesPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h1 className="text-2xl font-bold text-ink">Carros JamaaW</h1>
-          <p className="mt-1 text-sm text-ink-dim">Cadastro, responsavel, kilometragem, combustivel e abastecimentos com evidencia por foto.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={openCreateVehicleModal} leftIcon={<Plus size={16} />}>

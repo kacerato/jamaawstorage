@@ -131,9 +131,6 @@ export function StockReturnsTab({ embedded = false }: StockReturnsTabProps) {
       {!embedded && (
         <div>
           <h2 className="text-2xl font-bold text-ink">Itens devolvidos ao almoxarifado</h2>
-          <p className="mt-1 text-sm text-ink-dim">
-            Receba o material, classifique na triagem e confirme a entrada no estoque.
-          </p>
         </div>
       )}
 

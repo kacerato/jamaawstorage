@@ -1786,9 +1786,6 @@ export function NewWithdrawalPage() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-bold text-ink">Nova Retirada</h2>
-          <p className="mt-1 text-sm text-ink-dim">
-            Monte uma operacao com varios itens e destinos sem poluir o fluxo.
-          </p>
         </div>
         <Button variant="ghost" onClick={() => navigate('/withdrawals')}>
           Cancelar

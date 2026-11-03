@@ -167,9 +167,6 @@ export function ReturnsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-ink">Devoluções</h1>
-          <p className="mt-1 text-sm text-ink-dim">
-            Recebimento, triagem e retorno de material ao estoque.
-          </p>
         </div>
         <Button onClick={() => navigate('/returns/new')}>Nova devolução</Button>
       </div>

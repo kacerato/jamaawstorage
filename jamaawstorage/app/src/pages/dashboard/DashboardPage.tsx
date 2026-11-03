@@ -570,9 +570,6 @@ export function DashboardPage() {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
           <h2 className="text-2xl font-bold text-ink">Painel de Controle</h2>
-          <p className="mt-1 max-w-2xl text-sm text-ink-dim">
-            Leitura rapida do almoxarifado: disponibilidade do estoque, acoes principais e pontos que precisam de atencao.
-          </p>
         </div>
         {refreshing && (
           <div className="label-mono inline-flex w-fit items-center gap-2 bg-surface px-3 py-1.5">
@@ -595,9 +592,6 @@ export function DashboardPage() {
                   <h3 className="mt-5 max-w-2xl text-3xl font-bold leading-tight text-ink lg:text-4xl">
                     {highlightLabel}
                   </h3>
-                  <p className="mt-3 max-w-xl text-sm leading-6 text-ink-dim">
-                    Uma leitura direta do que precisa de decisao: saldo disponivel, retiradas do dia e alertas que podem travar a operacao.
-                  </p>
                 </div>
 
                 <div className="grid grid-cols-2 gap-px bg-line md:grid-cols-4">
