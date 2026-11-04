@@ -150,6 +150,11 @@ async function runVisionFallback(apiKey, imageInput, eventType, cvAnalysis) {
 
 function cvIsComplete(cv, eventType) {
   if (!cv || cv.needsReview || Number(cv.confidence) < 0.82) return false
+  // Um evento de abastecimento fotografa a bomba, nao o painel: litros, valor
+  // pago e nome do posto sao texto livre que o leitor OpenCV nao extrai (ele
+  // devolve sempre null nos tres). Por isso o fallback visual continua
+  // obrigatorio aqui, mesmo com a leitura do painel confiavel. Retirada e
+  // devolucao, que so precisam de ODO e barras, resolvem sem IA.
   if (eventType === 'fuel') return false
   return cv.odometerKm != null && cv.fuelBarsFilled != null
 }

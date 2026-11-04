@@ -1,0 +1,6 @@
+.venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+# Variacoes geradas por scripts/make_dataset.py; so a foto base e versionada.
+out/
