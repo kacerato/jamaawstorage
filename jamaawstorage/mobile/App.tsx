@@ -9,11 +9,13 @@ import {
   JetBrainsMono_700Bold,
   useFonts as useJetBrains,
 } from '@expo-google-fonts/jetbrains-mono'
+import * as SplashScreen from 'expo-splash-screen'
 import { StatusBar } from 'expo-status-bar'
-import { useState } from 'react'
-import { ActivityIndicator, StyleSheet, View } from 'react-native'
+import { useCallback, useEffect, useState } from 'react'
+import { StyleSheet, View } from 'react-native'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { AuthProvider, useAuth } from './src/auth/AuthContext'
+import { SplashSequence } from './src/components/SplashSequence'
 import { TabBar, type TabKey } from './src/components/TabBar'
 import { ConsumptionScreen } from './src/screens/ConsumptionScreen'
 import { LoginScreen } from './src/screens/LoginScreen'
@@ -31,6 +33,13 @@ import { color } from './src/theme/tokens'
  * sem rota aninhada e sem deep link, a biblioteca custaria mais do que
  * resolve.
  */
+
+// Segura a splash NATIVA ate a nossa estar pronta para desenhar. Sem isso
+// ha um piscar branco entre a splash do sistema e a animacao.
+void SplashScreen.preventAutoHideAsync().catch(() => {
+  // Ja escondida ou indisponivel: a animacao ainda roda normalmente.
+})
+
 export default function App() {
   return (
     <SafeAreaProvider>
@@ -46,13 +55,27 @@ export default function App() {
 function Root() {
   const { authorized, initializing } = useAuth()
   const fontsLoaded = useAppFonts()
+  const [introDone, setIntroDone] = useState(false)
 
-  if (!fontsLoaded || initializing) {
-    return (
-      <View style={styles.splash}>
-        <ActivityIndicator color={color.inkMute} />
-      </View>
-    )
+  // Esconde a splash nativa assim que as fontes carregarem: a partir daí
+  // a nossa animação assume, já com a tipografia certa.
+  useEffect(() => {
+    if (fontsLoaded) {
+      void SplashScreen.hideAsync().catch(() => {})
+    }
+  }, [fontsLoaded])
+
+  const handleIntroFinished = useCallback(() => setIntroDone(true), [])
+
+  // A animação roda enquanto as fontes carregam e a sessão é verificada.
+  // Como ela leva ~1,2s, na prática o trabalho acontece "de graça" por
+  // trás dela em vez de virar espera adicional.
+  if (!fontsLoaded) {
+    return <View style={styles.splash} />
+  }
+
+  if (!introDone || initializing) {
+    return <SplashSequence onFinished={handleIntroFinished} />
   }
 
   if (!authorized) {
@@ -97,10 +120,5 @@ function useAppFonts(): boolean {
 const styles = StyleSheet.create({
   app: { flex: 1, backgroundColor: color.void },
   body: { flex: 1 },
-  splash: {
-    flex: 1,
-    backgroundColor: color.void,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  splash: { flex: 1, backgroundColor: color.void },
 })

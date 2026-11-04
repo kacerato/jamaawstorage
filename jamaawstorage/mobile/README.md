@@ -162,6 +162,31 @@ Três telas é o limite acordado, não um ponto de partida. O app não tem:
 - **Gráfico.** Em tela de celular, com uma mão, número e faixa de severidade
   decidem mais rápido do que gráfico.
 
+## Abertura e marca
+
+A tela de abertura anima a logo: o símbolo do Jamaaw é uma pilha de sete
+ondas, e elas entram em cascata de baixo para cima, as três laranja por
+último — o olho termina no topo, na cor da marca. O nome entra depois que a
+pilha fecha. Cerca de 1,2 segundo ao todo.
+
+**É SVG animado, não GIF.** A marca foi reconstruída em vetor
+([`src/components/BrandMark.tsx`](src/components/BrandMark.tsx)) a partir do
+`logojamaaw.png` do site, que tem 2048×2048 e 1,3 MB. Três motivos:
+
+1. Fica nítida em qualquer densidade de tela, sem gerar `@2x`/`@3x`.
+2. Pesa poucos KB no bundle em vez de 1,3 MB.
+3. **Cada onda é um elemento próprio, animável em separado.** Com um GIF ou
+   PNG a marca seria uma imagem só, e a única animação possível seria mover
+   o retângulo inteiro.
+
+A animação usa a Animated API da React Native com `useNativeDriver`, não
+Reanimated: são sete valores interpolados em paralelo, carga trivial.
+
+`expo-splash-screen` segura a splash nativa até as fontes carregarem, para
+não piscar branco entre ela e a animação. Como a sequência leva ~1,2s, a
+verificação da sessão e o carregamento das fontes acontecem por trás dela em
+vez de virar espera adicional.
+
 ## Identidade visual
 
 Os tokens são os mesmos do site, portados de `app/src/index.css` para

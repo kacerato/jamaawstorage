@@ -72,7 +72,7 @@ export function ConsumptionScreen() {
         </View>
         <EmptyState
           title="Nenhum dado disponível"
-          hint="Puxe a tela para baixo para tentar de novo quando houver sinal."
+          hint="Puxe para atualizar."
         />
       </View>
     )
@@ -107,7 +107,7 @@ export function ConsumptionScreen() {
           <View style={styles.controls}>
             {query.stale ? (
               <Notice severity="warn">
-                Mostrando dados salvos no aparelho. A atualização falhou.
+                Dados salvos no aparelho. Atualização falhou.
               </Notice>
             ) : null}
 
@@ -124,11 +124,9 @@ export function ConsumptionScreen() {
               />
             </View>
 
-            <Body mute style={styles.windowNote}>
-              {tab === 'reposition'
-                ? `Previsão sobre consumo líquido de ${WINDOW_DAYS} dias. Itens que circulam e voltam não entram na previsão.`
-                : `Saída líquida nos últimos ${WINDOW_DAYS} dias, já descontando devoluções.`}
-            </Body>
+            {/* Rótulo da janela, não explicação da metodologia: o detalhe
+                de cada item já diz por que ele entra ou não na previsão. */}
+            <Label>Últimos {WINDOW_DAYS} dias</Label>
           </View>
         }
         renderItem={({ item: row }) => (
@@ -327,9 +325,11 @@ const styles = StyleSheet.create({
 
   row: {
     borderLeftWidth: RULE,
-    paddingVertical: space.md,
+    // Linha alta e com folga: alvo de toque grande e leitura tranquila
+    // com o celular numa mao so.
+    paddingVertical: space.lg,
     paddingHorizontal: space.lg,
-    minHeight: TOUCH + space.md,
+    minHeight: TOUCH + space.xl,
   },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   rowText: { flex: 1, minWidth: 0, gap: 2 },

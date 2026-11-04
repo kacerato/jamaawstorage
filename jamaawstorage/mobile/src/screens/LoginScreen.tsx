@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import {
   KeyboardAvoidingView,
   Platform,
@@ -9,15 +9,30 @@ import {
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useAuth } from '../auth/AuthContext'
-import { Body, Label, Notice, PrimaryButton, Title } from '../components/primitives'
+import { BrandMark } from '../components/BrandMark'
+import { Label, Notice, PrimaryButton } from '../components/primitives'
 import { HAIRLINE, TOUCH, color, font, space } from '../theme/tokens'
 
+/**
+ * Login.
+ *
+ * Estrutura em tres blocos com respiro entre eles: marca, formulario,
+ * acao. Sem frase explicando o que a tela faz — o campo diz E-MAIL, o
+ * botao diz Entrar, e isso basta.
+ *
+ * O campo tem 52px de altura, acima dos 44 minimos: digitar e-mail e
+ * senha com uma mao, no patio, pede alvo maior que o minimo.
+ */
 export function LoginScreen() {
   const { signIn, signingIn, error } = useAuth()
   const insets = useSafeAreaInsets()
+  // ComponentRef deriva o tipo do proprio TextInput: nesta versao da RN o
+  // ref nao e mais a classe TextInput, e o nome interno nao e publico.
+  const passwordRef = useRef<React.ComponentRef<typeof TextInput>>(null)
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [focused, setFocused] = useState<'email' | 'password' | null>(null)
 
   const canSubmit = email.trim().length > 0 && password.length > 0 && !signingIn
 
@@ -34,13 +49,13 @@ export function LoginScreen() {
       <ScrollView
         contentContainerStyle={[
           styles.content,
-          { paddingTop: insets.top + space.xxl, paddingBottom: insets.bottom + space.xl },
+          { paddingTop: insets.top + space.xxl, paddingBottom: insets.bottom + space.xxl },
         ]}
         keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
       >
         <View style={styles.brand}>
-          <Title>Jamaaw</Title>
-          <Label>Almoxarifado</Label>
+          <BrandMark size={96} stacked showTagline />
         </View>
 
         <View style={styles.form}>
@@ -49,14 +64,18 @@ export function LoginScreen() {
             <TextInput
               value={email}
               onChangeText={setEmail}
+              onFocus={() => setFocused('email')}
+              onBlur={() => setFocused(null)}
+              onSubmitEditing={() => passwordRef.current?.focus()}
               autoCapitalize="none"
+              autoCorrect={false}
               autoComplete="email"
               keyboardType="email-address"
               textContentType="emailAddress"
               returnKeyType="next"
-              placeholder="supervisor@empresa.com"
               placeholderTextColor={color.inkMute}
-              style={styles.input}
+              selectionColor={color.ink}
+              style={[styles.input, focused === 'email' ? styles.inputFocused : null]}
               editable={!signingIn}
             />
           </View>
@@ -64,28 +83,28 @@ export function LoginScreen() {
           <View style={styles.field}>
             <Label>Senha</Label>
             <TextInput
+              ref={passwordRef}
               value={password}
               onChangeText={setPassword}
+              onFocus={() => setFocused('password')}
+              onBlur={() => setFocused(null)}
+              onSubmitEditing={submit}
               secureTextEntry
+              autoCapitalize="none"
               autoComplete="current-password"
               textContentType="password"
               returnKeyType="go"
-              onSubmitEditing={submit}
-              placeholder="••••••••"
               placeholderTextColor={color.inkMute}
-              style={styles.input}
+              selectionColor={color.ink}
+              style={[styles.input, focused === 'password' ? styles.inputFocused : null]}
               editable={!signingIn}
             />
           </View>
 
           {error ? <Notice severity="crit">{error}</Notice> : null}
-
-          <PrimaryButton label="Entrar" onPress={submit} loading={signingIn} disabled={!canSubmit} />
         </View>
 
-        <Body mute style={styles.footnote}>
-          Acesso restrito a supervisores. A sessão fica guardada no aparelho.
-        </Body>
+        <PrimaryButton label="Entrar" onPress={submit} loading={signingIn} disabled={!canSubmit} />
       </ScrollView>
     </KeyboardAvoidingView>
   )
@@ -97,20 +116,25 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     paddingHorizontal: space.xl,
     justifyContent: 'center',
+    // Respiro entre marca, formulario e acao. xxl sozinho ja basta: o
+    // gap soma ao espaco interno de cada bloco, e medido em 375px o
+    // vao marca-formulario passava de 140px com xxl+md.
     gap: space.xxl,
   },
-  brand: { gap: space.xs },
-  form: { gap: space.lg },
+  brand: { alignItems: 'center' },
+  form: { gap: space.xl },
   field: { gap: space.sm },
   input: {
-    minHeight: TOUCH,
+    // 52px: acima do minimo de 44, porque digitar com uma mao pede folga.
+    minHeight: 52,
     backgroundColor: color.surface,
     borderWidth: HAIRLINE,
     borderColor: color.line,
-    paddingHorizontal: space.md,
+    paddingHorizontal: space.lg,
     fontFamily: font.text,
-    fontSize: 15,
+    fontSize: 16,
     color: color.ink,
   },
-  footnote: { fontSize: 12, textAlign: 'center' },
+  // Foco marca com a linha clara, nunca com laranja (regra 3 dos tokens).
+  inputFocused: { borderColor: color.inkMute },
 })

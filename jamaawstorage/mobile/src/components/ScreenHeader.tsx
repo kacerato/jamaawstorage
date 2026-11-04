@@ -51,7 +51,9 @@ export function ScreenHeader({
 const styles = StyleSheet.create({
   header: {
     paddingHorizontal: space.lg,
-    paddingBottom: space.md,
+    // Respiro generoso abaixo do titulo: ritmo mobile, hierarquia por
+    // tamanho e espaco em vez de linha e caixa.
+    paddingBottom: space.lg,
     borderBottomWidth: HAIRLINE,
     borderBottomColor: color.line,
     gap: space.xs,

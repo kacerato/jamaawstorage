@@ -125,7 +125,7 @@ export function VehiclesScreen() {
         </View>
         <EmptyState
           title="Nenhum dado disponível"
-          hint="Puxe a tela para baixo para tentar de novo quando houver sinal."
+          hint="Puxe para atualizar."
         />
       </View>
     )
@@ -161,15 +161,13 @@ export function VehiclesScreen() {
       >
         {query.stale ? (
           <Notice severity="warn">
-            Mostrando dados salvos no aparelho. A atualização falhou.
+            Dados salvos no aparelho. Atualização falhou.
           </Notice>
         ) : null}
 
         {permission !== 'granted' && permission !== 'unsupported' ? (
           <Surface style={styles.permissionCard}>
-            <Body dim style={styles.permissionText}>
-              Ativar aviso no celular quando uma manutenção vencer.
-            </Body>
+            <Label>Avisar quando vencer</Label>
             <GhostButton label="Ativar avisos" onPress={() => void enableNotifications()} />
           </Surface>
         ) : null}
@@ -183,7 +181,7 @@ export function VehiclesScreen() {
         {vehicles.length === 0 ? (
           <EmptyState
             title="Nenhum veículo cadastrado"
-            hint="Cadastre a frota no painel web; este app é somente consulta."
+            hint="Cadastre no painel web."
           />
         ) : (
           vehicles.map((vehicle) => (
@@ -301,8 +299,7 @@ function VehicleCard({
 
         {alerts.length === 0 ? (
           <Body mute style={styles.alertEmpty}>
-            Nenhum alerta cadastrado para este veículo. Cadastre troca de óleo,
-            revisão, pneus ou documento no painel web para acompanhar aqui.
+            Nenhum alerta cadastrado. Cadastre no painel web.
           </Body>
         ) : (
           <View style={styles.alertList}>

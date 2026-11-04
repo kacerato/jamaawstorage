@@ -265,8 +265,10 @@ export function Notice({
 const styles = StyleSheet.create({
   title: {
     fontFamily: font.titleBold,
-    fontSize: 26,
-    lineHeight: 32,
+    // 32 em vez de 26: na tela do celular a hierarquia se faz por
+    // tamanho, ja que nao ha espaco lateral para fazer por posicao.
+    fontSize: 32,
+    lineHeight: 38,
     color: color.ink,
     letterSpacing: -0.5,
   },

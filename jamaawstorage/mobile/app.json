@@ -37,7 +37,8 @@
         {
           "color": "#FF5D00"
         }
-      ]
+      ],
+      "expo-splash-screen"
     ]
   }
 }

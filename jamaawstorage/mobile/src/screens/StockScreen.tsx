@@ -88,7 +88,7 @@ export function StockScreen() {
         </View>
         <EmptyState
           title="Nenhum dado disponível"
-          hint="Puxe a tela para baixo para tentar de novo quando houver sinal."
+          hint="Puxe para atualizar."
         />
       </View>
     )
@@ -119,7 +119,7 @@ export function StockScreen() {
           <View style={styles.controls}>
             {query.stale ? (
               <Notice severity="warn">
-                Mostrando dados salvos no aparelho. A atualização falhou.
+                Dados salvos no aparelho. Atualização falhou.
               </Notice>
             ) : null}
 
@@ -227,7 +227,7 @@ export function StockScreen() {
                 ? `Nenhum item encontrado para "${search.trim()}"`
                 : 'Nenhum item neste filtro'
             }
-            hint={filter !== 'all' ? 'Toque em Todos para ver o estoque inteiro.' : undefined}
+            hint={filter !== 'all' ? 'Toque em Todos.' : undefined}
           />
         }
         contentContainerStyle={styles.listContent}
@@ -275,9 +275,11 @@ const styles = StyleSheet.create({
 
   row: {
     borderLeftWidth: RULE,
-    paddingVertical: space.md,
+    // Linha alta e com folga: alvo de toque grande e leitura tranquila
+    // com o celular numa mao so.
+    paddingVertical: space.lg,
     paddingHorizontal: space.lg,
-    minHeight: TOUCH + space.md,
+    minHeight: TOUCH + space.xl,
   },
   rowMain: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   rowText: { flex: 1, minWidth: 0, gap: 2 },
