@@ -19,7 +19,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             htmlFor={inputId}
             className={cn(
               'text-sm font-medium',
-              error ? 'text-red-400' : 'text-gray-300',
+              error ? 'text-crit' : 'text-ink-dim',
             )}
           >
             {label}
@@ -27,7 +27,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
         )}
         <div className="relative">
           {leftIcon && (
-            <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">
+            <div className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-mute">
               {leftIcon}
             </div>
           )}
@@ -35,10 +35,10 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={cn(
-              'w-full rounded-lg border bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/50',
+              'min-h-touch w-full rounded-none border bg-void px-3 py-2 text-sm text-ink placeholder-ink-mute transition-colors focus:outline-none',
               error
-                ? 'border-red-500 text-red-400 focus:border-red-500'
-                : 'border-gray-700 focus:border-orange-500',
+                ? 'border-crit focus:border-crit'
+                : 'border-line focus:border-ink',
               leftIcon ? 'pl-10' : '',
               props.disabled ? 'cursor-not-allowed opacity-50' : '',
               className,
@@ -46,9 +46,9 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
             {...props}
           />
         </div>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-crit">{error}</p>}
         {helperText && !error && (
-          <p className="text-sm text-gray-400">{helperText}</p>
+          <p className="text-sm text-ink-mute">{helperText}</p>
         )}
       </div>
     )

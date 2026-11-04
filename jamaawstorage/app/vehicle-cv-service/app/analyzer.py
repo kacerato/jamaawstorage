@@ -188,8 +188,33 @@ def _split_touching_digits(binary: np.ndarray, runs: list[tuple[int, int]]) -> l
     return result
 
 
+def _deskew_glyph(glyph: np.ndarray) -> np.ndarray:
+    """Straighten a glyph tilted by the camera angle.
+
+    A photo taken a few degrees off square slants the whole character. The
+    vertical strokes then lean into the neighbouring sampling window, and a
+    5 reads as a 9 with an exact segment match, so nothing downstream can
+    tell it is wrong. Shearing by the glyph's own second moment puts the
+    strokes back inside their own windows.
+    """
+    points = cv2.findNonZero(glyph)
+    if points is None or len(points) < 12:
+        return glyph
+    moments = cv2.moments(glyph, binaryImage=True)
+    if abs(moments["mu02"]) < 1e-2:
+        return glyph
+    skew = moments["mu11"] / moments["mu02"]
+    if abs(skew) < .08:
+        return glyph
+    skew = max(-.6, min(.6, skew))
+    height, width = glyph.shape[:2]
+    matrix = np.float32([[1, -skew, skew * height * .5], [0, 1, 0]])
+    return cv2.warpAffine(glyph, matrix, (width, height), flags=cv2.INTER_NEAREST,
+                          borderMode=cv2.BORDER_CONSTANT, borderValue=0)
+
+
 def _segment_pattern(glyph: np.ndarray) -> tuple[int, int, int, int, int, int, int]:
-    occupied = cv2.resize(glyph, (36, 60), interpolation=cv2.INTER_NEAREST) > 0
+    occupied = cv2.resize(_deskew_glyph(glyph), (36, 60), interpolation=cv2.INTER_NEAREST) > 0
     # Keep the sampling windows away from the segment junctions. The former
     # windows overlapped the top/middle bars, turning a reflected 5 into a 9.
     regions = (occupied[2:8, 9:27], occupied[12:24, 1:8], occupied[12:24, 28:35],
@@ -280,8 +305,15 @@ def read_odometer(screen: np.ndarray) -> tuple[int | None, float, list[str]]:
         value = max(values, key=lambda item: sum(candidate == item for candidate, _ in candidates))
         selected = [confidence for candidate, confidence in candidates if candidate == value]
         agreement = len(selected) / len(candidates)
-        confidence = min(.99, .76 + agreement * .20 + float(np.mean(selected)) * .03)
-        if agreement >= .75:
+        glyph_quality = float(np.mean(selected))
+        confidence = min(.99, .76 + agreement * .20 + glyph_quality * .03)
+        # Agreement alone was publishing an odometer the segments never
+        # supported: a blown-out photo gave two candidates that agreed on 485
+        # while every digit sat one segment away from a clean match, and the
+        # reading went out at 0.98. What separates that from a real reading is
+        # glyph quality, not how many thresholds survived: the digits must
+        # actually look like the digits claimed.
+        if agreement >= .75 and glyph_quality >= .80:
             return value, confidence, [f"odometer-groups:{candidates}"]
 
     # Keep the generic reader as a conservative fallback for other dashboard
@@ -320,54 +352,168 @@ def _fuel_components(binary: np.ndarray) -> list[tuple[int, int, int, int]]:
     return sorted(bars)
 
 
+def _strip_rows(gray: np.ndarray, threshold: int) -> np.ndarray | None:
+    """Locate the fuel row by its own shape, not by a fixed window.
+
+    A tilted or high-angle photo moves the LCD inside its envelope: a band
+    pinned to .75-.85 of the crop then samples the fuel-pump icon and reads
+    two bars with full threshold agreement. The fuel row is instead the one
+    row in the lower half holding several separated blocks of similar width,
+    which is true wherever the warp puts it.
+    """
+    height = gray.shape[0]
+    _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
+    window = max(3, int(height * .07))
+    best: tuple[int, np.ndarray] | None = None
+    for top in range(int(height * .62), int(height * .95) - window, max(1, window // 3)):
+        strip = binary[top:top + window, :]
+        dense = (strip > 0).sum(axis=0) >= strip.shape[0] * .5
+        blocks, start = [], None
+        for index, value in enumerate(dense):
+            if value and start is None:
+                start = index
+            elif not value and start is not None:
+                blocks.append((start, index - 1))
+                start = None
+        if start is not None:
+            blocks.append((start, len(dense) - 1))
+        wide = [(a, b) for a, b in blocks if b - a + 1 >= max(2, int(gray.shape[1] * .015))]
+        if len(wide) < 3:
+            continue
+        # Prefer the row with the most same-width blocks: the bar track.
+        widths = [b - a + 1 for a, b in wide]
+        median = float(np.median(widths))
+        regular = sum(1 for value in widths if abs(value - median) <= median * .45)
+        if best is None or regular > best[0]:
+            best = (regular, strip)
+    return best[1] if best is not None else None
+
+
+def _fuel_track(gray: np.ndarray, threshold: int) -> int | None:
+    """Read the gauge from the track's geometry, not by counting blobs.
+
+    The strip reads `E [bar][bar]...[empty][empty] F`. Counting connected
+    components breaks as soon as two neighbouring bars touch: a bright photo
+    fuses six bars into one blob and the gauge reports 1/8 with high
+    confidence. Here the lit span is measured against one bar's pitch, which
+    survives fusion, and the E/F labels are dropped by their isolation rather
+    than by a brightness rule that daylight defeats.
+    """
+    strip = _strip_rows(gray, threshold)
+    if strip is None:
+        return None
+
+    dense = (strip > 0).sum(axis=0) >= strip.shape[0] * .5
+    width = gray.shape[1]
+    runs: list[tuple[int, int]] = []
+    start: int | None = None
+    for index, value in enumerate(dense):
+        if value and start is None:
+            start = index
+        elif not value and start is not None:
+            runs.append((start, index - 1))
+            start = None
+    if start is not None:
+        runs.append((start, len(dense) - 1))
+    # A seam of one or two dim columns splits a single bar in the photo; the
+    # bars themselves never sit that close together.
+    merged: list[list[int]] = []
+    for left, right in runs:
+        if merged and left - merged[-1][1] <= max(2, int(width * .012)):
+            merged[-1][1] = right
+        else:
+            merged.append([left, right])
+    # A bar occupies about an eighth of the track, so a block far wider than
+    # that is washed-out screen, not a bar. The margins are excluded for the
+    # same reason: an overexposed photo lights up both crop edges, and those
+    # two blobs are regular with each other, so they read as two bars at full
+    # confidence while the real track sits between them.
+    margin = width * .04
+    blocks = [(a, b) for a, b in merged
+              if max(2, int(width * .015)) <= b - a + 1 <= width * .22
+              and a >= margin and b <= width - margin]
+    if len(blocks) < 2:
+        return None
+
+    # The bars are the one evenly pitched run of same-sized blocks on the row.
+    # E, F, the fuel pump icon and any screen-edge reflection are narrower,
+    # wider or off-pitch, so picking the longest regular sequence drops them
+    # without a brightness rule that daylight defeats. Trimming the ends by a
+    # gap ratio could not tell a lit E from a seventh bar.
+    best: list[tuple[int, int]] = []
+    for start in range(len(blocks)):
+        for end in range(start + 1, len(blocks) + 1):
+            run = blocks[start:end]
+            if len(run) < 2:
+                continue
+            widths = [b - a + 1 for a, b in run]
+            pitches = [run[i + 1][0] - run[i][0] for i in range(len(run) - 1)]
+            median_width = float(np.median(widths))
+            median_pitch = float(np.median(pitches))
+            if median_width <= 0 or median_pitch <= 0:
+                continue
+            # Same width and same spacing, within the tolerance a phone photo
+            # of a backlit LCD actually produces.
+            if max(abs(w - median_width) for w in widths) > median_width * .45:
+                continue
+            if max(abs(p - median_pitch) for p in pitches) > median_pitch * .35:
+                continue
+            if not 1.05 <= median_pitch / median_width <= 2.2:
+                continue
+            if len(run) > len(best):
+                best = run
+    if len(best) < 2:
+        return None
+
+    widths = [b - a + 1 for a, b in best]
+    unit = float(np.median(widths))
+    pitches = [best[i + 1][0] - best[i][0] for i in range(len(best) - 1)]
+    pitch = float(np.median(pitches))
+    if pitch <= 0 or unit <= 0:
+        return None
+
+    # A uniform blowout fuses every pair of bars at once, and the local pitch
+    # then doubles with them: the run still looks perfectly regular while it
+    # reports half the bars. The track's own width is the invariant that does
+    # not double, so reject a pitch that cannot divide E..F into eight slots.
+    span = blocks[-1][1] - blocks[0][0] + 1
+    if span > 0:
+        slot = span / TOTAL_FUEL_BARS
+        if not .55 <= pitch / slot <= 1.75:
+            return None
+
+    # A block may still hold several fused bars: size each against the pitch.
+    bars = sum(max(1, int(round((b - a + 1 + (pitch - unit)) / pitch))) for a, b in best)
+    return bars if 1 <= bars <= TOTAL_FUEL_BARS else None
+
+
 def read_fuel_bars(screen: np.ndarray) -> tuple[int | None, float, list[str]]:
+    """Read the gauge across a threshold sweep and publish only on consensus.
+
+    A threshold that fuses or drops bars produces an outlier, so the decision
+    rests on how many thresholds agree on one value, not on the raw spread:
+    [2, 6, 6, 6] is three independent readings of six plus one bad exposure,
+    while [1, 1, 2, 3] is noise and stays unpublished.
+    """
     gray = cv2.cvtColor(screen, cv2.COLOR_BGR2GRAY)
     readings: list[int] = []
-    height, width = screen.shape[:2]
-    for threshold in (165, 185, 205, 220):
-        _, binary = cv2.threshold(gray, threshold, 255, cv2.THRESH_BINARY)
-        count, _, stats, _ = cv2.connectedComponentsWithStats(binary)
-        components: list[tuple[int, int, int, int]] = []
-        for x, y, component_width, component_height, area in stats[1:count]:
-            fill = area / max(component_width * component_height, 1)
-            if not (.63 * height < y < .85 * height and .20 * width < x < .75 * width):
-                continue
-            if not (.025 * height < component_height < .10 * height and .025 * width < component_width < .10 * width):
-                continue
-            if fill >= .45:
-                components.append((int(x), int(y), int(component_width), int(component_height)))
-        if not components:
-            continue
-        # The filled bars share a baseline and size. This rejects E/F and
-        # nearby icons even when their brightness resembles a bar.
-        baseline = max({item[1] for item in components}, key=lambda y: sum(abs(other[1] - y) <= 2 for other in components))
-        aligned = [item for item in components if abs(item[1] - baseline) <= 2]
-        if aligned:
-            median_width = float(np.median([item[2] for item in aligned]))
-            aligned = [item for item in aligned if .72 <= item[2] / max(median_width, 1) <= 1.30]
-        if 1 <= len(aligned) <= TOTAL_FUEL_BARS:
-            readings.append(len(aligned))
-    if readings:
-        bars = max(set(readings), key=readings.count)
-        agreement = readings.count(bars) / len(readings)
-        confidence = min(.99, .76 + agreement * .22)
-        # A low threshold can merge the bars with the E/F labels in a bright
-        # reflection. Two independent high-contrast thresholds agreeing are
-        # sufficient evidence, while a lone reading is still rejected.
-        if agreement >= .50 and readings.count(bars) >= 2:
-            return bars, confidence, [f"fuel-groups:{readings}"]
+    for threshold in (150, 170, 190, 210, 230):
+        value = _fuel_track(gray, threshold)
+        if value is not None:
+            readings.append(value)
+    if not readings:
+        return None, 0.0, ["fuel-bars-not-found"]
 
-    crop = crop_normalized(screen, FUEL_ROI)
-    readings = [len(_fuel_components(binary)) for binary in _binary_variants(crop)]
-    valid = [count for count in readings if 1 <= count <= TOTAL_FUEL_BARS]
-    if not valid:
-        return None, 0.0, [f"fuel-candidates:{readings}", "fuel-bars-not-found"]
-    bars = max(set(valid), key=valid.count)
-    agreement = valid.count(bars) / len(readings)
-    confidence = min(.99, .69 + agreement * .30)
-    if agreement < .55 or confidence < .82:
-        return None, confidence, [f"fuel-rejected:agreement={agreement:.2f}", f"fuel-candidates:{readings}"]
-    return bars, confidence, [f"fuel-candidates:{readings}"]
+    bars = max(set(readings), key=readings.count)
+    votes = readings.count(bars)
+    agreement = votes / len(readings)
+    confidence = min(.99, .72 + agreement * .26)
+    # Two agreeing thresholds are the least that distinguishes a reading from
+    # a coincidence; a lone reading is never published, however clean it looks.
+    if votes >= 2 and agreement >= .60:
+        return bars, confidence, [f"fuel-track:{readings}"]
+    return None, confidence, [f"fuel-rejected:votes={votes},agreement={agreement:.2f}",
+                              f"fuel-track:{readings}"]
 
 
 def read_qr(image: np.ndarray) -> str | None:

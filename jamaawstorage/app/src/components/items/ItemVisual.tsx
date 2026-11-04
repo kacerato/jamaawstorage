@@ -21,7 +21,7 @@ export function ItemVisual({
         src={normalizedKey}
         alt={alt ?? 'Item'}
         style={{ width: size, height: size, objectFit: 'cover' }}
-        className={cn('rounded-lg', className)}
+        className={cn('rounded-none', className)}
         draggable={false}
       />
     )

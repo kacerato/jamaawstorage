@@ -28,7 +28,7 @@ export function AppLayout() {
   }, [])
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,_#09090b_0%,_#030712_48%,_#111827_100%)] text-white">
+    <div className="min-h-screen bg-void text-ink">
       <Sidebar
         isOpen={sidebarOpen}
         isCollapsed={sidebarCollapsed}

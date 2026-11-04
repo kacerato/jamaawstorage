@@ -17,18 +17,22 @@ interface NavItem {
   label: string
   path: string
   icon: React.ReactNode
+  /* Item que so existe para o administrador. Nao e controle de acesso: a RLS
+   * recusa os dados de qualquer forma. Serve para nao oferecer o que vai dar
+   * em pagina vazia. */
+  adminOnly?: boolean
 }
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', path: '/', icon: <WarehouseIcon size={20} /> },
   { label: 'Estoque', path: '/stock', icon: <PackageIcon size={20} /> },
   { label: 'Colaboradores', path: '/people', icon: <UsersIcon size={20} /> },
-  { label: 'Supervisores', path: '/supervisors', icon: <UsersIcon size={20} /> },
+  { label: 'Contas', path: '/supervisors', icon: <UsersIcon size={20} />, adminOnly: true },
   { label: 'Retiradas', path: '/withdrawals', icon: <ClipboardIcon size={20} /> },
   { label: 'Devoluções', path: '/returns', icon: <PackageIcon size={20} /> },
   { label: 'Carros', path: '/vehicles', icon: <Car size={20} /> },
   { label: 'Relatórios', path: '/reports', icon: <ChartIcon size={20} /> },
-  { label: 'Auditoria', path: '/audit', icon: <SignatureIcon size={20} /> },
+  { label: 'Auditoria', path: '/audit', icon: <SignatureIcon size={20} />, adminOnly: true },
   { label: 'Perfil', path: '/profile', icon: <UserIcon size={20} /> },
 ]
 
@@ -40,7 +44,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: SidebarProps) {
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, isAdmin } = useAuth()
+  const visibleNavItems = navItems.filter((item) => !item.adminOnly || isAdmin)
 
   const handleNavClick = () => {
     if (window.innerWidth < 1024) {
@@ -57,7 +62,7 @@ export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: Side
     <>
       {isOpen && (
         <div
-          className="fixed inset-0 z-40 bg-black/60 lg:hidden"
+          className="fixed inset-0 z-40 bg-void lg:hidden"
           onClick={onClose}
           aria-hidden="true"
         />
@@ -65,12 +70,12 @@ export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: Side
 
       <aside
         className={cn(
-          'fixed left-0 top-0 z-50 flex h-full flex-col border-r border-white/10 bg-[#0b0b0c]/95 backdrop-blur-xl transition-all duration-300',
+          'fixed left-0 top-0 z-50 flex h-full flex-col border-r border-line bg-void/95 transition-all duration-300',
           isCollapsed ? 'w-16' : 'w-64',
           isOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
         )}
       >
-        <div className={cn('border-b border-white/8 px-3 py-4', isCollapsed && 'px-2')}>
+        <div className={cn('border-b border-line px-3 py-4', isCollapsed && 'px-2')}>
           {isCollapsed ? (
             <div className="flex justify-center">
               <BrandMark compact />
@@ -82,7 +87,7 @@ export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: Side
 
         <nav className="flex-1 overflow-y-auto px-2 py-4">
           <ul className="flex flex-col gap-1.5">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}
@@ -90,10 +95,10 @@ export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: Side
                   onClick={handleNavClick}
                   className={({ isActive }: { isActive: boolean }) =>
                     cn(
-                      'group flex items-center gap-3 rounded-2xl px-3 py-3 text-sm font-medium transition-all duration-200',
+                      'group flex items-center gap-3 rounded-none px-3 py-3 text-sm font-medium transition-all duration-200',
                       isActive
-                        ? 'bg-gradient-to-r from-orange-500/18 to-orange-400/6 text-orange-300 shadow-[inset_0_0_0_1px_rgba(249,115,22,0.24)]'
-                        : 'text-gray-400 hover:bg-white/5 hover:text-white',
+                        ? '   text-ink'
+                        : 'text-ink-dim hover:bg-surface hover:text-ink',
                       isCollapsed && 'justify-center px-2'
                     )
                   }
@@ -106,20 +111,20 @@ export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: Side
           </ul>
         </nav>
 
-        <div className={cn('border-t border-white/8 px-3 py-3', isCollapsed && 'px-2')}>
+        <div className={cn('border-t border-line px-3 py-3', isCollapsed && 'px-2')}>
           {!isCollapsed && profile && (
-            <div className="mb-3 rounded-2xl border border-white/8 bg-white/4 px-3 py-3">
-              <span className="block truncate text-sm font-medium text-white">
+            <div className="mb-3 rounded-none border border-line bg-surface px-3 py-3">
+              <span className="block truncate text-sm font-medium text-ink">
                 {profile.full_name}
               </span>
-              <span className="text-xs text-orange-200/80">Supervisor</span>
+              <span className="text-xs text-ink-dim">{isAdmin ? 'Administrador' : 'Supervisor'}</span>
             </div>
           )}
 
           <button
             onClick={handleSignOut}
             className={cn(
-              'flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm font-medium text-gray-400 transition-colors hover:bg-white/5 hover:text-red-300',
+              'flex w-full items-center gap-3 rounded-none px-3 py-2.5 text-sm font-medium text-ink-dim transition-colors hover:bg-surface hover:text-crit',
               isCollapsed && 'justify-center px-2'
             )}
           >
@@ -132,11 +137,11 @@ export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: Side
           </button>
         </div>
 
-        <div className={cn('border-t border-white/8 px-3 py-2', isCollapsed && 'px-2')}>
+        <div className={cn('border-t border-line px-3 py-2', isCollapsed && 'px-2')}>
           <button
             onClick={onToggleCollapse}
             className={cn(
-              'flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-gray-400 transition-colors hover:bg-white/5 hover:text-white',
+              'flex w-full items-center gap-3 rounded-none px-3 py-2.5 text-sm text-ink-dim transition-colors hover:bg-surface hover:text-ink',
               isCollapsed && 'justify-center px-2'
             )}
             aria-label={isCollapsed ? 'Expandir menu' : 'Recolher menu'}

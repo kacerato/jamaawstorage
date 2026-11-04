@@ -959,8 +959,7 @@ export function VehiclesPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">Carros JamaaW</h1>
-          <p className="mt-1 text-sm text-gray-400">Cadastro, responsavel, kilometragem, combustivel e abastecimentos com evidencia por foto.</p>
+          <h1 className="text-2xl font-bold text-ink">Carros JamaaW</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button onClick={openCreateVehicleModal} leftIcon={<Plus size={16} />}>
@@ -973,7 +972,7 @@ export function VehiclesPage() {
             <a
               href={`/api/vehicle-marker?code=${encodeURIComponent(selectedVehicle.code)}`}
               download={`${selectedVehicle.code}-marker.png`}
-              className="inline-flex items-center justify-center gap-2 rounded-lg border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-gray-200 transition-colors hover:bg-white/10"
+              className="inline-flex items-center justify-center gap-2 rounded-none border border-line bg-surface px-4 py-2 text-sm font-medium text-ink-dim transition-colors hover:bg-surface"
             >
               <QrCode size={16} /> Baixar QR
             </a>
@@ -995,24 +994,24 @@ export function VehiclesPage() {
           <div className="space-y-4 xl:sticky xl:top-6 xl:max-h-[calc(100vh-150px)] xl:overflow-y-auto xl:pr-1">
             {vehicles.map((vehicle) => (
               <button key={vehicle.id} type="button" onClick={() => setSelectedVehicleId(vehicle.id)} className="w-full text-left">
-                <Card variant="bordered" className={`overflow-hidden border-white/8 ${selectedVehicle?.id === vehicle.id ? 'bg-orange-500/10' : 'bg-white/3'}`}>
+                <Card variant="bordered" className={`overflow-hidden border-line ${selectedVehicle?.id === vehicle.id ? 'bg-surface' : 'bg-surface'}`}>
                   <div className="grid grid-cols-[96px_minmax(0,1fr)] gap-4">
-                    <div className="aspect-[3/4] overflow-hidden rounded-2xl border border-white/10 bg-black/30">
+                    <div className="aspect-[3/4] overflow-hidden rounded-none border border-line bg-void">
                       {vehicle.photo_url ? (
                         <img src={vehicle.photo_url} alt={vehicle.model} className="h-full w-full object-cover" />
                       ) : (
-                        <div className="flex h-full items-center justify-center text-orange-200"><Car size={42} /></div>
+                        <div className="flex h-full items-center justify-center text-ink"><Car size={42} /></div>
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-[11px] uppercase tracking-[0.22em] text-orange-200/70">Carteira digital</p>
-                      <h2 className="mt-1 truncate text-lg font-semibold text-white">{vehicle.code}</h2>
-                      <p className="mt-1 text-sm text-gray-300">{vehicle.model}</p>
+                      <p className="text-[11px] uppercase tracking-[0.22em] text-ink">Carteira digital</p>
+                      <h2 className="mt-1 truncate text-lg font-semibold text-ink">{vehicle.code}</h2>
+                      <p className="mt-1 text-sm text-ink-dim">{vehicle.model}</p>
                       <div className="mt-3 grid grid-cols-2 gap-2">
                         <MiniMetric label="Placa" value={vehicle.plate ?? '-'} />
                         <MiniMetric label="Alertas" value={String(maintenanceAlerts.filter((alert) => alert.vehicle_id === vehicle.id && alert.status === 'active').length)} />
                       </div>
-                      <div className="mt-3 flex items-center gap-2 text-xs text-gray-400">
+                      <div className="mt-3 flex items-center gap-2 text-xs text-ink-dim">
                         <UserRound size={14} />
                         <span className="truncate">{vehicle.responsible_person?.full_name ?? 'Sem responsavel'}</span>
                       </div>
@@ -1024,16 +1023,16 @@ export function VehiclesPage() {
           </div>
 
           {selectedVehicle ? (
-            <Card variant="bordered" className="min-w-0 overflow-hidden border-white/8 bg-[#101114]">
+            <Card variant="bordered" className="min-w-0 overflow-hidden border-line bg-surface">
               <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                   <Badge variant="warning">Responsavel: {selectedVehicle.responsible_person?.full_name ?? 'nao definido'}</Badge>
-                  <h2 className="mt-3 text-2xl font-semibold text-white">{selectedVehicle.model}</h2>
-                  <p className="mt-1 text-sm text-gray-400">{selectedVehicle.plate ?? 'Sem placa'} • {selectedVehicle.color ?? 'Cor nao informada'}</p>
+                  <h2 className="mt-3 text-2xl font-semibold text-ink">{selectedVehicle.model}</h2>
+                  <p className="mt-1 text-sm text-ink-dim">{selectedVehicle.plate ?? 'Sem placa'} • {selectedVehicle.color ?? 'Cor nao informada'}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {selectedVehicle.document_url ? (
-                    <a href={selectedVehicle.document_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-sm text-orange-200 hover:bg-white/5">
+                    <a href={selectedVehicle.document_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-none border border-line px-3 py-2 text-sm text-ink hover:bg-surface">
                       <FileText size={16} />
                       Documento
                     </a>
@@ -1056,28 +1055,28 @@ export function VehiclesPage() {
 
               <div className="mt-6 space-y-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <h3 className="text-lg font-semibold text-white">Revisoes e alertas</h3>
+                  <h3 className="text-lg font-semibold text-ink">Revisoes e alertas</h3>
                   <Button size="sm" variant="secondary" onClick={openCreateMaintenanceModal} leftIcon={<Plus size={14} />}>
                     Adicionar alerta
                   </Button>
                 </div>
                 {selectedMaintenanceAlerts.length === 0 ? (
-                  <p className="rounded-xl border border-white/8 bg-white/3 p-4 text-sm text-gray-400">Nenhum alerta de revisao cadastrado para este carro.</p>
+                  <p className="rounded-none border border-line bg-surface p-4 text-sm text-ink-dim">Nenhum alerta de revisao cadastrado para este carro.</p>
                 ) : (
                   <div className="grid gap-3 2xl:grid-cols-2">
                     {selectedMaintenanceAlerts.map((alert) => {
                       const state = maintenanceState(alert, currentOdometerKm)
                       const isClosed = alert.status !== 'active'
                       return (
-                        <div key={alert.id} className="min-w-0 rounded-xl border border-white/8 bg-white/4 p-4">
+                        <div key={alert.id} className="min-w-0 rounded-none border border-line bg-surface p-4">
                           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                             <div className="min-w-0">
                               <div className="flex flex-wrap items-center gap-2">
                                 <Badge variant={state.variant}>{state.label}</Badge>
                                 <Badge variant="info">{maintenanceTypeLabel(alert.alert_type)}</Badge>
                               </div>
-                              <h4 className="mt-2 truncate text-sm font-semibold text-white">{alert.title}</h4>
-                              <p className="mt-1 text-sm text-gray-300">{maintenanceTargetSummary(alert)}</p>
+                              <h4 className="mt-2 truncate text-sm font-semibold text-ink">{alert.title}</h4>
+                              <p className="mt-1 text-sm text-ink-dim">{maintenanceTargetSummary(alert)}</p>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <Button size="sm" variant="secondary" onClick={() => openEditMaintenanceModal(alert)} leftIcon={<Pencil size={14} />}>
@@ -1093,11 +1092,11 @@ export function VehiclesPage() {
                               </Button>
                             </div>
                           </div>
-                          <div className="mt-3 grid gap-2 text-xs text-gray-400 sm:grid-cols-2">
+                          <div className="mt-3 grid gap-2 text-xs text-ink-dim sm:grid-cols-2">
                             <span className="inline-flex items-center gap-1.5"><AlertTriangle size={13} /> Aviso: {alert.advance_days} dia(s) / {alert.advance_km.toLocaleString('pt-BR')} km antes</span>
                             <span className="inline-flex items-center gap-1.5"><CalendarDays size={13} /> Repete: {alert.repeat_interval_days ? `${alert.repeat_interval_days} dia(s)` : '-'} {alert.repeat_interval_km ? `/ ${alert.repeat_interval_km.toLocaleString('pt-BR')} km` : ''}</span>
                           </div>
-                          {alert.notes ? <p className="mt-3 break-words text-sm text-gray-400">{alert.notes}</p> : null}
+                          {alert.notes ? <p className="mt-3 break-words text-sm text-ink-dim">{alert.notes}</p> : null}
                         </div>
                       )
                     })}
@@ -1106,20 +1105,20 @@ export function VehiclesPage() {
               </div>
 
               <div className="mt-6 space-y-3">
-                <h3 className="text-lg font-semibold text-white">Historico do carro</h3>
+                <h3 className="text-lg font-semibold text-ink">Historico do carro</h3>
                 {selectedLogs.length === 0 ? (
-                  <p className="rounded-xl border border-white/8 bg-white/3 p-4 text-sm text-gray-400">Nenhum registro feito para este carro.</p>
+                  <p className="rounded-none border border-line bg-surface p-4 text-sm text-ink-dim">Nenhum registro feito para este carro.</p>
                 ) : (
                   <div className="max-h-[560px] space-y-3 overflow-y-auto pr-1">
                     {selectedLogs.map((log) => (
-                      <div key={log.id} className="grid min-w-0 gap-4 rounded-xl border border-white/8 bg-white/4 p-4 md:grid-cols-[92px_minmax(0,1fr)]">
-                        {log.photo_url ? <img src={log.photo_url} alt={eventLabel(log.event_type)} className="h-24 w-full rounded-lg object-cover md:w-24" /> : <div className="flex h-24 items-center justify-center rounded-lg bg-black/30"><Camera size={24} /></div>}
+                      <div key={log.id} className="grid min-w-0 gap-4 rounded-none border border-line bg-surface p-4 md:grid-cols-[92px_minmax(0,1fr)]">
+                        {log.photo_url ? <img src={log.photo_url} alt={eventLabel(log.event_type)} className="h-24 w-full rounded-none object-cover md:w-24" /> : <div className="flex h-24 items-center justify-center rounded-none bg-void"><Camera size={24} /></div>}
                         <div className="min-w-0">
                           <div className="flex flex-wrap items-start justify-between gap-3">
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant={log.event_type === 'fuel' ? 'warning' : 'info'}>{eventLabel(log.event_type)}</Badge>
                               {log.needs_review ? <Badge variant="warning">Revisar leitura</Badge> : null}
-                              <span className="text-xs text-gray-500">{formatDateTime(log.occurred_at)}</span>
+                              <span className="text-xs text-ink-mute">{formatDateTime(log.occurred_at)}</span>
                             </div>
                             <div className="flex flex-wrap gap-2">
                               <Button size="sm" variant="secondary" onClick={() => openEditLogModal(log)} leftIcon={<Pencil size={14} />}>
@@ -1130,13 +1129,13 @@ export function VehiclesPage() {
                               </Button>
                             </div>
                           </div>
-                          <p className="mt-2 break-words text-sm text-gray-300">
+                          <p className="mt-2 break-words text-sm text-ink-dim">
                             Km: {log.odometer_km ?? '-'} | Combustivel: {log.fuel_level_percent != null ? `${log.fuel_level_percent}%` : '-'}
                             {log.fuel_level_range ? ` (${fuelRangeLabel(log.fuel_level_range)})` : ''}
                             {log.fuel_bars_filled != null && log.fuel_bars_total != null ? ` | ${log.fuel_bars_filled}/${log.fuel_bars_total} barras` : ''}
                             {log.fuel_liters ? ` | ${log.fuel_liters} L` : ''}
                           </p>
-                          {log.ai_summary ? <p className="mt-2 break-words text-sm text-gray-400">{log.ai_summary}</p> : null}
+                          {log.ai_summary ? <p className="mt-2 break-words text-sm text-ink-dim">{log.ai_summary}</p> : null}
                         </div>
                       </div>
                     ))}
@@ -1150,11 +1149,11 @@ export function VehiclesPage() {
 
       <Modal isOpen={showVehicleModal} onClose={closeVehicleModal} title={editingVehicleId ? 'Editar carro' : 'Cadastrar carro'} size="xl">
         <div className="grid gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-          <div className="rounded-[28px] border border-white/10 bg-black/30 p-4">
-            <div className="aspect-[3/4] overflow-hidden rounded-3xl border border-white/10 bg-[#16171a]">
-              {vehicleForm.photo_url ? <img src={vehicleForm.photo_url} alt="Carro" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-orange-200"><Car size={64} /></div>}
+          <div className="rounded-none border border-line bg-void p-4">
+            <div className="aspect-[3/4] overflow-hidden rounded-none border border-line bg-surface">
+              {vehicleForm.photo_url ? <img src={vehicleForm.photo_url} alt="Carro" className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-ink"><Car size={64} /></div>}
             </div>
-            <input type="file" accept="image/*" onChange={(event) => void handleVehiclePhoto(event)} className="mt-4 block w-full text-xs text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-500 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white" />
+            <input type="file" accept="image/*" onChange={(event) => void handleVehiclePhoto(event)} className="mt-4 block w-full text-xs text-ink-dim file:mr-3 file:rounded-none file:border-0 file:bg-blaze file:px-3 file:py-2 file:text-xs file:font-medium file:text-ink" />
           </div>
           <div className="space-y-4">
             <div className="grid gap-3 md:grid-cols-2">
@@ -1167,11 +1166,11 @@ export function VehiclesPage() {
             </div>
             <Input label="Observacoes" value={vehicleForm.notes} onChange={(event) => setVehicleForm((prev) => ({ ...prev, notes: event.target.value }))} />
             <div>
-              <label className="text-sm font-medium text-gray-300">Documento do carro</label>
-              <input type="file" accept="application/pdf,image/*" onChange={(event) => void handleVehicleDocument(event)} className="mt-2 block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white" />
-              {vehicleForm.document_name ? <p className="mt-2 text-xs text-orange-200">{vehicleForm.document_name}</p> : null}
+              <label className="text-sm font-medium text-ink-dim">Documento do carro</label>
+              <input type="file" accept="application/pdf,image/*" onChange={(event) => void handleVehicleDocument(event)} className="mt-2 block w-full text-sm text-ink-dim file:mr-4 file:rounded-none file:border-0 file:bg-blaze file:px-4 file:py-2 file:text-sm file:font-medium file:text-ink" />
+              {vehicleForm.document_name ? <p className="mt-2 text-xs text-ink">{vehicleForm.document_name}</p> : null}
             </div>
-            <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
+            <div className="flex justify-end gap-3 border-t border-line pt-4">
               <Button variant="secondary" onClick={closeVehicleModal}>Cancelar</Button>
               <Button onClick={() => void handleSaveVehicle()} isLoading={savingVehicle}>
                 {editingVehicleId ? 'Salvar alteracoes' : 'Salvar carro'}
@@ -1200,14 +1199,14 @@ export function VehiclesPage() {
                     key={option.value}
                     type="button"
                     onClick={() => applyMaintenanceType(option.value)}
-                    className={`flex min-h-16 items-center gap-3 rounded-2xl border px-3 py-3 text-left transition-colors ${
+                    className={`flex min-h-16 items-center gap-3 rounded-none border px-3 py-3 text-left transition-colors ${
                       selected
-                        ? 'border-orange-400/50 bg-orange-500/14 text-orange-100 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.12)]'
-                        : 'border-white/8 bg-white/3 text-gray-300 hover:border-white/14 hover:bg-white/6'
+                        ? 'border-line bg-surface text-ink'
+                        : 'border-line bg-surface text-ink-dim hover:border-line hover:bg-surface'
                     }`}
                   >
-                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl border border-white/10 bg-black/20 text-orange-200">{visual.icon}</span>
-                    <span className="text-sm font-medium text-white">{option.label}</span>
+                    <span className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-none border border-line bg-void text-ink">{visual.icon}</span>
+                    <span className="text-sm font-medium text-ink">{option.label}</span>
                   </button>
                 )
               })}
@@ -1222,7 +1221,7 @@ export function VehiclesPage() {
             />
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-white/3 p-4">
+          <div className="rounded-none border border-line bg-surface p-4">
             <SectionLabel label="Vence por" info="Km e data podem trabalhar juntos. O alerta fica vencido quando qualquer meta passar." />
             <div className="mt-3 grid gap-2 sm:grid-cols-3">
               {([
@@ -1234,10 +1233,10 @@ export function VehiclesPage() {
                   key={option.value}
                   type="button"
                   onClick={() => applyMaintenanceTargetMode(option.value)}
-                  className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border px-3 py-2 text-sm font-medium transition-colors ${
+                  className={`inline-flex min-h-10 items-center justify-center gap-2 rounded-none border px-3 py-2 text-sm font-medium transition-colors ${
                     maintenanceTargetMode === option.value
-                      ? 'border-orange-400/50 bg-orange-500/14 text-orange-100 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.12)]'
-                      : 'border-white/8 bg-black/20 text-gray-300 hover:border-white/14 hover:bg-white/6'
+                      ? 'border-line bg-surface text-ink'
+                      : 'border-line bg-void text-ink-dim hover:border-line hover:bg-surface'
                   }`}
                 >
                   {option.icon}
@@ -1271,7 +1270,7 @@ export function VehiclesPage() {
           </div>
 
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="rounded-none border border-line bg-void p-4">
               <SectionLabel label="Antecedencia" info="Define quando o alerta muda de em dia para proximo." />
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {maintenanceTargetMode !== 'km' ? (
@@ -1293,7 +1292,7 @@ export function VehiclesPage() {
               </div>
             </div>
 
-            <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+            <div className="rounded-none border border-line bg-void p-4">
               <SectionLabel label="Recorrencia" info="Opcional. Ao concluir, o sistema cria automaticamente o proximo alerta usando esse intervalo." />
               <div className="mt-3 grid gap-3 sm:grid-cols-2">
                 {maintenanceTargetMode !== 'km' ? (
@@ -1317,7 +1316,7 @@ export function VehiclesPage() {
           </div>
 
           {maintenanceTargetMode !== 'date' && numericOrNull(maintenanceForm.repeat_interval_km) != null && (maintenanceForm.due_odometer_km.trim() || currentOdometerKm != null) ? (
-            <div className="rounded-2xl border border-orange-300/18 bg-orange-500/8 p-4 text-sm text-orange-100">
+            <div className="rounded-none border border-line bg-surface p-4 text-sm text-ink">
               {maintenanceForm.due_odometer_km.trim() ? (
                 <>Este alerta vai vencer em {numericOrNull(maintenanceForm.due_odometer_km)?.toLocaleString('pt-BR')} km e, ao concluir, repetira a cada {numericOrNull(maintenanceForm.repeat_interval_km)?.toLocaleString('pt-BR')} km.</>
               ) : (
@@ -1335,7 +1334,7 @@ export function VehiclesPage() {
             />
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
+          <div className="flex justify-end gap-3 border-t border-line pt-4">
             <Button variant="secondary" onClick={closeMaintenanceModal}>Cancelar</Button>
             <Button onClick={() => void handleSaveMaintenanceAlert()} isLoading={savingMaintenance}>
               {editingMaintenanceAlertId ? 'Salvar alerta' : 'Criar alerta'}
@@ -1362,17 +1361,17 @@ export function VehiclesPage() {
                   fuel_amount: option.value === 'fuel' ? prev.fuel_amount : '',
                   station_name: option.value === 'fuel' ? prev.station_name : '',
                 }))}
-                className={`rounded-2xl border p-4 text-left transition-colors ${
+                className={`rounded-none border p-4 text-left transition-colors ${
                   logForm.event_type === option.value
-                    ? 'border-orange-400/35 bg-orange-500/12 text-orange-100'
-                    : 'border-white/8 bg-white/3 text-gray-300 hover:bg-white/6'
+                    ? 'border-line bg-surface text-ink'
+                    : 'border-line bg-surface text-ink-dim hover:bg-surface'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <div className="rounded-xl border border-white/10 bg-black/20 p-2">{option.icon}</div>
+                  <div className="rounded-none border border-line bg-void p-2">{option.icon}</div>
                   <div>
-                    <p className="text-sm font-medium text-white">{option.title}</p>
-                    <p className="mt-1 text-xs text-gray-400">{option.detail}</p>
+                    <p className="text-sm font-medium text-ink">{option.title}</p>
+                    <p className="mt-1 text-xs text-ink-dim">{option.detail}</p>
                   </div>
                 </div>
               </button>
@@ -1380,10 +1379,10 @@ export function VehiclesPage() {
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
-            <div className="space-y-4 rounded-3xl border border-white/8 bg-white/3 p-4">
+            <div className="space-y-4 rounded-none border border-line bg-surface p-4">
               <div>
-                <p className="text-sm font-medium text-white">{eventLabel(logForm.event_type)}</p>
-                <p className="mt-1 text-xs text-gray-400">{eventDescription(logForm.event_type)}</p>
+                <p className="text-sm font-medium text-ink">{eventLabel(logForm.event_type)}</p>
+                <p className="mt-1 text-xs text-ink-dim">{eventDescription(logForm.event_type)}</p>
               </div>
               <div className="grid gap-3 md:grid-cols-2">
                 <Input label="Kilometragem" value={logForm.odometer_km} onChange={(event) => setLogForm((prev) => ({ ...prev, odometer_km: event.target.value }))} />
@@ -1415,23 +1414,23 @@ export function VehiclesPage() {
               ) : null}
             </div>
 
-            <div className="rounded-3xl border border-dashed border-white/12 bg-black/20 p-4">
-              <div className="aspect-[4/3] overflow-hidden rounded-2xl border border-white/10 bg-[#15161a]">
+            <div className="rounded-none border border-dashed border-line bg-void p-4">
+              <div className="aspect-[4/3] overflow-hidden rounded-none border border-line bg-surface">
                 {logForm.photo_url ? (
                   <img src={logForm.photo_url} alt="Evidencia do registro" className="h-full w-full object-cover" />
                 ) : (
-                  <div className="flex h-full flex-col items-center justify-center gap-2 text-gray-500">
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-ink-mute">
                     <Camera size={34} />
                     <span className="text-xs">Foto da evidencia</span>
                   </div>
                 )}
               </div>
-              <input type="file" accept="image/*" onChange={(event) => void handleLogPhoto(event)} disabled={uploadingLogImage || analyzingImage} className="mt-4 block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white" />
-              <p className="mt-2 text-xs text-gray-500">A imagem recebida e otimizada, enviada e lida primeiro por visao computacional local. A IA so entra quando houver duvida.</p>
+              <input type="file" accept="image/*" onChange={(event) => void handleLogPhoto(event)} disabled={uploadingLogImage || analyzingImage} className="mt-4 block w-full text-sm text-ink-dim file:mr-4 file:rounded-none file:border-0 file:bg-blaze file:px-4 file:py-2 file:text-sm file:font-medium file:text-ink" />
+              <p className="mt-2 text-xs text-ink-mute">A imagem recebida e otimizada, enviada e lida primeiro por visao computacional local. A IA so entra quando houver duvida.</p>
             </div>
           </div>
 
-          <div className="rounded-2xl border border-white/8 bg-black/20 p-4">
+          <div className="rounded-none border border-line bg-void p-4">
             <div className="grid gap-3 md:grid-cols-3">
               <MiniMetric label="Km lida" value={logForm.odometer_km || '-'} />
               <MiniMetric label="Combustivel" value={logForm.fuel_level_percent ? `${logForm.fuel_level_percent}% (${fuelRangeLabel(logForm.fuel_level_range)})` : fuelRangeLabel(logForm.fuel_level_range)} />
@@ -1440,9 +1439,9 @@ export function VehiclesPage() {
             <div className="mt-3">
               <MiniMetric label="Confianca da leitura" value={logForm.ai_confidence != null ? `${Math.round(logForm.ai_confidence * 100)}%` : '-'} />
             </div>
-            {uploadingLogImage ? <p className="mt-2 text-xs text-orange-300">Enviando imagem otimizada...</p> : null}
-            {analyzingImage ? <p className="mt-2 text-xs text-orange-300">Leitura computacional em andamento. Voce ja pode salvar e continuar.</p> : null}
-            {analysisMethod ? <p className="mt-2 text-xs text-emerald-300">Metodo: {analysisMethod}{analysisDurationMs != null ? ` • ${Math.round(analysisDurationMs)} ms` : ''}</p> : null}
+            {uploadingLogImage ? <p className="mt-2 text-xs text-ink">Enviando imagem otimizada...</p> : null}
+            {analyzingImage ? <p className="mt-2 text-xs text-ink">Leitura computacional em andamento. Voce ja pode salvar e continuar.</p> : null}
+            {analysisMethod ? <p className="mt-2 text-xs text-ok">Metodo: {analysisMethod}{analysisDurationMs != null ? ` • ${Math.round(analysisDurationMs)} ms` : ''}</p> : null}
             {logForm.needs_review ? (
               <Alert variant="warning" className="mt-3">
                 A leitura do combustivel precisa de conferencia manual antes de salvar.
@@ -1451,7 +1450,7 @@ export function VehiclesPage() {
             {logForm.ai_summary ? <Alert variant="info" className="mt-3">{logForm.ai_summary}</Alert> : null}
           </div>
           <Input label="Observacoes" value={logForm.notes} onChange={(event) => setLogForm((prev) => ({ ...prev, notes: event.target.value }))} />
-          <div className="flex justify-end gap-3 border-t border-white/8 pt-4">
+          <div className="flex justify-end gap-3 border-t border-line pt-4">
             <Button variant="secondary" onClick={closeLogModal}>Cancelar</Button>
             <Button onClick={() => void handleSaveLog()} isLoading={savingLog} disabled={uploadingLogImage}>
               {analyzingImage ? 'Salvar e continuar analise' : editingLogId ? 'Salvar alteracoes' : 'Salvar registro'}
@@ -1465,21 +1464,21 @@ export function VehiclesPage() {
 
 function MiniMetric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
-      <p className="text-[10px] uppercase tracking-[0.18em] text-gray-500">{label}</p>
-      <p className="mt-1 truncate text-sm font-medium text-white">{value}</p>
+    <div className="rounded-none border border-line bg-void px-3 py-2">
+      <p className="text-[10px] uppercase tracking-[0.18em] text-ink-mute">{label}</p>
+      <p className="mt-1 truncate text-sm font-medium text-ink">{value}</p>
     </div>
   )
 }
 
 function MetricCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
   return (
-    <Card variant="bordered" className="border-white/8 bg-white/3">
+    <Card variant="bordered" className="border-line bg-surface">
       <div className="flex items-center gap-3">
-        <div className="rounded-xl border border-orange-500/15 bg-orange-500/10 p-2 text-orange-200">{icon}</div>
+        <div className="rounded-none border border-line bg-surface p-2 text-ink">{icon}</div>
         <div>
-          <p className="text-xs uppercase tracking-[0.2em] text-gray-500">{label}</p>
-          <p className="mt-1 text-lg font-semibold text-white">{value}</p>
+          <p className="text-xs uppercase tracking-[0.2em] text-ink-mute">{label}</p>
+          <p className="mt-1 text-lg font-semibold text-ink">{value}</p>
         </div>
       </div>
     </Card>

@@ -981,8 +981,8 @@ export function NewWithdrawalPage() {
     <Card variant="bordered" padding="lg">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">Termo de retirada PDF</h3>
-          <p className="mt-1 text-sm text-gray-400">
+          <h3 className="text-lg font-semibold text-ink">Termo de retirada PDF</h3>
+          <p className="mt-1 text-sm text-ink-dim">
             Gere antes da assinatura. O termo geral cria uma pagina por destino; os individuais baixam um PDF por responsavel.
           </p>
         </div>
@@ -1024,10 +1024,10 @@ export function NewWithdrawalPage() {
                 className={cn(
                   'flex h-10 w-10 items-center justify-center rounded-full transition-colors',
                   isActive
-                    ? 'bg-orange-500 text-white'
+                    ? 'bg-blaze text-ink'
                     : isCompleted
-                      ? 'bg-emerald-500 text-white'
-                      : 'bg-gray-800 text-gray-500',
+                      ? 'bg-ok text-ink'
+                      : 'bg-surface text-ink-mute',
                 )}
               >
                 <StepIcon size={20} />
@@ -1036,10 +1036,10 @@ export function NewWithdrawalPage() {
                 className={cn(
                   'max-w-[80px] text-center text-xs font-medium',
                   isActive
-                    ? 'text-orange-400'
+                    ? 'text-ink'
                     : isCompleted
-                      ? 'text-emerald-400'
-                      : 'text-gray-500',
+                      ? 'text-ok'
+                      : 'text-ink-mute',
                 )}
               >
                 {step.label}
@@ -1049,7 +1049,7 @@ export function NewWithdrawalPage() {
               <div
                 className={cn(
                   'mx-2 h-0.5 flex-1',
-                  idx < currentStep ? 'bg-emerald-500' : 'bg-gray-800',
+                  idx < currentStep ? 'bg-ok' : 'bg-surface',
                 )}
               />
             )}
@@ -1062,7 +1062,7 @@ export function NewWithdrawalPage() {
   const renderStep1 = () => (
     <div className="flex flex-col gap-6">
       <Card variant="bordered" padding="lg">
-        <h3 className="mb-4 text-lg font-semibold text-white">Solicitante e Destino Padrao</h3>
+        <h3 className="mb-4 text-lg font-semibold text-ink">Solicitante e Destino Padrao</h3>
 
         {loadingOptions ? (
           <div className="flex items-center justify-center py-8">
@@ -1093,10 +1093,10 @@ export function NewWithdrawalPage() {
                   type="button"
                   onClick={() => setDraftDestinationType('collaborator')}
                   className={cn(
-                    'flex-1 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors',
+                    'flex-1 rounded-none border px-4 py-3 text-sm font-medium transition-colors',
                     draftDestinationType === 'collaborator'
-                      ? 'border-orange-400/50 bg-orange-500/14 text-orange-100 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.12)]'
-                      : 'border-white/8 bg-gray-900 text-gray-400 hover:border-white/14 hover:bg-white/6',
+                      ? 'border-line bg-surface text-ink'
+                      : 'border-line bg-surface text-ink-dim hover:border-line hover:bg-surface',
                   )}
                 >
                   <UserIcon size={18} className="mb-1 mr-2 inline-block" />
@@ -1106,10 +1106,10 @@ export function NewWithdrawalPage() {
                   type="button"
                   onClick={() => setDraftDestinationType('work_site')}
                   className={cn(
-                    'flex-1 rounded-2xl border px-4 py-3 text-sm font-medium transition-colors',
+                    'flex-1 rounded-none border px-4 py-3 text-sm font-medium transition-colors',
                     draftDestinationType === 'work_site'
-                      ? 'border-orange-400/50 bg-orange-500/14 text-orange-100 shadow-[inset_0_0_0_1px_rgba(251,146,60,0.12)]'
-                      : 'border-white/8 bg-gray-900 text-gray-400 hover:border-white/14 hover:bg-white/6',
+                      ? 'border-line bg-surface text-ink'
+                      : 'border-line bg-surface text-ink-dim hover:border-line hover:bg-surface',
                   )}
                 >
                   <ClipboardIcon size={18} className="mb-1 mr-2 inline-block" />
@@ -1135,12 +1135,12 @@ export function NewWithdrawalPage() {
                 error={stepErrors.collaboratorId}
               />
             ) : (
-              <div className="rounded-2xl border border-dashed border-white/10 bg-white/4 px-4 py-4">
-                <p className="text-sm font-medium text-orange-300">
+              <div className="rounded-none border border-dashed border-line bg-surface px-4 py-4">
+                <p className="text-sm font-medium text-ink">
                   {selectedWorkSiteLabel(workSites, defaultWorkSiteId)}
                 </p>
                 {stepErrors.workSiteId && (
-                  <p className="mt-2 text-sm text-red-400">{stepErrors.workSiteId}</p>
+                  <p className="mt-2 text-sm text-crit">{stepErrors.workSiteId}</p>
                 )}
               </div>
             )}
@@ -1156,7 +1156,7 @@ export function NewWithdrawalPage() {
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2">
-              <h3 className="text-lg font-semibold text-white">Itens da Retirada</h3>
+              <h3 className="text-lg font-semibold text-ink">Itens da Retirada</h3>
               <InfoTip text="Cada item pode ter destino proprio. Isso permite uma unica retirada com colaboradores e obras diferentes." />
             </div>
           </div>
@@ -1215,9 +1215,9 @@ export function NewWithdrawalPage() {
 
         {items.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-8 text-center">
-            <PackageIcon size={40} className="mb-2 text-gray-600" />
-            <p className="text-sm text-gray-400">Nenhum item adicionado.</p>
-            <p className="mt-1 max-w-sm text-xs text-gray-500">
+            <PackageIcon size={40} className="mb-2 text-ink-mute" />
+            <p className="text-sm text-ink-dim">Nenhum item adicionado.</p>
+            <p className="mt-1 max-w-sm text-xs text-ink-mute">
               Para entregar o mesmo item a varias pessoas, use "Retirada em Massa": escolha o item uma vez e marque todos os destinatarios.
             </p>
           </div>
@@ -1235,14 +1235,14 @@ export function NewWithdrawalPage() {
                 <div
                   key={stockItem.id}
                   className={cn(
-                    'rounded-2xl border p-4',
-                    isOverStock ? 'border-red-500/40 bg-red-500/6' : 'border-white/8 bg-white/3',
+                    'rounded-none border p-4',
+                    isOverStock ? 'border-crit bg-crit/15' : 'border-line bg-surface',
                   )}
                 >
                   <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div className="min-w-0">
                       <div className="flex flex-wrap items-center gap-2">
-                        <p className="font-medium text-white">{stockItem.name}</p>
+                        <p className="font-medium text-ink">{stockItem.name}</p>
                         <Badge variant={isOverStock ? 'danger' : 'primary'} size="sm">
                           {groupTotal} {stockItem.unit} para {entries.length} destino(s)
                         </Badge>
@@ -1256,7 +1256,7 @@ export function NewWithdrawalPage() {
                         </Badge>
                       </div>
                       {willUseRestrictedStock && (
-                        <p className="mt-2 text-xs text-amber-300">
+                        <p className="mt-2 text-xs text-warn">
                           Esta retirada vai usar {composition.usedQty > 0 ? `${composition.usedQty} usado(s)` : ''}
                           {composition.usedQty > 0 && composition.damagedQty > 0 ? ' e ' : ''}
                           {composition.damagedQty > 0 ? `${composition.damagedQty} com avaria` : ''}.
@@ -1267,7 +1267,7 @@ export function NewWithdrawalPage() {
                     <div className="flex flex-shrink-0 items-center gap-2">
                       {entries.length > 1 && (
                         <>
-                          <label className="text-xs text-gray-400">Aplicar a todos</label>
+                          <label className="text-xs text-ink-dim">Aplicar a todos</label>
                           <input
                             type="number"
                             min={1}
@@ -1276,7 +1276,7 @@ export function NewWithdrawalPage() {
                             onChange={(event) => {
                               setGroupQuantityDrafts((prev) => ({ ...prev, [stockItem.id]: event.target.value }))
                             }}
-                            className="w-16 rounded border border-gray-700 bg-gray-900 px-2 py-1 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                            className="w-16 rounded-none border border-line bg-surface px-2 py-1 text-center text-sm text-ink focus:outline-none focus:ring-2 focus:ring-line"
                           />
                           <Button
                             type="button"
@@ -1322,7 +1322,7 @@ export function NewWithdrawalPage() {
                       return (
                         <div
                           key={entryKey}
-                          className="flex flex-col gap-2 rounded-xl border border-white/6 bg-gray-900/60 p-3 sm:flex-row sm:items-center sm:gap-3"
+                          className="flex flex-col gap-2 rounded-none border border-line bg-surface p-3 sm:flex-row sm:items-center sm:gap-3"
                         >
                           <select
                             value={encodeDestination(item.destination_type, item.collaborator_id, item.work_site_id)}
@@ -1334,7 +1334,7 @@ export function NewWithdrawalPage() {
                                 return next
                               })
                             }}
-                            className="min-w-0 flex-1 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                            className="min-w-0 flex-1 rounded-none border border-line bg-surface px-2 py-1.5 text-sm text-ink focus:outline-none focus:ring-2 focus:ring-line"
                           >
                             {destinationOptions.map((option) => (
                               <option key={option.value} value={option.value}>
@@ -1360,14 +1360,14 @@ export function NewWithdrawalPage() {
                                   })
                                 }
                               }}
-                              className="w-20 rounded border border-gray-700 bg-gray-900 px-2 py-1.5 text-center text-sm text-white focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+                              className="w-20 rounded-none border border-line bg-surface px-2 py-1.5 text-center text-sm text-ink focus:outline-none focus:ring-2 focus:ring-line"
                             />
-                            <span className="w-12 text-xs text-gray-400">{item.unit}</span>
+                            <span className="w-12 text-xs text-ink-dim">{item.unit}</span>
                             <button
                               type="button"
                               onClick={() => handleRemoveItem(entryKey)}
                               aria-label="Remover destino"
-                              className="rounded p-1 text-red-400 transition-colors hover:bg-red-500/10"
+                              className="rounded-none p-1 text-crit transition-colors hover:bg-crit/15"
                             >
                               <svg width="18" height="18" viewBox="0 0 18 18" fill="none" xmlns="http://www.w3.org/2000/svg">
                                 <path d="M4 4L14 14M14 4L4 14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
@@ -1385,11 +1385,11 @@ export function NewWithdrawalPage() {
         )}
 
         {items.length > 0 && (
-          <div className="mt-3 flex items-center justify-between border-t border-gray-700 pt-3">
-            <span className="text-sm text-gray-400">
+          <div className="mt-3 flex items-center justify-between border-t border-line pt-3">
+            <span className="text-sm text-ink-dim">
               {itemGroups.length} item(ns) em {items.length} linha(s) para {groups.length} destino(s)
             </span>
-            <span className="text-sm font-medium text-white">
+            <span className="text-sm font-medium text-ink">
               {items.reduce((sum, item) => sum + item.quantity, 0)} unidades
             </span>
           </div>
@@ -1451,11 +1451,11 @@ export function NewWithdrawalPage() {
                 && warning.composition.damagedQty > 0
 
               return (
-                <Card key={warning.entryId} variant="bordered" className="border-white/8 bg-white/3">
+                <Card key={warning.entryId} variant="bordered" className="border-line bg-surface">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div>
-                      <p className="font-semibold text-white">{warning.itemName}</p>
-                      <p className="mt-1 text-sm text-gray-400">
+                      <p className="font-semibold text-ink">{warning.itemName}</p>
+                      <p className="mt-1 text-sm text-ink-dim">
                         Solicitado: {warning.quantity} {warning.unit}
                       </p>
                     </div>
@@ -1475,7 +1475,7 @@ export function NewWithdrawalPage() {
             })}
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-white/10 pt-4">
+          <div className="flex justify-end gap-3 border-t border-line pt-4">
             <Button
               variant="secondary"
               onClick={() => {
@@ -1504,7 +1504,7 @@ export function NewWithdrawalPage() {
   const renderStep3 = () => (
     <div className="flex flex-col gap-6">
       <Card variant="bordered" padding="lg">
-        <h3 className="mb-4 text-lg font-semibold text-white">Documentacao</h3>
+        <h3 className="mb-4 text-lg font-semibold text-ink">Documentacao</h3>
 
         <div className="mb-6 flex flex-col gap-2">
           <SectionLabel label="Observacoes" info="Opcional. Use para contexto da retirada, obra, turno ou justificativa." />
@@ -1513,7 +1513,7 @@ export function NewWithdrawalPage() {
             onChange={(event) => setNotes(event.target.value)}
             placeholder="Observacoes adicionais (opcional)"
             rows={3}
-            className="w-full rounded-lg border border-gray-700 bg-gray-900 px-3 py-2 text-sm text-white placeholder-gray-500 transition-colors focus:border-orange-500 focus:outline-none focus:ring-2 focus:ring-orange-500/50"
+            className="w-full rounded-none border border-line bg-surface px-3 py-2 text-sm text-ink placeholder-ink-mute transition-colors focus:border-ink focus:outline-none focus:ring-2 focus:ring-line"
           />
         </div>
 
@@ -1530,8 +1530,8 @@ export function NewWithdrawalPage() {
               }
             }}
             className={cn(
-              "rounded-lg border-2 border-dashed p-4 transition-colors",
-              dragActivePhoto ? "border-orange-500 bg-orange-500/10" : "border-gray-700 bg-gray-900/50"
+              "rounded-none border-2 border-dashed p-4 transition-colors",
+              dragActivePhoto ? "border-line bg-surface" : "border-line bg-surface"
             )}
           >
             <input
@@ -1541,14 +1541,14 @@ export function NewWithdrawalPage() {
               multiple
               onChange={handlePhotoChange}
               disabled={uploadingPhoto}
-              className="block w-full text-sm text-gray-400 file:mr-4 file:rounded-lg file:border-0 file:bg-orange-500 file:px-4 file:py-2 file:text-sm file:font-medium file:text-white hover:file:bg-orange-600"
+              className="block w-full text-sm text-ink-dim file:mr-4 file:rounded-none file:border-0 file:bg-blaze file:px-4 file:py-2 file:text-sm file:font-medium file:text-ink hover:file:bg-blaze"
             />
-            {uploadingPhoto && <p className="mt-2 text-xs text-orange-300">Enviando imagem...</p>}
+            {uploadingPhoto && <p className="mt-2 text-xs text-ink">Enviando imagem...</p>}
           </div>
           {photoAttachments.length > 0 && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
               {photoAttachments.map((photo, index) => (
-                <div key={photo.id} className="relative overflow-hidden rounded-lg border border-gray-700 bg-gray-900">
+                <div key={photo.id} className="relative overflow-hidden rounded-none border border-line bg-surface">
                   <img
                     src={photo.previewUrl}
                     alt={`Registro fotografico ${index + 1}`}
@@ -1557,7 +1557,7 @@ export function NewWithdrawalPage() {
                   <button
                     type="button"
                     onClick={() => removePhotoAttachment(photo.id)}
-                    className="absolute right-2 top-2 rounded-full bg-red-600 p-1 text-white transition-colors hover:bg-red-700"
+                    className="absolute right-2 top-2 rounded-full bg-crit p-1 text-ink transition-colors hover:bg-red-700"
                     aria-label={`Remover registro fotografico ${index + 1}`}
                   >
                     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -1565,7 +1565,7 @@ export function NewWithdrawalPage() {
                     </svg>
                   </button>
                   {index === 0 && (
-                    <span className="absolute bottom-2 left-2 rounded bg-black/70 px-2 py-1 text-[11px] font-medium text-white">
+                    <span className="absolute bottom-2 left-2 rounded-none bg-void px-2 py-1 text-[11px] font-medium text-ink">
                       Principal
                     </span>
                   )}
@@ -1573,7 +1573,7 @@ export function NewWithdrawalPage() {
               ))}
             </div>
           )}
-          {photoError && <p className="text-xs text-red-400">{photoError}</p>}
+          {photoError && <p className="text-xs text-crit">{photoError}</p>}
         </div>
       </Card>
 
@@ -1582,8 +1582,8 @@ export function NewWithdrawalPage() {
       <Card variant="bordered" padding="lg">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <h3 className="text-lg font-semibold text-white">PDFs assinados por pessoa</h3>
-            <p className="mt-1 text-sm text-gray-400">
+            <h3 className="text-lg font-semibold text-ink">PDFs assinados por pessoa</h3>
+            <p className="mt-1 text-sm text-ink-dim">
               Opcional. Anexe agora somente os PDFs que ja estiverem assinados; os demais poderao ser enviados depois.
             </p>
           </div>
@@ -1599,11 +1599,11 @@ export function NewWithdrawalPage() {
               : selectedRequester?.full_name ?? 'Lider solicitante'
 
             return (
-              <div key={scopeKey} className="rounded-2xl border border-white/8 bg-white/3 p-4">
+              <div key={scopeKey} className="rounded-none border border-line bg-surface p-4">
                 <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                   <div className="min-w-0">
-                    <p className="font-medium text-white">{responsibleName}</p>
-                    <p className="mt-1 text-xs text-gray-500">{groupTitle(group, collaborators, workSites)}</p>
+                    <p className="font-medium text-ink">{responsibleName}</p>
+                    <p className="mt-1 text-xs text-ink-mute">{groupTitle(group, collaborators, workSites)}</p>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <input
@@ -1613,7 +1613,7 @@ export function NewWithdrawalPage() {
                         void handleSignedDocumentChange(scopeKey, event.target.files?.[0])
                         event.target.value = ''
                       }}
-                      className="block max-w-sm text-xs text-gray-400 file:mr-3 file:rounded-lg file:border-0 file:bg-orange-500 file:px-3 file:py-2 file:text-xs file:font-medium file:text-white hover:file:bg-orange-600"
+                      className="block max-w-sm text-xs text-ink-dim file:mr-3 file:rounded-none file:border-0 file:bg-blaze file:px-3 file:py-2 file:text-xs file:font-medium file:text-ink hover:file:bg-blaze"
                     />
                     {file && (
                       <Button type="button" variant="ghost" size="sm" onClick={() => removeSignedDocument(scopeKey)}>
@@ -1622,8 +1622,8 @@ export function NewWithdrawalPage() {
                     )}
                   </div>
                 </div>
-                {file && <p className="mt-2 truncate text-xs text-emerald-300">Selecionado: {file.name}</p>}
-                {signedDocumentErrors[scopeKey] && <p className="mt-2 text-xs text-red-400">{signedDocumentErrors[scopeKey]}</p>}
+                {file && <p className="mt-2 truncate text-xs text-ok">Selecionado: {file.name}</p>}
+                {signedDocumentErrors[scopeKey] && <p className="mt-2 text-xs text-crit">{signedDocumentErrors[scopeKey]}</p>}
               </div>
             )
           })}
@@ -1637,24 +1637,24 @@ export function NewWithdrawalPage() {
       {renderTermPdfActions()}
 
       <Card variant="bordered" padding="lg">
-        <h3 className="mb-4 text-lg font-semibold text-white">Resumo da Operacao</h3>
+        <h3 className="mb-4 text-lg font-semibold text-ink">Resumo da Operacao</h3>
 
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div>
-            <p className="text-xs font-medium text-gray-400">Codigo previsto</p>
-            <p className="text-sm text-white">{generateWithdrawalCodePreview()}</p>
+            <p className="text-xs font-medium text-ink-dim">Codigo previsto</p>
+            <p className="text-sm text-ink">{generateWithdrawalCodePreview()}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Solicitante</p>
-            <p className="text-sm text-white">{selectedRequester?.full_name ?? '-'}</p>
+            <p className="text-xs font-medium text-ink-dim">Solicitante</p>
+            <p className="text-sm text-ink">{selectedRequester?.full_name ?? '-'}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Destinos nesta retirada</p>
-            <p className="text-sm text-white">{groups.length}</p>
+            <p className="text-xs font-medium text-ink-dim">Destinos nesta retirada</p>
+            <p className="text-sm text-ink">{groups.length}</p>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-400">Itens totais</p>
-            <p className="text-sm text-white">{items.length}</p>
+            <p className="text-xs font-medium text-ink-dim">Itens totais</p>
+            <p className="text-sm text-ink">{items.length}</p>
           </div>
         </div>
 
@@ -1673,8 +1673,8 @@ export function NewWithdrawalPage() {
         >
           <div className="mb-4 flex items-center justify-between">
             <div>
-              <h3 className="text-lg font-semibold text-white">{groupTitle(group, collaborators, workSites)}</h3>
-              <p className="mt-1 text-xs text-gray-500">{group.items.length} item(ns)</p>
+              <h3 className="text-lg font-semibold text-ink">{groupTitle(group, collaborators, workSites)}</h3>
+              <p className="mt-1 text-xs text-ink-mute">{group.items.length} item(ns)</p>
             </div>
             <Badge variant={group.destination_type === 'work_site' ? 'info' : 'primary'} size="sm">
               {group.destination_type === 'work_site' ? 'Obra' : 'Inventario individual'}
@@ -1684,18 +1684,18 @@ export function NewWithdrawalPage() {
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-gray-700">
-                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Item</th>
-                  <th className="px-3 py-2 text-center text-sm font-medium text-gray-300">Qtd</th>
-                  <th className="px-3 py-2 text-left text-sm font-medium text-gray-300">Unidade</th>
+                <tr className="border-b border-line">
+                  <th className="px-3 py-2 text-left text-sm font-medium text-ink-dim">Item</th>
+                  <th className="px-3 py-2 text-center text-sm font-medium text-ink-dim">Qtd</th>
+                  <th className="px-3 py-2 text-left text-sm font-medium text-ink-dim">Unidade</th>
                 </tr>
               </thead>
               <tbody>
                 {group.items.map((item) => (
-                  <tr key={item.entry_id} className="border-b border-gray-800">
-                    <td className="px-3 py-2 text-sm text-white">{item.stock_item.name}</td>
-                    <td className="px-3 py-2 text-center text-sm text-gray-300">{item.quantity}</td>
-                    <td className="px-3 py-2 text-sm text-gray-300">{item.unit}</td>
+                  <tr key={item.entry_id} className="border-b border-line">
+                    <td className="px-3 py-2 text-sm text-ink">{item.stock_item.name}</td>
+                    <td className="px-3 py-2 text-center text-sm text-ink-dim">{item.quantity}</td>
+                    <td className="px-3 py-2 text-sm text-ink-dim">{item.unit}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1706,9 +1706,9 @@ export function NewWithdrawalPage() {
 
       {(notes || photoAttachments.length > 0 || Object.keys(signedDocumentFiles).length > 0) && (
         <Card variant="bordered" padding="lg">
-          <h3 className="mb-4 text-lg font-semibold text-white">Anexos e documentos</h3>
+          <h3 className="mb-4 text-lg font-semibold text-ink">Anexos e documentos</h3>
 
-          {notes && <p className="mb-4 text-sm text-gray-300">{notes}</p>}
+          {notes && <p className="mb-4 text-sm text-ink-dim">{notes}</p>}
 
           {photoAttachments.length > 0 && (
             <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
@@ -1717,7 +1717,7 @@ export function NewWithdrawalPage() {
                   key={photo.id}
                   src={photo.previewUrl}
                   alt={`Registro fotografico ${index + 1}`}
-                  className="h-32 w-full rounded-lg border border-gray-700 object-cover"
+                  className="h-32 w-full rounded-none border border-line object-cover"
                 />
               ))}
             </div>
@@ -1725,15 +1725,15 @@ export function NewWithdrawalPage() {
 
           {Object.keys(signedDocumentFiles).length > 0 && (
             <div className="space-y-2">
-              <p className="text-xs font-medium uppercase tracking-[0.18em] text-gray-400">PDFs individuais selecionados</p>
+              <p className="text-xs font-medium uppercase tracking-[0.18em] text-ink-dim">PDFs individuais selecionados</p>
               {groups.map((group) => {
                 const scopeKey = makeDestinationGroupKey(group)
                 const file = signedDocumentFiles[scopeKey]
                 if (!file) return null
                 return (
-                  <div key={scopeKey} className="flex items-center justify-between rounded-xl border border-white/8 bg-white/3 px-3 py-2 text-sm">
-                    <span className="truncate text-gray-200">{groupTitle(group, collaborators, workSites)}</span>
-                    <span className="ml-3 max-w-[50%] truncate text-emerald-300">{file.name}</span>
+                  <div key={scopeKey} className="flex items-center justify-between rounded-none border border-line bg-surface px-3 py-2 text-sm">
+                    <span className="truncate text-ink-dim">{groupTitle(group, collaborators, workSites)}</span>
+                    <span className="ml-3 max-w-[50%] truncate text-ok">{file.name}</span>
                   </div>
                 )
               })}
@@ -1785,10 +1785,7 @@ export function NewWithdrawalPage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Nova Retirada</h2>
-          <p className="mt-1 text-sm text-gray-400">
-            Monte uma operacao com varios itens e destinos sem poluir o fluxo.
-          </p>
+          <h2 className="text-2xl font-bold text-ink">Nova Retirada</h2>
         </div>
         <Button variant="ghost" onClick={() => navigate('/withdrawals')}>
           Cancelar

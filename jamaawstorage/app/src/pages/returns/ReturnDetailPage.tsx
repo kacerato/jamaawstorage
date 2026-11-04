@@ -293,10 +293,10 @@ export function ReturnDetailPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-2xl font-bold text-white">{detail.code ?? 'Rascunho de devolução'}</h1>
+            <h1 className="text-2xl font-bold text-ink">{detail.code ?? 'Rascunho de devolução'}</h1>
             <Badge variant={STATUS_META[status].variant}>{STATUS_META[status].label}</Badge>
           </div>
-          <p className="mt-1 text-sm text-gray-400">
+          <p className="mt-1 text-sm text-ink-dim">
             {detail.source_type === 'collaborator' ? 'Colaborador' : 'Obra'}: {sourceLabel}
             {' · '}
             {REASON_LABELS[detail.reason] ?? detail.reason}
@@ -318,13 +318,13 @@ export function ReturnDetailPage() {
                 <div key={step.status} className="flex items-center gap-2">
                   <div
                     className={`flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
-                      reached ? 'bg-orange-500 text-white' : 'bg-gray-800 text-gray-500'
+                      reached ? 'bg-blaze text-ink' : 'bg-surface text-ink-mute'
                     }`}
                   >
                     {index + 1}
                   </div>
-                  <span className={reached ? 'text-sm text-white' : 'text-sm text-gray-500'}>{step.label}</span>
-                  {index < STEPS.length - 1 && <div className="h-px w-6 bg-gray-700" />}
+                  <span className={reached ? 'text-sm text-ink' : 'text-sm text-ink-mute'}>{step.label}</span>
+                  {index < STEPS.length - 1 && <div className="h-px w-6 bg-surface" />}
                 </div>
               )
             })}
@@ -341,12 +341,12 @@ export function ReturnDetailPage() {
             const balanced = total === item.quantity
 
             return (
-              <div key={item.id} className="rounded-lg border border-white/10 bg-white/[0.02] p-3">
+              <div key={item.id} className="rounded-none border border-line bg-surface p-3">
                 <div className="flex flex-wrap items-center gap-3">
                   <ItemVisual iconKey={item.stockItem?.svg_icon_key ?? null} alt={item.stockItem?.name ?? ''} className="h-9 w-9" />
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-medium text-white">{item.stockItem?.name ?? 'Item removido'}</p>
-                    <p className="font-mono text-xs text-orange-300">{item.stockItem?.code ?? '-'}</p>
+                    <p className="truncate font-medium text-ink">{item.stockItem?.name ?? 'Item removido'}</p>
+                    <p className="font-mono text-xs text-ink">{item.stockItem?.code ?? '-'}</p>
                   </div>
                   <Badge variant="primary" size="sm">
                     {formatQuantity(item.quantity, item.stockItem?.unit ?? 'un')}
@@ -375,7 +375,7 @@ export function ReturnDetailPage() {
                         }
                       />
                     ))}
-                    <p className={`sm:col-span-3 text-xs ${balanced ? 'text-emerald-300' : 'text-amber-300'}`}>
+                    <p className={`sm:col-span-3 text-xs ${balanced ? 'text-ok' : 'text-warn'}`}>
                       {balanced
                         ? 'Classificação fecha com a quantidade recebida.'
                         : `Distribuído ${total} de ${item.quantity}. A soma precisa fechar.`}
@@ -447,14 +447,14 @@ export function ReturnDetailPage() {
           )}
 
           {status === 'completed' && (
-            <div className="flex items-center gap-2 text-sm text-emerald-300">
+            <div className="flex items-center gap-2 text-sm text-ok">
               <PackageIcon className="h-4 w-4" />
               Material creditado no estoque em {detail.completed_at ? formatDateTime(detail.completed_at) : '-'}.
             </div>
           )}
 
           {status === 'cancelled' && (
-            <div className="text-sm text-red-300">
+            <div className="text-sm text-crit">
               Cancelada{detail.cancellation_reason ? `: ${detail.cancellation_reason}` : '.'}
             </div>
           )}

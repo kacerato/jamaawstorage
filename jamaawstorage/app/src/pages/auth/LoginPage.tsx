@@ -47,7 +47,7 @@ export function LoginPage() {
 
   // Redirect only when session and profile are both ready.
   // This avoids a login <-> protected-route redirect loop when the user exists but the profile is missing.
-  if (user && profile?.is_active && profile.role === 'supervisor') {
+  if (user && profile?.is_active && (profile.role === 'admin' || profile.role === 'supervisor')) {
     return <Navigate to="/" replace />
   }
 
@@ -203,7 +203,7 @@ export function LoginPage() {
 // ─── CSS ──────────────────────────────────────────────────────────────────────
 
 const LOGIN_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');
 
 /* ── Keyframes ─────────────────────────────────────────────────────────── */
 
@@ -215,8 +215,8 @@ const LOGIN_CSS = `
   to { transform: rotate(360deg); }
 }
 @keyframes pulseBtn {
-  0%, 100% { box-shadow: 0 0 0 0 rgba(249,115,22,0); }
-  50% { box-shadow: 0 0 0 6px rgba(249,115,22,.15); }
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,93,0,0); }
+  50% { box-shadow: 0 0 0 6px rgba(255,93,0,.15); }
 }
 @keyframes breatheGlow {
   0%, 100% { opacity: .6; }
@@ -229,7 +229,7 @@ const LOGIN_CSS = `
   position: fixed; inset: 0;
   display: flex; align-items: center; justify-content: center;
   background: #060606;
-  font-family: 'Outfit', sans-serif;
+  font-family: 'Archivo', sans-serif;
   overflow: hidden;
 }
 
@@ -239,7 +239,7 @@ const LOGIN_CSS = `
   position: absolute;
   width: 480px; height: 480px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(249,115,22,.08) 0%, transparent 65%);
+  background: transparent;
   pointer-events: none;
   animation: breatheGlow 4s ease-in-out infinite;
 }
@@ -252,8 +252,8 @@ const LOGIN_CSS = `
   margin: 0 16px;
   padding: 32px 28px 24px;
   background: rgba(14,14,14,.96);
-  border: 1px solid rgba(249,115,22,.12);
-  border-radius: 18px;
+  border: 1px solid #262422;
+  border-radius: 0;
   backdrop-filter: blur(24px);
   box-shadow:
     0 20px 60px rgba(0,0,0,.6),
@@ -271,7 +271,7 @@ const LOGIN_CSS = `
 .login-logo-img {
   height: 64px; width: auto;
   object-fit: contain;
-  filter: drop-shadow(0 0 20px rgba(249,115,22,.25));
+  filter: none;
   transition: transform .3s;
 }
 .login-logo-img:hover {
@@ -285,8 +285,8 @@ const LOGIN_CSS = `
   text-align: center;
   font-size: 20px; font-weight: 700;
   letter-spacing: -.3px;
-  color: #fff;
-  font-family: 'Outfit', sans-serif;
+  color: #0D0101;
+  font-family: 'Archivo', sans-serif;
 }
 .login-subtitle {
   margin: 5px 0 0;
@@ -302,7 +302,7 @@ const LOGIN_CSS = `
 .login-divider {
   height: 1px;
   margin: 18px 0;
-  background: linear-gradient(90deg, transparent 0%, rgba(249,115,22,.22) 50%, transparent 100%);
+  background: #262422;
 }
 
 /* ── Form ──────────────────────────────────────────────────────────────── */
@@ -328,8 +328,8 @@ const LOGIN_CSS = `
   padding: 11px 13px;
   background: rgba(255,255,255,.035);
   border: 1.5px solid rgba(255,255,255,.08);
-  border-radius: 10px;
-  color: #fff;
+  border-radius: 0;
+  color: #0D0101;
   font-family: 'Inter', sans-serif;
   font-size: 14px;
   outline: none;
@@ -337,9 +337,9 @@ const LOGIN_CSS = `
   box-sizing: border-box;
 }
 .login-input:focus {
-  border-color: rgba(249,115,22,.55);
-  background: rgba(249,115,22,.04);
-  box-shadow: 0 0 0 3px rgba(249,115,22,.08);
+  border-color: #FFFAFA;
+  background: #0D0101;
+  box-shadow: none;
 }
 .login-input::placeholder {
   color: rgba(255,255,255,.2);
@@ -350,7 +350,7 @@ const LOGIN_CSS = `
 .login-input:-webkit-autofill,
 .login-input:-webkit-autofill:focus {
   -webkit-box-shadow: 0 0 0 1000px #121212 inset;
-  -webkit-text-fill-color: #fff;
+  -webkit-text-fill-color: #0D0101;
   transition: background-color 5000s ease-in-out 0s;
 }
 
@@ -367,7 +367,7 @@ const LOGIN_CSS = `
   background: transparent; border: none;
   color: rgba(255,255,255,.3);
   cursor: pointer; padding: 8px;
-  border-radius: 8px;
+  border-radius: 0;
   display: flex; align-items: center; justify-content: center;
   transition: color .2s, background .2s;
 }
@@ -383,7 +383,7 @@ const LOGIN_CSS = `
   padding: 9px 12px;
   background: rgba(239,68,68,.07);
   border: 1px solid rgba(239,68,68,.2);
-  border-radius: 9px;
+  border-radius: 0;
   font-size: 13px; color: #fca5a5;
   font-family: 'Inter', sans-serif;
 }
@@ -395,10 +395,10 @@ const LOGIN_CSS = `
   width: 100%;
   padding: 12px;
   border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #f97316 0%, #ea580c 100%);
-  color: #fff;
-  font-family: 'Outfit', sans-serif;
+  border-radius: 0;
+  background: #FF5D00;
+  color: #0D0101;
+  font-family: 'Archivo', sans-serif;
   font-size: 14.5px; font-weight: 600;
   letter-spacing: .3px;
   cursor: pointer;
@@ -409,7 +409,7 @@ const LOGIN_CSS = `
 }
 .login-btn:hover:not(:disabled) {
   transform: translateY(-1px);
-  box-shadow: 0 8px 28px rgba(249,115,22,.35);
+  box-shadow: none;
 }
 .login-btn:active:not(:disabled) {
   transform: translateY(0);
@@ -429,7 +429,7 @@ const LOGIN_CSS = `
   display: inline-block; width: 16px; height: 16px;
   border-radius: 50%;
   border: 2.5px solid rgba(255,255,255,.25);
-  border-top-color: #fff;
+  border-top-color: #0D0101;
   animation: spin .7s linear infinite;
 }
 
@@ -448,8 +448,8 @@ const LOGIN_CSS = `
 .login-initial-loader {
   width: 32px; height: 32px;
   border-radius: 50%;
-  border: 3px solid rgba(249,115,22,.15);
-  border-top-color: #f97316;
+  border: 3px solid #262422;
+  border-top-color: #FF5D00;
   animation: spin .8s linear infinite;
 }
 `

@@ -237,7 +237,7 @@ export function PeoplePage() {
               className="h-8 w-8 rounded-full object-cover"
             />
           ) : (
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-800 text-xs font-medium text-gray-300">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-surface text-xs font-medium text-ink-dim">
               {row.full_name
                 .split(' ')
                 .map((n) => n[0])
@@ -246,7 +246,7 @@ export function PeoplePage() {
                 .toUpperCase()}
             </div>
           )}
-          <span className="font-medium text-white">{row.full_name}</span>
+          <span className="font-medium text-ink">{row.full_name}</span>
         </div>
       ),
     },
@@ -313,10 +313,10 @@ export function PeoplePage() {
             <span>{count} {count === 1 ? 'item' : 'itens'}</span>
             {row.low_stock_warnings > 0 && (
               <span
-                className="inline-flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-400"
+                className="inline-flex items-center gap-1 rounded-none bg-warn/15 px-2 py-0.5 text-xs font-medium text-warn"
                 title={`${row.low_stock_warnings} item(ns) com estoque baixo no almoxarifado`}
               >
-                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-amber-400">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none" className="text-warn">
                   <path d="M6 1L11 10H1L6 1Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
                   <path d="M6 4.5V6.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
                   <circle cx="6" cy="8" r="0.5" fill="currentColor" />
@@ -345,10 +345,7 @@ export function PeoplePage() {
     <div className="flex flex-col gap-6">
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Gestão de Colaboradores</h2>
-          <p className="mt-1 text-sm text-gray-400">
-            Cadastro de colaboradores, lideranças e seus inventários
-          </p>
+          <h2 className="text-2xl font-bold text-ink">Gestão de Colaboradores</h2>
         </div>
         <Button
           onClick={() => {
@@ -380,7 +377,7 @@ export function PeoplePage() {
               })
             }}
             leftIcon={
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-gray-400">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="text-ink-dim">
                 <circle cx="6.5" cy="6.5" r="5.5" stroke="currentColor" strokeWidth="2" />
                 <path d="M11 11L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
               </svg>
@@ -404,8 +401,8 @@ export function PeoplePage() {
       </div>
 
       {refreshing && (
-        <div className="inline-flex items-center gap-2 text-xs text-orange-200/75">
-          <span className="h-2 w-2 rounded-full bg-orange-400 animate-pulse" />
+        <div className="inline-flex items-center gap-2 text-xs text-ink">
+          <span className="h-2 w-2 rounded-full bg-blaze animate-pulse" />
           Atualizando colaboradores...
         </div>
       )}
@@ -427,8 +424,8 @@ export function PeoplePage() {
 
       {/* Paginação */}
       {totalCount > PAGE_SIZE && (
-        <div className="flex items-center justify-between border-t border-gray-700 pt-4">
-          <p className="text-sm text-gray-400">
+        <div className="flex items-center justify-between border-t border-line pt-4">
+          <p className="text-sm text-ink-dim">
             Mostrando {currentPage * PAGE_SIZE + 1} - {Math.min((currentPage + 1) * PAGE_SIZE, totalCount)} de {totalCount} colaboradores
           </p>
           <div className="flex items-center gap-2">
@@ -444,7 +441,7 @@ export function PeoplePage() {
             >
               Anterior
             </Button>
-            <span className="text-sm text-gray-400">
+            <span className="text-sm text-ink-dim">
               Página {currentPage + 1} de {Math.ceil(totalCount / PAGE_SIZE)}
             </span>
             <Button
@@ -509,9 +506,9 @@ function ConfirmToggleModal({ person, onConfirm, onCancel }: ConfirmToggleModalP
       size="sm"
     >
       <div className="flex flex-col gap-4">
-        <p className="text-sm text-gray-300">
+        <p className="text-sm text-ink-dim">
           Tem certeza que deseja {isDeactivating ? 'desativar' : 'reativar'}{' '}
-          <span className="font-medium text-white">{person.full_name}</span>?
+          <span className="font-medium text-ink">{person.full_name}</span>?
         </p>
         <div className="flex justify-end gap-3">
           <Button type="button" variant="secondary" onClick={onCancel}>

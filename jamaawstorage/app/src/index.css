@@ -1,20 +1,89 @@
 @import "tailwindcss";
 
+/* ============================================================
+   IDENTIDADE VISUAL - dark editorial
+   Preto chapado, uma superficie elevada, laranja so em bloco
+   solido, canto vivo. Divisor de 1px no lugar de borda de card.
+   ============================================================ */
+
+@theme {
+  /* Superficies */
+  --color-void: #0D0101;
+  --color-surface: #151515;
+  --color-line: #262422;
+
+  /* Texto */
+  --color-ink: #FFFAFA;
+  --color-ink-dim: #A09B98;
+  --color-ink-mute: #6B6663;
+
+  /* Acento: so preenchido, em acao primaria e estado critico */
+  --color-blaze: #FF5D00;
+  --color-blaze-ink: #0D0101;
+
+  /* Semanticas */
+  --color-ok: #4ADE80;
+  --color-warn: #FBBF24;
+  --color-crit: #F87171;
+
+  /* Tipografia */
+  --font-display: 'Archivo', 'Helvetica Neue', Arial, sans-serif;
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+
+  /* Canto vivo: o raio existe so como token, para ficar em um lugar so */
+  --radius-none: 0px;
+
+  /* Alvo de toque minimo */
+  --spacing-touch: 2.75rem;
+}
+
 /* ESTILOS BASE ANTI-FLASH */
 @layer base {
   html {
-    background-color: #030712; /* gray-950 */
+    background-color: var(--color-void);
   }
   body {
-    background-color: #030712;
-    color: #ffffff;
+    background-color: var(--color-void);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
     min-height: 100vh;
     margin: 0;
     padding: 0;
+    -webkit-font-smoothing: antialiased;
   }
   #root {
     min-height: 100vh;
-    background-color: #030712;
+    background-color: var(--color-void);
+  }
+
+  h1, h2, h3, h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  /* Quantidade, codigo de item e data alinham em coluna. */
+  th, td {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  /* Rotulo de coluna, unidade, codigo. */
+  .label-mono {
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--color-ink-mute);
+  }
+
+  /* Numero de destaque. */
+  .num {
+    font-family: var(--font-mono);
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
   }
 }
 

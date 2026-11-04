@@ -11,10 +11,11 @@ interface StatCardProps {
   variant?: 'default' | 'warning' | 'danger'
 }
 
-const variantClasses: Record<NonNullable<StatCardProps['variant']>, string> = {
-  default: '',
-  warning: 'border-l-4 border-l-orange-500',
-  danger: 'border-l-4 border-l-red-500',
+/* O estado critico tinge o numero, nao a borda: sem faixa lateral, sem cartao. */
+const valueClasses: Record<NonNullable<StatCardProps['variant']>, string> = {
+  default: 'text-ink',
+  warning: 'text-warn',
+  danger: 'text-blaze',
 }
 
 export function StatCard({
@@ -25,16 +26,13 @@ export function StatCard({
   variant = 'default',
 }: StatCardProps) {
   return (
-    <div
-      className={cn(
-        'rounded-xl bg-gray-900 p-4',
-        variantClasses[variant],
-      )}
-    >
-      <div className="flex items-start justify-between">
-        <div className="flex flex-col gap-1">
-          <p className="text-sm font-medium text-gray-400">{title}</p>
-          <p className="text-2xl font-bold text-white">{value}</p>
+    <div className="bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="flex min-w-0 flex-col gap-2">
+          <p className="label-mono truncate">{title}</p>
+          <p className={cn('num text-2xl leading-none', valueClasses[variant])}>
+            {value}
+          </p>
           {trend && (
             <div className="flex items-center gap-1">
               <svg
@@ -45,20 +43,15 @@ export function StatCard({
                 xmlns="http://www.w3.org/2000/svg"
                 className={cn(
                   'transition-transform',
-                  trend.isPositive
-                    ? 'text-emerald-400'
-                    : 'rotate-180 text-red-400',
+                  trend.isPositive ? 'text-ok' : 'rotate-180 text-crit',
                 )}
               >
-                <path
-                  d="M7 2L12 8H2L7 2Z"
-                  fill="currentColor"
-                />
+                <path d="M7 2L12 8H2L7 2Z" fill="currentColor" />
               </svg>
               <span
                 className={cn(
-                  'text-xs font-medium',
-                  trend.isPositive ? 'text-emerald-400' : 'text-red-400',
+                  'num text-xs',
+                  trend.isPositive ? 'text-ok' : 'text-crit',
                 )}
               >
                 {Math.abs(trend.value)}%
@@ -67,14 +60,7 @@ export function StatCard({
           )}
         </div>
         {icon && (
-          <div
-            className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-lg bg-gray-800 text-orange-500',
-              variant === 'danger' && 'animate-pulse',
-            )}
-          >
-            {icon}
-          </div>
+          <div className="flex-shrink-0 text-ink-mute">{icon}</div>
         )}
       </div>
     </div>

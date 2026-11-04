@@ -137,10 +137,10 @@ function typeBucket(operation: MovementOperation): 'entry' | 'exit' | 'return' |
 
 function toneFor(operation: MovementOperation) {
   const bucket = typeBucket(operation)
-  if (bucket === 'entry') return { dot: 'bg-emerald-400', amount: 'text-emerald-300', badge: 'success' as const }
-  if (bucket === 'exit') return { dot: 'bg-red-400', amount: 'text-red-300', badge: 'danger' as const }
+  if (bucket === 'entry') return { dot: 'bg-emerald-400', amount: 'text-ok', badge: 'success' as const }
+  if (bucket === 'exit') return { dot: 'bg-red-400', amount: 'text-crit', badge: 'danger' as const }
   if (bucket === 'return') return { dot: 'bg-sky-400', amount: 'text-sky-300', badge: 'info' as const }
-  return { dot: 'bg-amber-400', amount: 'text-amber-200', badge: 'warning' as const }
+  return { dot: 'bg-amber-400', amount: 'text-warn', badge: 'warning' as const }
 }
 
 function groupOperations(events: MovementEventRow[]): MovementOperation[] {
@@ -307,11 +307,11 @@ export function StockMovementsTab() {
 
   return (
     <div className="space-y-4">
-      <section className="rounded-2xl border border-white/8 bg-[#111216] p-4 shadow-[0_12px_30px_rgba(0,0,0,0.14)]">
+      <section className="rounded-none border border-line bg-surface p-4">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
           <div className="min-w-0 xl:w-64">
-            <h2 className="text-lg font-semibold text-white">Histórico de movimentações</h2>
-            <p className="mt-0.5 text-xs text-gray-500">Saldo real, origem e responsável em uma única timeline.</p>
+            <h2 className="text-lg font-semibold text-ink">Histórico de movimentações</h2>
+            <p className="mt-0.5 text-xs text-ink-mute">Saldo real, origem e responsável em uma única timeline.</p>
           </div>
 
           <div className="grid flex-1 gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(220px,1.5fr)_minmax(150px,0.8fr)_minmax(160px,0.8fr)_auto]">
@@ -333,7 +333,7 @@ export function StockMovementsTab() {
         </div>
 
         {showAdvanced && (
-          <div className="mt-3 grid gap-2 border-t border-white/8 pt-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
+          <div className="mt-3 grid gap-2 border-t border-line pt-3 md:grid-cols-[1fr_1fr_1fr_auto] md:items-end">
             <Select value={sourceFilter} onChange={(event) => setSourceFilter(event.target.value)} options={SOURCE_OPTIONS} label="Origem" />
             <Input label="De" type="datetime-local" value={from} onChange={(event) => { setPeriodPreset('custom'); setFrom(event.target.value) }} />
             <Input label="Até" type="datetime-local" value={to} onChange={(event) => { setPeriodPreset('custom'); setTo(event.target.value) }} />
@@ -343,14 +343,14 @@ export function StockMovementsTab() {
       </section>
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <CompactStat label="Entradas" value={`+${stats.entries}`} tone="text-emerald-300" />
-        <CompactStat label="Saídas" value={`-${stats.exits}`} tone="text-red-300" />
+        <CompactStat label="Entradas" value={`+${stats.entries}`} tone="text-ok" />
+        <CompactStat label="Saídas" value={`-${stats.exits}`} tone="text-crit" />
         <CompactStat label="Devoluções" value={`+${stats.returns}`} tone="text-sky-300" />
-        <CompactStat label="Ajustes" value={stats.adjustments} tone="text-amber-200" />
+        <CompactStat label="Ajustes" value={stats.adjustments} tone="text-warn" />
       </div>
 
       {itemFilter && (
-        <div className="flex items-center justify-between rounded-xl border border-orange-400/15 bg-orange-500/8 px-3 py-2 text-sm text-orange-100">
+        <div className="flex items-center justify-between rounded-none border border-line bg-surface px-3 py-2 text-sm text-ink">
           <span>Exibindo somente as movimentações deste item.</span>
           <Button size="sm" variant="ghost" onClick={() => navigate('/stock?tab=movements')}>Ver todos</Button>
         </div>
@@ -385,8 +385,8 @@ export function StockMovementsTab() {
 
 function CompactStat({ label, value, tone }: { label: string; value: string | number; tone: string }) {
   return (
-    <div className="flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.035] px-3 py-2">
-      <span className="text-xs text-gray-500">{label}</span>
+    <div className="flex items-center justify-between rounded-none border border-line bg-surface px-3 py-2">
+      <span className="text-xs text-ink-mute">{label}</span>
       <strong className={cn('text-sm font-semibold', tone)}>{value}</strong>
     </div>
   )
@@ -402,12 +402,12 @@ function MovementRow({ operation, onOpen }: { operation: MovementOperation; onOp
   const sign = operation.quantityDelta > 0 ? '+' : ''
 
   return (
-    <article className="overflow-hidden rounded-2xl border border-white/8 bg-[#111216] transition-colors hover:border-white/14">
+    <article className="overflow-hidden rounded-none border border-line bg-surface transition-colors hover:border-line">
       <div className="grid gap-3 p-3 sm:grid-cols-[auto_minmax(0,1fr)_auto] sm:items-center">
         <button
           type="button"
           onClick={() => navigate(`/stock?tab=items&item=${event.stock_item_id}`)}
-          className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/8 bg-black/20"
+          className="flex h-11 w-11 items-center justify-center rounded-none border border-line bg-void"
           aria-label={`Abrir ${event.stock_item?.name ?? 'item'}`}
         >
           <ItemVisual iconKey={event.stock_item?.svg_icon_key ?? null} size={28} />
@@ -417,15 +417,15 @@ function MovementRow({ operation, onOpen }: { operation: MovementOperation; onOp
           <div className="flex flex-wrap items-center gap-1.5">
             <Badge variant={tone.badge} size="sm">{movementLabel(event.event_kind)}</Badge>
             <Badge variant="default" size="sm">{sourceLabel(event.source)}</Badge>
-            {event.related_code && <span className="font-mono text-xs text-orange-300">{event.related_code}</span>}
-            {event.provenance === 'backfill' && <span className="text-[10px] text-gray-600">histórico migrado</span>}
+            {event.related_code && <span className="font-mono text-xs text-ink">{event.related_code}</span>}
+            {event.provenance === 'backfill' && <span className="text-[10px] text-ink-mute">histórico migrado</span>}
           </div>
           <div className="mt-1.5 flex min-w-0 flex-wrap items-baseline gap-x-2 gap-y-0.5">
-            <h3 className="truncate text-sm font-semibold text-white">{event.stock_item?.name ?? 'Item removido'}</h3>
-            <span className="text-xs text-gray-500">{event.counterparty_name ?? event.actor?.full_name ?? 'Sistema'}</span>
-            <span className="text-xs text-gray-600">{formatDateTime(operation.createdAt)}</span>
+            <h3 className="truncate text-sm font-semibold text-ink">{event.stock_item?.name ?? 'Item removido'}</h3>
+            <span className="text-xs text-ink-mute">{event.counterparty_name ?? event.actor?.full_name ?? 'Sistema'}</span>
+            <span className="text-xs text-ink-mute">{formatDateTime(operation.createdAt)}</span>
           </div>
-          <p className="mt-1 line-clamp-1 text-xs text-gray-400">{event.description ?? 'Movimentação registrada.'}</p>
+          <p className="mt-1 line-clamp-1 text-xs text-ink-dim">{event.description ?? 'Movimentação registrada.'}</p>
         </button>
 
         <div className="flex items-center justify-between gap-2 sm:justify-end">
@@ -434,14 +434,14 @@ function MovementRow({ operation, onOpen }: { operation: MovementOperation; onOp
               {operation.quantityDelta === 0 ? 'Sem alteração' : `${sign}${formatQuantity(operation.quantityDelta, unit)}`}
             </p>
             {operation.balanceBefore !== null && operation.balanceAfter !== null && (
-              <p className="text-[11px] text-gray-500">{operation.balanceBefore} → {operation.balanceAfter}</p>
+              <p className="text-[11px] text-ink-mute">{operation.balanceBefore} → {operation.balanceAfter}</p>
             )}
           </div>
-          <button type="button" onClick={onOpen} className="rounded-lg p-2 text-gray-500 hover:bg-white/5 hover:text-white" aria-label="Abrir registro">
+          <button type="button" onClick={onOpen} className="rounded-none p-2 text-ink-mute hover:bg-surface hover:text-ink" aria-label="Abrir registro">
             <ExternalLink size={16} />
           </button>
           {hasDetails && (
-            <button type="button" onClick={() => setExpanded((current) => !current)} className="rounded-lg p-2 text-gray-500 hover:bg-white/5 hover:text-white" aria-label="Exibir etapas">
+            <button type="button" onClick={() => setExpanded((current) => !current)} className="rounded-none p-2 text-ink-mute hover:bg-surface hover:text-ink" aria-label="Exibir etapas">
               {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
             </button>
           )}
@@ -449,15 +449,15 @@ function MovementRow({ operation, onOpen }: { operation: MovementOperation; onOp
       </div>
 
       {expanded && (
-        <div className="border-t border-white/8 bg-black/15 px-3 py-2.5">
+        <div className="border-t border-line bg-void px-3 py-2.5">
           <div className="grid gap-2 lg:grid-cols-[1fr_auto]">
             <div className="space-y-1.5">
               {operation.events.map((stage) => (
                 <div key={stage.id} className="flex items-start gap-2 text-xs">
                   <span className={cn('mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full', tone.dot)} />
-                  <span className="font-medium text-gray-300">{movementLabel(stage.event_kind)}</span>
-                  <span className="text-gray-500">{stage.description}</span>
-                  <span className="ml-auto shrink-0 text-gray-600">{formatDateTime(stage.created_at)}</span>
+                  <span className="font-medium text-ink-dim">{movementLabel(stage.event_kind)}</span>
+                  <span className="text-ink-mute">{stage.description}</span>
+                  <span className="ml-auto shrink-0 text-ink-mute">{formatDateTime(stage.created_at)}</span>
                 </div>
               ))}
             </div>
@@ -475,5 +475,5 @@ function MovementRow({ operation, onOpen }: { operation: MovementOperation; onOp
 
 function DeltaPill({ label, value }: { label: string; value: number }) {
   if (value === 0) return null
-  return <span className="rounded-md border border-white/8 bg-white/4 px-2 py-1 text-gray-400">{label}: {value > 0 ? '+' : ''}{value}</span>
+  return <span className="rounded-none border border-line bg-surface px-2 py-1 text-ink-dim">{label}: {value > 0 ? '+' : ''}{value}</span>
 }

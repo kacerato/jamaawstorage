@@ -1,4 +1,6 @@
-export type AppRole = 'supervisor' | 'leader' | 'collaborator'
+/* 'admin' existe apenas para contas de login (profiles). A tabela people
+ * segue usando supervisor/leader/collaborator. */
+export type AppRole = 'admin' | 'supervisor' | 'leader' | 'collaborator'
 
 export type WithdrawalDestinationType = 'collaborator' | 'work_site'
 export type StockReturnSourceType = 'collaborator' | 'work_site'
@@ -1363,6 +1365,52 @@ export interface Database {
     }
     Returns: string
   }
+  /* Hierarquia de contas: todas exigem administrador ativo no banco. */
+  is_active_admin: {
+    Args: Record<string, never>
+    Returns: boolean
+  }
+  set_supervisor_active: {
+    Args: {
+      p_profile_id: string
+      p_is_active: boolean
+    }
+    Returns: undefined
+  }
+  set_supervisor_role: {
+    Args: {
+      p_profile_id: string
+      p_role: string
+    }
+    Returns: undefined
+  }
+  reset_supervisor_password: {
+    Args: {
+      p_profile_id: string
+      p_password: string
+    }
+    Returns: undefined
+  }
+  admin_account_overview: {
+    Args: Record<string, never>
+    Returns: {
+      id: string
+      full_name: string
+      email: string | null
+      employee_id: string | null
+      role: string
+      sector: string | null
+      photo_url: string | null
+      is_active: boolean
+      created_at: string
+      last_sign_in_at: string | null
+      /* count(*) e bigint: o PostgREST serializa como string. */
+      withdrawals_count: number | string
+      returns_count: number | string
+      audit_count: number | string
+      last_action_at: string | null
+    }[]
+  }
   adjust_stock_item_quantity: {
     Args: {
       p_stock_item_id: string
@@ -1633,7 +1681,7 @@ export interface Database {
   }
 }
     Enums: {
-      app_role: 'supervisor' | 'leader' | 'collaborator'
+      app_role: 'admin' | 'supervisor' | 'leader' | 'collaborator'
       withdrawal_status: 'pending' | 'approved' | 'rejected' | 'completed'
     }
     CompositeTypes: Record<string, never>

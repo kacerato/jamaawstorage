@@ -13,18 +13,20 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   rightIcon?: React.ReactNode
 }
 
+/* O acento so existe preenchido. As demais variantes vivem de divisor e texto. */
 const variantClasses: Record<ButtonVariant, string> = {
-  primary: 'bg-orange-500 hover:bg-orange-600 text-white',
-  secondary: 'bg-gray-800 hover:bg-gray-700 text-gray-300 border border-gray-700',
-  danger: 'bg-red-600 hover:bg-red-700 text-white',
-  ghost: 'hover:bg-gray-800 text-gray-300',
-  outline: 'border border-orange-500 text-orange-500 hover:bg-orange-500/10',
+  primary: 'bg-blaze text-blaze-ink hover:bg-blaze/90',
+  secondary: 'bg-surface text-ink border border-line hover:border-ink-mute',
+  danger: 'bg-surface text-crit border border-crit/40 hover:border-crit',
+  ghost: 'text-ink-dim hover:bg-surface hover:text-ink',
+  outline: 'border border-line text-ink hover:border-ink-mute',
 }
 
+/* min-h-touch garante 44px de alvo mesmo no tamanho sm. */
 const sizeClasses: Record<ButtonSize, string> = {
-  sm: 'px-3 py-1.5 text-sm',
-  md: 'px-4 py-2 text-sm',
-  lg: 'px-6 py-3 text-base',
+  sm: 'min-h-touch px-3 text-sm',
+  md: 'min-h-touch px-4 text-sm',
+  lg: 'min-h-touch px-6 py-3 text-base',
 }
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
@@ -48,7 +50,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
       <button
         ref={ref}
         className={cn(
-          'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/50 focus:ring-offset-2 focus:ring-offset-gray-950',
+          'inline-flex items-center justify-center gap-2 rounded-none font-semibold transition-colors focus:outline-none focus:ring-2 focus:ring-ink/40 focus:ring-offset-2 focus:ring-offset-void',
           variantClasses[variant],
           sizeClasses[size],
           isDisabled && 'pointer-events-none opacity-50',

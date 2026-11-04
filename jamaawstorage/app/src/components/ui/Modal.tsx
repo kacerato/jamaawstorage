@@ -72,28 +72,20 @@ export function Modal({
       aria-modal="true"
       aria-labelledby="modal-title"
     >
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
+      <div className="absolute inset-0 bg-black/70" onClick={onClose} />
       <div
         className={cn(
-          'relative flex max-h-[calc(100dvh-1rem)] w-full transform flex-col overflow-hidden rounded-2xl border border-white/10 bg-[linear-gradient(180deg,_rgba(20,20,24,0.98)_0%,_rgba(12,12,15,0.98)_100%)] shadow-[0_32px_90px_rgba(0,0,0,0.45)] transition-all duration-200 sm:max-h-[calc(100dvh-2rem)] sm:rounded-[24px]',
+          'relative flex max-h-[calc(100dvh-1rem)] w-full transform flex-col overflow-hidden rounded-none border border-line bg-surface transition-all duration-200 sm:max-h-[calc(100dvh-2rem)]',
           sizeClasses[size],
           isAnimating
             ? 'translate-y-0 scale-100 opacity-100'
             : 'translate-y-4 scale-95 opacity-0',
         )}
       >
-        <div className="flex flex-shrink-0 items-center justify-between border-b border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.12),_transparent_50%)] px-4 py-3.5 sm:px-5 sm:py-4">
-          <div>
-            <p className="text-[11px] font-semibold uppercase tracking-[0.28em] text-orange-200/70">
-              JamaaW
-            </p>
-            <h2
-              id="modal-title"
-              className="mt-1 text-lg font-semibold text-white"
-            >
+        <div className="flex flex-shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-3.5 sm:px-5 sm:py-4">
+          <div className="min-w-0">
+            <p className="label-mono">JamaaW</p>
+            <h2 id="modal-title" className="mt-1 text-lg font-semibold text-ink">
               {title}
             </h2>
           </div>
@@ -101,7 +93,7 @@ export function Modal({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border border-white/8 bg-white/4 p-2 text-gray-400 transition-colors hover:bg-white/8 hover:text-white"
+              className="flex h-touch w-touch flex-shrink-0 items-center justify-center rounded-none border border-line text-ink-mute transition-colors hover:border-ink-mute hover:text-ink"
               aria-label="Fechar"
             >
               <svg

@@ -35,8 +35,24 @@ function App() {
             <Route path="/worksites" element={<Navigate to="/withdrawals/new" replace />} />
             <Route path="/reports" element={<ReportsPage />} />
             <Route path="/vehicles" element={<VehiclesPage />} />
-            <Route path="/audit" element={<AuditPage />} />
-            <Route path="/supervisors" element={<SupervisorsPage />} />
+            {/* Auditoria e contas sao do administrador. A RLS corta os dados
+                de qualquer forma; o guard evita montar a pagina vazia. */}
+            <Route
+              path="/audit"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <AuditPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/supervisors"
+              element={
+                <ProtectedRoute requireAdmin>
+                  <SupervisorsPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/profile" element={<ProfilePage />} />
       </Route>
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -76,21 +76,21 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
 
     switch (notification.type) {
       case 'stock_critical':
-        return <AlertIcon size={14} className="text-red-200" />
+        return <AlertIcon size={14} className="text-crit" />
       case 'stock_low':
-        return <AlertIcon size={14} className="text-orange-100" />
+        return <AlertIcon size={14} className="text-ink" />
       case 'stock_return_pending':
         return <WarehouseIcon size={14} className="text-sky-100" />
       case 'stock_return_held':
-        return <ClipboardIcon size={14} className="text-amber-100" />
+        return <ClipboardIcon size={14} className="text-warn" />
       case 'vehicle_maintenance_due':
-        return <Wrench size={14} className="text-red-200" />
+        return <Wrench size={14} className="text-crit" />
       case 'vehicle_maintenance_upcoming':
-        return <Wrench size={14} className="text-amber-100" />
+        return <Wrench size={14} className="text-warn" />
       case 'withdrawal_pending':
-        return <ClipboardIcon size={14} className="text-amber-100" />
+        return <ClipboardIcon size={14} className="text-warn" />
       case 'withdrawal_completed':
-        return <ClipboardIcon size={14} className="text-emerald-100" />
+        return <ClipboardIcon size={14} className="text-ok" />
       default:
         return null
     }
@@ -122,42 +122,42 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
   const accentForType = (type: NotificationItem['type']) => {
     switch (type) {
       case 'stock_critical':
-        return 'from-red-500/30 to-red-500/5 border-red-400/20 text-red-200'
+        return '  border-crit text-crit'
       case 'stock_low':
-        return 'from-orange-500/30 to-orange-500/5 border-orange-400/20 text-orange-100'
+        return '  border-line text-ink'
       case 'stock_return_pending':
-        return 'from-sky-500/30 to-sky-500/5 border-sky-400/20 text-sky-100'
+        return '  border-sky-400/20 text-sky-100'
       case 'stock_return_held':
-        return 'from-amber-500/30 to-amber-500/5 border-amber-400/20 text-amber-100'
+        return '  border-warn text-warn'
       case 'vehicle_maintenance_due':
-        return 'from-red-500/30 to-red-500/5 border-red-400/20 text-red-200'
+        return '  border-crit text-crit'
       case 'vehicle_maintenance_upcoming':
-        return 'from-amber-500/30 to-amber-500/5 border-amber-400/20 text-amber-100'
+        return '  border-warn text-warn'
       case 'withdrawal_pending':
-        return 'from-amber-500/30 to-amber-500/5 border-amber-400/20 text-amber-100'
+        return '  border-warn text-warn'
       case 'withdrawal_completed':
-        return 'from-emerald-500/30 to-emerald-500/5 border-emerald-400/20 text-emerald-100'
+        return '  border-ok text-ok'
       case 'item_added':
-        return 'from-emerald-500/30 to-emerald-500/5 border-emerald-400/20 text-emerald-100'
+        return '  border-ok text-ok'
     }
   }
 
   return (
     <div
       ref={ref}
-      className="absolute right-0 top-[calc(100%+10px)] z-[100] w-[292px] overflow-hidden rounded-[20px] border border-white/10 bg-[#101113]/95 shadow-[0_28px_80px_rgba(0,0,0,0.55)] backdrop-blur-xl"
+      className="absolute right-0 top-[calc(100%+10px)] z-[100] w-[292px] overflow-hidden rounded-none border border-line bg-surface/95"
       role="region"
       aria-label="Notificacoes"
     >
-      <div className="border-b border-white/8 bg-[radial-gradient(circle_at_top_left,_rgba(249,115,22,0.16),_transparent_45%)] px-4 py-3.5">
+      <div className="border-b border-line bg-surface px-4 py-3.5">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-orange-200/75">
+            <p className="text-xs font-semibold uppercase tracking-[0.28em] text-ink">
               Central
             </p>
-            <h3 className="mt-1 text-[15px] font-semibold text-white">Notificacoes</h3>
+            <h3 className="mt-1 text-[15px] font-semibold text-ink">Notificacoes</h3>
           </div>
-          <div className="rounded-full border border-orange-400/20 bg-orange-500/10 px-3 py-1 text-xs font-semibold text-orange-200">
+          <div className="rounded-none border border-line bg-surface px-3 py-1 text-xs font-semibold text-ink">
             {unreadCount} novas
           </div>
         </div>
@@ -165,13 +165,13 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
 
       {notifications.length === 0 ? (
         <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-          <div className="flex h-14 w-14 items-center justify-center rounded-2xl border border-white/8 bg-white/5 text-gray-500">
+          <div className="flex h-14 w-14 items-center justify-center rounded-none border border-line bg-surface text-ink-mute">
             <svg width={28} height={28} viewBox="0 0 24 24" fill="none">
               <path d="M18 8C18 6.4087 17.3679 4.88258 16.2426 3.75736C15.1174 2.63214 13.5913 2 12 2C10.4087 2 8.88258 2.63214 7.75736 3.75736C6.63214 4.88258 6 6.4087 6 8C6 15 3 17 3 17H21C21 17 18 15 18 8Z" stroke="currentColor" strokeWidth="2" />
               <path d="M13.73 21C13.5542 21.3031 13.3019 21.5547 12.9982 21.7295C12.6946 21.9044 12.3504 21.9965 12 21.9965C11.6496 21.9965 11.3054 21.9044 11.0018 21.7295C10.6982 21.5547 10.4458 21.3031 10.27 21" stroke="currentColor" strokeWidth="2" />
             </svg>
           </div>
-          <p className="text-sm text-gray-400">Tudo limpo por aqui.</p>
+          <p className="text-sm text-ink-dim">Tudo limpo por aqui.</p>
         </div>
       ) : (
         <ul className="max-h-[300px] space-y-1.5 overflow-y-auto px-2.5 py-2.5">
@@ -179,7 +179,7 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
             <li key={notification.id}>
               <button
                 className={cn(
-                  'w-full rounded-[18px] border bg-gradient-to-r px-3 py-2.5 text-left transition-all hover:translate-y-[-1px]',
+                  'w-full rounded-none border  px-3 py-2.5 text-left transition-all hover:translate-y-[-1px]',
                   accentForType(notification.type)
                 )}
                 onClick={() => {
@@ -190,21 +190,21 @@ function NotificationDropdown({ notifications, unreadCount, onClose }: Notificat
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="flex h-7 w-7 items-center justify-center rounded-xl border border-white/10 bg-black/15">
+                      <span className="flex h-7 w-7 items-center justify-center rounded-none border border-line bg-void">
                         {iconForType(notification)}
                       </span>
-                      <span className="rounded-full border border-white/10 bg-black/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-white/75">
+                      <span className="rounded-none border border-line bg-void px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-dim">
                         {labelForType(notification.type)}
                       </span>
-                      <span className="text-xs text-white/50">
+                      <span className="text-xs text-ink-dim">
                         {new Date(notification.createdAt).toLocaleString('pt-BR')}
                       </span>
                     </div>
-                    <p className="mt-1.5 text-[13px] font-semibold text-white">{notification.title}</p>
-                    <p className="mt-0.5 text-[11px] leading-4 text-white/72">{notification.description}</p>
+                    <p className="mt-1.5 text-[13px] font-semibold text-ink">{notification.title}</p>
+                    <p className="mt-0.5 text-[11px] leading-4 text-ink-dim">{notification.description}</p>
                   </div>
                   {notification.isUnread ? (
-                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-white/75" />
+                    <span className="mt-1 h-2 w-2 shrink-0 rounded-full bg-surface" />
                   ) : null}
                 </div>
               </button>
@@ -319,10 +319,10 @@ export function Header({
   }, [])
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-white/8 bg-[#09090b]/82 px-3 backdrop-blur-xl sm:px-4 lg:px-5">
+    <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-line bg-void/82 px-3 sm:px-4 lg:px-5">
       <button
         onClick={onToggleSidebar}
-        className="flex items-center justify-center rounded-2xl p-2 text-gray-400 transition-colors hover:bg-white/5 hover:text-white lg:hidden"
+        className="flex items-center justify-center rounded-none p-2 text-ink-dim transition-colors hover:bg-surface hover:text-ink lg:hidden"
         aria-label="Abrir menu"
       >
         <svg width={24} height={24} viewBox="0 0 24 24" fill="none">
@@ -333,7 +333,7 @@ export function Header({
       </button>
 
       <div className="min-w-0">
-        <h1 className="truncate text-lg font-semibold text-white">{pageTitle}</h1>
+        <h1 className="truncate text-lg font-semibold text-ink">{pageTitle}</h1>
       </div>
 
       <div className="flex-1" />
@@ -345,7 +345,7 @@ export function Header({
             height={18}
             viewBox="0 0 24 24"
             fill="none"
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-gray-500"
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-ink-mute"
           >
             <path d="M21 21L15 15M17 10C17 13.866 13.866 17 10 17C6.13401 17 3 13.866 3 10C3 6.13401 6.13401 3 10 3C13.866 3 17 6.13401 17 10Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
@@ -365,16 +365,16 @@ export function Header({
                 setSearchQuery('')
               }
             }}
-            className="w-full rounded-2xl border border-white/8 bg-white/4 py-2.5 pl-10 pr-4 text-sm text-white placeholder-gray-500 transition-colors focus:border-orange-500/50 focus:outline-none focus:ring-1 focus:ring-orange-500/30"
+            className="w-full rounded-none border border-line bg-surface py-2.5 pl-10 pr-4 text-sm text-ink placeholder-ink-mute transition-colors focus:border-ink focus:outline-none focus:ring-1 focus:ring-line"
           />
           {showSearch && (
-            <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-[90] overflow-hidden rounded-2xl border border-white/10 bg-[#101113]/96 shadow-[0_24px_70px_rgba(0,0,0,0.45)]">
-              <div className="border-b border-white/8 px-4 py-3 text-xs uppercase tracking-[0.2em] text-orange-200/75">
+            <div className="absolute left-0 right-0 top-[calc(100%+10px)] z-[90] overflow-hidden rounded-none border border-line bg-surface/96">
+              <div className="border-b border-line px-4 py-3 text-xs uppercase tracking-[0.2em] text-ink">
                 Busca rapida
               </div>
               <ul className="max-h-[280px] overflow-y-auto p-2">
                 {filteredSearchActions.length === 0 ? (
-                  <li className="px-3 py-3 text-sm text-gray-400">Nenhum atalho encontrado.</li>
+                  <li className="px-3 py-3 text-sm text-ink-dim">Nenhum atalho encontrado.</li>
                 ) : (
                   filteredSearchActions.map((item) => (
                     <li key={item.path}>
@@ -385,13 +385,13 @@ export function Header({
                           setShowSearch(false)
                           setSearchQuery('')
                         }}
-                        className="flex w-full items-start justify-between rounded-xl px-3 py-2.5 text-left transition-colors hover:bg-white/5"
+                        className="flex w-full items-start justify-between rounded-none px-3 py-2.5 text-left transition-colors hover:bg-surface"
                       >
                         <div>
-                          <p className="text-sm font-medium text-white">{item.label}</p>
-                          <p className="mt-0.5 text-xs text-gray-400">{item.description}</p>
+                          <p className="text-sm font-medium text-ink">{item.label}</p>
+                          <p className="mt-0.5 text-xs text-ink-dim">{item.description}</p>
                         </div>
-                        <span className="text-xs text-gray-500">Abrir</span>
+                        <span className="text-xs text-ink-mute">Abrir</span>
                       </button>
                     </li>
                   ))
@@ -406,10 +406,10 @@ export function Header({
         <button
           onClick={toggleNotifications}
           className={cn(
-            'relative flex items-center justify-center rounded-2xl p-2.5 transition-colors',
+            'relative flex items-center justify-center rounded-none p-2.5 transition-colors',
             showNotifications
-              ? 'bg-orange-500/15 text-orange-300'
-              : 'text-gray-400 hover:bg-white/5 hover:text-white'
+              ? 'bg-surface text-ink'
+              : 'text-ink-dim hover:bg-surface hover:text-ink'
           )}
           aria-label={`Notificacoes${unreadCount > 0 ? ` - ${unreadCount} novas` : ''}`}
           aria-expanded={showNotifications}
@@ -438,8 +438,8 @@ export function Header({
         <button
           onClick={toggleProfile}
           className={cn(
-            'flex items-center gap-3 rounded-2xl px-2 py-1.5 transition-colors',
-            showProfile ? 'bg-orange-500/10' : 'hover:bg-white/5'
+            'flex items-center gap-3 rounded-none px-2 py-1.5 transition-colors',
+            showProfile ? 'bg-surface' : 'hover:bg-surface'
           )}
           aria-label="Abrir perfil"
           aria-expanded={showProfile}
@@ -447,7 +447,7 @@ export function Header({
           <div
             className={cn(
               'flex h-9 w-9 items-center justify-center overflow-hidden rounded-full text-xs font-bold',
-              showProfile ? 'bg-orange-500/30 text-orange-200' : 'bg-orange-500/18 text-orange-300'
+              showProfile ? 'bg-surface text-ink' : 'bg-surface text-ink'
             )}
           >
             {profile?.photo_url ? (
@@ -456,7 +456,7 @@ export function Header({
               initials
             )}
           </div>
-          <span className="hidden text-sm font-medium text-white lg:block">
+          <span className="hidden text-sm font-medium text-ink lg:block">
             {profile?.full_name ?? 'Supervisor'}
           </span>
         </button>

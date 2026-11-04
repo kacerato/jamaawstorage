@@ -25,7 +25,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             htmlFor={selectId}
             className={cn(
               'text-sm font-medium',
-              error ? 'text-red-400' : 'text-gray-300',
+              error ? 'text-crit' : 'text-ink-dim',
             )}
           >
             {label}
@@ -35,10 +35,8 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           id={selectId}
           className={cn(
-            'w-full appearance-none rounded-lg border bg-gray-900 px-3 py-2 text-sm text-white transition-colors focus:outline-none focus:ring-2 focus:ring-orange-500/50',
-            error
-              ? 'border-red-500 text-red-400 focus:border-red-500'
-              : 'border-gray-700 focus:border-orange-500',
+            'min-h-touch w-full appearance-none rounded-none border bg-void px-3 py-2 text-sm text-ink transition-colors focus:outline-none',
+            error ? 'border-crit focus:border-crit' : 'border-line focus:border-ink',
             props.disabled && 'cursor-not-allowed opacity-50',
             className,
           )}
@@ -55,7 +53,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             </option>
           ))}
         </select>
-        {error && <p className="text-sm text-red-400">{error}</p>}
+        {error && <p className="text-sm text-crit">{error}</p>}
       </div>
     )
   },

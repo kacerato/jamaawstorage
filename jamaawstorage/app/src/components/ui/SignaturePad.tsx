@@ -142,7 +142,7 @@ export function SignaturePad({
 
   return (
     <div className="flex flex-col gap-2">
-      <label className="text-sm font-medium text-gray-300">
+      <label className="text-sm font-medium text-ink-dim">
         {label}
         {required && <span className="ml-1 text-red-400">*</span>}
       </label>
@@ -150,9 +150,9 @@ export function SignaturePad({
         <canvas
           ref={canvasRef}
           className={cn(
-            'rounded-lg border-2 border-dashed bg-white',
+            'rounded-none border-2 border-dashed bg-white',
             disabled ? 'cursor-not-allowed opacity-50' : 'cursor-crosshair',
-            hasDrawn ? 'border-emerald-500' : 'border-gray-600',
+            hasDrawn ? 'border-ok' : 'border-line',
           )}
           onMouseDown={startDrawing}
           onMouseMove={draw}
@@ -164,11 +164,11 @@ export function SignaturePad({
         />
         {!hasDrawn && !disabled && (
           <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-            <span className="text-sm text-gray-400">{placeholder}</span>
+            <span className="text-sm text-ink-mute">{placeholder}</span>
           </div>
         )}
         {hasDrawn && (
-          <div className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500">
+          <div className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center bg-ok">
             <svg
               width="12"
               height="12"
@@ -193,8 +193,8 @@ export function SignaturePad({
           onClick={handleClear}
           disabled={disabled || !hasDrawn}
           className={cn(
-            'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-            'bg-gray-800 text-gray-300 hover:bg-gray-700',
+            'min-h-touch rounded-none px-3 text-sm font-semibold transition-colors',
+            'bg-surface text-ink border border-line hover:border-ink-mute',
             (disabled || !hasDrawn) && 'pointer-events-none opacity-50',
           )}
         >
@@ -205,8 +205,8 @@ export function SignaturePad({
           onClick={handleConfirm}
           disabled={disabled || !hasDrawn}
           className={cn(
-            'rounded-lg px-3 py-1.5 text-sm font-medium transition-colors',
-            'bg-orange-500 text-white hover:bg-orange-600',
+            'min-h-touch rounded-none px-3 text-sm font-semibold transition-colors',
+            'bg-blaze text-blaze-ink hover:bg-blaze/90',
             (disabled || !hasDrawn) && 'pointer-events-none opacity-50',
           )}
         >

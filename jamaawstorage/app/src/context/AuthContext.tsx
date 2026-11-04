@@ -19,6 +19,10 @@ interface AuthContextType {
   loading: boolean
   error: string | null
   isAuthenticated: boolean
+  /* Topo da hierarquia: gerencia contas e ve a atividade das demais.
+   * Esconder botao nao e controle de acesso — quem decide e a RLS; isto serve
+   * apenas para nao oferecer na tela o que o banco vai recusar. */
+  isAdmin: boolean
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   createSupervisor: (data: {
@@ -38,8 +42,8 @@ function getAccessError(profile: ProfileRow | null): string | null {
     return 'Perfil do usuário não encontrado. Contate o administrador.'
   }
 
-  if (profile.role !== 'supervisor') {
-    return 'Sua conta nao tem permissao de supervisor para acessar este painel.'
+  if (profile.role !== 'admin' && profile.role !== 'supervisor') {
+    return 'Sua conta nao tem permissao para acessar este painel.'
   }
 
   if (!profile.is_active) {
@@ -210,7 +214,12 @@ function AuthProvider({ children }: { children: ReactNode }) {
     profile,
     loading,
     error,
-    isAuthenticated: !!user && !!profile && profile.role === 'supervisor' && profile.is_active,
+    isAuthenticated:
+      !!user &&
+      !!profile &&
+      (profile.role === 'admin' || profile.role === 'supervisor') &&
+      profile.is_active,
+    isAdmin: !!profile && profile.role === 'admin' && profile.is_active,
     signIn,
     signOut,
     createSupervisor,
