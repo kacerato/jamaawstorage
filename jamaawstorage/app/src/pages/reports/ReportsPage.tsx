@@ -19,6 +19,15 @@ import {
 } from '../../components/ui'
 import { ChartIcon, ClipboardIcon, PackageIcon, UsersIcon, AlertIcon } from '../../components/icons'
 import {
+  CHART_BLAZE,
+  CHART_GRID,
+  chartTickStyle,
+  chartTickStyleSmall,
+  chartTooltipStyle,
+} from './chartTheme'
+import { ReplenishmentTab } from './ReplenishmentTab'
+import { ConsumptionTab } from './ConsumptionTab'
+import {
   BarChart,
   Bar,
   XAxis,
@@ -33,13 +42,21 @@ type StockItemRow = Tables<'stock_items'>
 type WorkSiteRow = Tables<'work_sites'>
 
 type TabKey =
+  | 'replenishment'
+  | 'consumption'
   | 'movements'
   | 'inventory'
   | 'stock'
   | 'abc'
   | 'leader'
 
+/*
+ * Ordem deliberada: a tela abre no que exige acao (o que comprar agora), depois
+ * o consumo que explica a previsao, e so entao os relatorios de consulta.
+ */
 const TABS: { key: TabKey; label: string }[] = [
+  { key: 'replenishment', label: 'Reposicao' },
+  { key: 'consumption', label: 'Consumo e Previsao' },
   { key: 'movements', label: 'Movimentacoes por Periodo' },
   { key: 'inventory', label: 'Inventario de Colaboradores' },
   { key: 'stock', label: 'Estoque Geral' },
@@ -224,27 +241,27 @@ function withdrawalDestinationsSummary(withdrawal: WithdrawalWithItems): string 
 }
 
 export function ReportsPage() {
-  const [activeTab, setActiveTab] = useState<TabKey>('movements')
+  const [activeTab, setActiveTab] = useState<TabKey>('replenishment')
 
   return (
     <div className="flex flex-col gap-6">
       <div>
         <div className="flex items-center gap-2">
           <h2 className="text-2xl font-bold text-ink">Relatorios</h2>
-          <InfoTip text="Relatorios de retiradas, consumo e estoque. Use filtros antes de exportar CSV ou PDF." />
+          <InfoTip text="Reposicao mostra o que comprar agora. Consumo e Previsao explica o ritmo de saida de cada item. As demais abas sao consulta de retiradas, inventario e estoque." />
         </div>
       </div>
 
-      <div className="flex gap-1 overflow-x-auto rounded-none border border-line bg-surface p-1">
+      <div className="flex gap-1 overflow-x-auto border border-line bg-surface p-1">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             type="button"
             onClick={() => setActiveTab(tab.key)}
             className={cn(
-              'whitespace-nowrap rounded-none px-4 py-2 text-sm font-medium transition-colors',
+              'min-h-touch whitespace-nowrap px-4 py-2 text-sm font-medium transition-colors',
               activeTab === tab.key
-                ? 'bg-blaze text-ink'
+                ? 'bg-blaze text-blaze-ink'
                 : 'text-ink-dim hover:bg-surface hover:text-ink',
             )}
           >
@@ -253,6 +270,8 @@ export function ReportsPage() {
         ))}
       </div>
 
+      {activeTab === 'replenishment' && <ReplenishmentTab />}
+      {activeTab === 'consumption' && <ConsumptionTab />}
       {activeTab === 'movements' && <MovementsTab />}
       {activeTab === 'inventory' && <InventoryTab />}
       {activeTab === 'stock' && <StockOverviewTab />}
@@ -1514,21 +1533,16 @@ function AbcCurveTab() {
                   layout="vertical"
                   margin={{ top: 5, right: 20, left: 110, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+                  <XAxis type="number" tick={chartTickStyle} />
                   <YAxis
                     dataKey="name"
                     type="category"
-                    tick={{ fill: '#9ca3af', fontSize: 11 }}
+                    tick={chartTickStyleSmall}
                     width={100}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1f2937',
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#f9fafb',
-                    }}
+                    contentStyle={chartTooltipStyle}
                     formatter={((value: unknown) => [String(value), 'Quantidade'])}
                     labelFormatter={((label: unknown, payload: readonly { payload?: { fullName?: unknown } }[] | undefined) => {
                       const fullName = payload?.[0]?.payload?.fullName
@@ -1536,7 +1550,7 @@ function AbcCurveTab() {
                       return String(label)
                     })}
                   />
-                  <Bar dataKey="Quantidade" fill="#FF5D00" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="Quantidade" fill={CHART_BLAZE} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -1677,7 +1691,7 @@ function LeaderConsumptionTab() {
     setTotalItems(itemsTotal)
     setTotalWithdrawals(withdrawalIds.size)
     setLoading(false)
-  }, [selectedLeader, period, customFrom, customTo, leaders])
+  }, [selectedLeader, period, customFrom, customTo])
 
   useEffect(() => {
     setTimeout(() => void fetchConsumption(), 0)
@@ -1836,21 +1850,16 @@ function LeaderConsumptionTab() {
                   layout="vertical"
                   margin={{ top: 5, right: 20, left: 100, bottom: 5 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis type="number" tick={{ fill: '#9ca3af', fontSize: 12 }} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+                  <XAxis type="number" tick={chartTickStyle} />
                   <YAxis
                     dataKey="name"
                     type="category"
-                    tick={{ fill: '#9ca3af', fontSize: 11 }}
+                    tick={chartTickStyleSmall}
                     width={90}
                   />
                   <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#1f2937',
-                      border: '1px solid #374151',
-                      borderRadius: '8px',
-                      color: '#f9fafb',
-                    }}
+                    contentStyle={chartTooltipStyle}
                     formatter={((value: unknown) => [String(value), 'Quantidade'])}
                     labelFormatter={((label: unknown, payload: readonly { payload?: { fullName?: unknown } }[] | undefined) => {
                       const fullName = payload?.[0]?.payload?.fullName
@@ -1858,7 +1867,7 @@ function LeaderConsumptionTab() {
                       return String(label)
                     })}
                   />
-                  <Bar dataKey="Quantidade" fill="#FF5D00" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="Quantidade" fill={CHART_BLAZE} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
