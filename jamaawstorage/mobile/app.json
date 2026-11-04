@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Jamaaw Almoxarifado",
+    "slug": "jamaaw-almoxarifado",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "jamaaw",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0D0101",
+    "splash": {
+      "backgroundColor": "#0D0101",
+      "resizeMode": "contain",
+      "image": "./assets/splash-icon.png"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.jamaaw.almoxarifado"
+    },
+    "android": {
+      "package": "com.jamaaw.almoxarifado",
+      "adaptiveIcon": {
+        "backgroundColor": "#0D0101",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-font",
+      [
+        "expo-notifications",
+        {
+          "color": "#FF5D00"
+        }
+      ]
+    ]
+  }
+}
