@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { formatDateTime } from '../../lib/utils'
 import { Alert, Badge, Button, Card, EmptyState, Select, Spinner } from '../../components/ui'
@@ -160,6 +161,9 @@ function entityTitle(row: AuditLogDisplay): string {
 }
 
 export function AuditPage() {
+  /* A tela de contas aponta para ca com ?user=<id>, para abrir o log ja
+     filtrado naquela conta. */
+  const [searchParams, setSearchParams] = useSearchParams()
   const [logs, setLogs] = useState<AuditLogDisplay[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -167,7 +171,7 @@ export function AuditPage() {
   const [dateFrom, setDateFrom] = useState('')
   const [dateTo, setDateTo] = useState('')
   const [actionFilter, setActionFilter] = useState('')
-  const [userFilter, setUserFilter] = useState('')
+  const [userFilter, setUserFilter] = useState(searchParams.get('user') ?? '')
   const [supervisors, setSupervisors] = useState<{ value: string; label: string }[]>([])
 
   const [page, setPage] = useState(0)
@@ -177,7 +181,9 @@ export function AuditPage() {
     const { data } = await supabase
       .from('profiles')
       .select('id, full_name')
-      .eq('role', 'supervisor')
+      /* Inclui o administrador: ele tambem opera o almoxarifado e aparece
+         como autor no log. */
+      .in('role', ['admin', 'supervisor'])
       .eq('is_active', true)
       .order('full_name')
 
@@ -298,7 +304,21 @@ export function AuditPage() {
             />
           </div>
           <Select label="Acao" value={actionFilter} onChange={(event) => setActionFilter(event.target.value)} options={ACTION_OPTIONS} />
-          <Select label="Usuario" value={userFilter} onChange={(event) => setUserFilter(event.target.value)} options={supervisors} />
+          <Select
+            label="Usuario"
+            value={userFilter}
+            onChange={(event) => {
+              const next = event.target.value
+              setUserFilter(next)
+              setPage(0)
+              /* replace: trocar o filtro nao deve empilhar historico. */
+              const params = new URLSearchParams(searchParams)
+              if (next) params.set('user', next)
+              else params.delete('user')
+              setSearchParams(params, { replace: true })
+            }}
+            options={supervisors}
+          />
         </div>
         <div className="mt-4 flex items-center gap-3">
           <Button size="sm" onClick={() => { setPage(0); void fetchLogs() }}>Aplicar filtros</Button>

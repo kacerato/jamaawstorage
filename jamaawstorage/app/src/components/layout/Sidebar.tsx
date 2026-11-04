@@ -17,18 +17,22 @@ interface NavItem {
   label: string
   path: string
   icon: React.ReactNode
+  /* Item que so existe para o administrador. Nao e controle de acesso: a RLS
+   * recusa os dados de qualquer forma. Serve para nao oferecer o que vai dar
+   * em pagina vazia. */
+  adminOnly?: boolean
 }
 
 const navItems: NavItem[] = [
   { label: 'Dashboard', path: '/', icon: <WarehouseIcon size={20} /> },
   { label: 'Estoque', path: '/stock', icon: <PackageIcon size={20} /> },
   { label: 'Colaboradores', path: '/people', icon: <UsersIcon size={20} /> },
-  { label: 'Supervisores', path: '/supervisors', icon: <UsersIcon size={20} /> },
+  { label: 'Contas', path: '/supervisors', icon: <UsersIcon size={20} />, adminOnly: true },
   { label: 'Retiradas', path: '/withdrawals', icon: <ClipboardIcon size={20} /> },
   { label: 'Devoluções', path: '/returns', icon: <PackageIcon size={20} /> },
   { label: 'Carros', path: '/vehicles', icon: <Car size={20} /> },
   { label: 'Relatórios', path: '/reports', icon: <ChartIcon size={20} /> },
-  { label: 'Auditoria', path: '/audit', icon: <SignatureIcon size={20} /> },
+  { label: 'Auditoria', path: '/audit', icon: <SignatureIcon size={20} />, adminOnly: true },
   { label: 'Perfil', path: '/profile', icon: <UserIcon size={20} /> },
 ]
 
@@ -40,7 +44,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: SidebarProps) {
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, isAdmin } = useAuth()
+  const visibleNavItems = navItems.filter((item) => !item.adminOnly || isAdmin)
 
   const handleNavClick = () => {
     if (window.innerWidth < 1024) {
@@ -82,7 +87,7 @@ export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: Side
 
         <nav className="flex-1 overflow-y-auto px-2 py-4">
           <ul className="flex flex-col gap-1.5">
-            {navItems.map((item) => (
+            {visibleNavItems.map((item) => (
               <li key={item.path}>
                 <NavLink
                   to={item.path}
@@ -112,7 +117,7 @@ export function Sidebar({ isOpen, isCollapsed, onClose, onToggleCollapse }: Side
               <span className="block truncate text-sm font-medium text-ink">
                 {profile.full_name}
               </span>
-              <span className="text-xs text-ink">Supervisor</span>
+              <span className="text-xs text-ink-dim">{isAdmin ? 'Administrador' : 'Supervisor'}</span>
             </div>
           )}
 

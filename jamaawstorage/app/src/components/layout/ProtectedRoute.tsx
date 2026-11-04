@@ -5,23 +5,27 @@ import { AlertCircle, RefreshCw, Loader2, LogIn } from 'lucide-react'
 
 interface ProtectedRouteProps {
   children: ReactNode
+  /* Com requireAdmin, a rota exige o topo da hierarquia. A RLS ja recusaria os
+   * dados; o guard existe para nao deixar a pagina montar e falhar em pedacos. */
+  requireAdmin?: boolean
 }
 
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, profile, loading, error, retry } = useAuth()
+export function ProtectedRoute({ children, requireAdmin = false }: ProtectedRouteProps) {
+  const { user, profile, loading, error, retry, isAdmin } = useAuth()
   const navigate = useNavigate()
+  const isOperator = profile?.role === 'admin' || profile?.role === 'supervisor'
   const accessReason = !profile
     ? 'no_profile'
     : !profile.is_active
     ? 'inactive_profile'
-    : profile.role !== 'supervisor'
+    : !isOperator
     ? 'forbidden_role'
     : null
 
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-void">
-        <Loader2 className="h-10 w-10 animate-spin text-blue-500" />
+        <Loader2 className="h-10 w-10 animate-spin text-ink-dim" />
       </div>
     )
   }
@@ -76,6 +80,12 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   if (accessReason) {
     return <Navigate to={`/login?reason=${accessReason}`} replace />
+  }
+
+  /* Supervisor autenticado que mira uma rota de administrador volta ao painel,
+   * nao para o login: a sessao dele e valida, so o nivel nao alcanca. */
+  if (requireAdmin && !isAdmin) {
+    return <Navigate to="/" replace />
   }
 
   return <>{children}</>

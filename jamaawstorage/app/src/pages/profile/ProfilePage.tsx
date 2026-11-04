@@ -18,6 +18,8 @@ function getInitials(fullName: string): string {
 
 function roleLabel(role: string): string {
   switch (role) {
+    case 'admin':
+      return 'Administrador'
     case 'supervisor':
       return 'Supervisor'
     case 'leader':

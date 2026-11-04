@@ -47,7 +47,7 @@ export function LoginPage() {
 
   // Redirect only when session and profile are both ready.
   // This avoids a login <-> protected-route redirect loop when the user exists but the profile is missing.
-  if (user && profile?.is_active && profile.role === 'supervisor') {
+  if (user && profile?.is_active && (profile.role === 'admin' || profile.role === 'supervisor')) {
     return <Navigate to="/" replace />
   }
 
